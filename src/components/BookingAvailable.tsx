@@ -7,6 +7,8 @@ interface BookingAvailableProps {
   assignedPilots?: string[];
   bookingStatus?: "confirmed" | "pending" | "cancelled";
   span?: number;
+  onAvailableClick?: () => void;
+  onBookedClick?: () => void;
 }
 
 export function BookingAvailable({
@@ -16,7 +18,9 @@ export function BookingAvailable({
   pickupLocation,
   assignedPilots = [],
   bookingStatus = "confirmed",
-  span = 1
+  span = 1,
+  onAvailableClick,
+  onBookedClick
 }: BookingAvailableProps) {
   if (status === "booked") {
     const statusColors = {
@@ -26,7 +30,10 @@ export function BookingAvailable({
     };
 
     return (
-      <div className="w-full h-full bg-blue-900/40 border border-blue-700/50 rounded-lg pt-2 px-2 flex flex-col justify-between cursor-pointer hover:bg-blue-900/50 transition-colors overflow-hidden relative">
+      <div
+        className="w-full h-full bg-blue-900/40 border border-blue-700/50 rounded-lg pt-2 px-2 flex flex-col justify-between cursor-pointer hover:bg-blue-900/50 transition-colors overflow-hidden relative"
+        onClick={onBookedClick}
+      >
         {/* Status indicator dot */}
         <div className={`absolute top-1 right-1 w-2 h-2 rounded-full ${statusColors[bookingStatus]}`} />
 
@@ -59,7 +66,10 @@ export function BookingAvailable({
   }
 
   return (
-    <div className="w-full h-full bg-zinc-800 rounded-lg hover:bg-zinc-700 transition-colors cursor-pointer">
+    <div
+      className="w-full h-full bg-zinc-800 rounded-lg hover:bg-zinc-700 transition-colors cursor-pointer"
+      onClick={onAvailableClick}
+    >
       {/* Empty booking cell - available for booking */}
     </div>
   );

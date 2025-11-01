@@ -49,7 +49,7 @@ export function Header({
   };
 
   return (
-    <header className="bg-zinc-950 border-b border-zinc-800">
+    <header className="bg-zinc-950 border-b border-zinc-800 pt-[env(safe-area-inset-top)]">
       <div className="flex items-center justify-between p-4">
         {/* Left: Hamburger Menu */}
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>

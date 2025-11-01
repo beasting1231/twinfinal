@@ -1,9 +1,15 @@
 export interface Booking {
   id?: string;
+  date: string; // ISO date string (YYYY-MM-DD)
   pilotIndex: number;
   timeIndex: number;
   customerName: string;
+  numberOfPeople: number;
   pickupLocation: string;
+  bookingSource: string;
+  phoneNumber?: string;
+  email?: string;
+  notes?: string;
   assignedPilots: string[];
   bookingStatus: "confirmed" | "pending" | "cancelled";
   span: number;

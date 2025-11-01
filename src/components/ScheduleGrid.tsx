@@ -1,16 +1,44 @@
+import { useState } from "react";
 import { BookingAvailable } from "./BookingAvailable";
+import { NewBookingModal } from "./NewBookingModal";
+import { BookingDetailsModal } from "./BookingDetailsModal";
 import type { Booking, UnavailablePilot, Pilot } from "../types/index";
 
 interface ScheduleGridProps {
+  selectedDate: Date;
   pilots: Pilot[];
   timeSlots: string[];
   bookings?: Booking[];
   unavailablePilots?: UnavailablePilot[];
   isPilotAvailableForTimeSlot: (pilotUid: string, timeSlot: string) => boolean;
   loading?: boolean;
+  onAddBooking?: (booking: Omit<Booking, "id">) => void;
+  onUpdateBooking?: (id: string, booking: Partial<Booking>) => void;
+  onDeleteBooking?: (id: string) => void;
 }
 
-export function ScheduleGrid({ pilots, timeSlots, bookings = [], unavailablePilots = [], isPilotAvailableForTimeSlot, loading = false }: ScheduleGridProps) {
+export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], unavailablePilots = [], isPilotAvailableForTimeSlot, loading = false, onAddBooking, onUpdateBooking, onDeleteBooking }: ScheduleGridProps) {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedCell, setSelectedCell] = useState<{ pilotIndex: number; timeIndex: number; timeSlot: string } | null>(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+
+  const handleAvailableCellClick = (pilotIndex: number, timeIndex: number, timeSlot: string) => {
+    setSelectedCell({ pilotIndex, timeIndex, timeSlot });
+    setIsModalOpen(true);
+  };
+
+  const handleBookedCellClick = (booking: Booking) => {
+    setSelectedBooking(booking);
+    setIsDetailsModalOpen(true);
+  };
+
+  const handleBookingSubmit = (booking: Omit<Booking, "id">) => {
+    if (onAddBooking) {
+      onAddBooking(booking);
+    }
+  };
+
   // Show skeleton loader while loading
   if (loading) {
     return (
@@ -161,6 +189,16 @@ export function ScheduleGrid({ pilots, timeSlots, bookings = [], unavailablePilo
                         assignedPilots={booking?.assignedPilots}
                         bookingStatus={booking?.bookingStatus}
                         span={span}
+                        onAvailableClick={
+                          cellStatus === "available"
+                            ? () => handleAvailableCellClick(pilotIndex, timeIndex, timeSlot)
+                            : undefined
+                        }
+                        onBookedClick={
+                          cellStatus === "booked" && booking
+                            ? () => handleBookedCellClick(booking)
+                            : undefined
+                        }
                       />
                     </div>
                   );
@@ -169,6 +207,27 @@ export function ScheduleGrid({ pilots, timeSlots, bookings = [], unavailablePilo
           })}
         </div>
       </div>
+
+      {selectedCell && (
+        <NewBookingModal
+          open={isModalOpen}
+          onOpenChange={setIsModalOpen}
+          selectedDate={selectedDate}
+          pilotIndex={selectedCell.pilotIndex}
+          timeIndex={selectedCell.timeIndex}
+          timeSlot={selectedCell.timeSlot}
+          pilots={pilots}
+          onSubmit={handleBookingSubmit}
+        />
+      )}
+
+      <BookingDetailsModal
+        open={isDetailsModalOpen}
+        onOpenChange={setIsDetailsModalOpen}
+        booking={selectedBooking}
+        onUpdate={onUpdateBooking}
+        onDelete={onDeleteBooking}
+      />
     </div>
   );
 }
