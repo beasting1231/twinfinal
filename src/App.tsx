@@ -3,23 +3,38 @@ import { startOfWeek } from "date-fns";
 import { Header } from "./components/Header";
 import { ScheduleGrid } from "./components/ScheduleGrid";
 import { AvailabilityGrid } from "./components/AvailabilityGrid";
+import { Account } from "./components/Account/Account";
 import { WeekPicker } from "./components/WeekPicker";
+import { useBookings } from "./hooks/useBookings";
+import { usePilots } from "./hooks/usePilots";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { Login } from "./components/Auth/Login";
 
-type View = "daily-plan" | "availability";
+type View = "daily-plan" | "availability" | "account";
 
-function App() {
+function AppContent() {
   const [currentView, setCurrentView] = useState<View>("availability");
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [weekStartDate, setWeekStartDate] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
+  const { currentUser } = useAuth();
 
-  // Sample data - based on the image
-  const pilots = ["Pilot 1", "Pilot 1", "Pilot 1", "Pilot 1", "Pilot 1"];
+  // Fetch bookings and unavailable pilots from Firebase
+  const { bookings, unavailablePilots, loading, error } = useBookings();
+
+  // Fetch available pilots for the selected date
+  const { pilots, loading: pilotsLoading, isPilotAvailableForTimeSlot } = usePilots(selectedDate);
+
+  // Time slots for the schedule
   const timeSlots = ["7:30", "8:30", "9:45", "11:00", "12:30", "14:00", "15:30", "16:45"];
+
+  // Show login if user is not authenticated
+  if (!currentUser) {
+    return <Login />;
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-zinc-950 dark">
       <Header
-        userName="User Name"
         date={selectedDate}
         onDateChange={setSelectedDate}
         weekStartDate={weekStartDate}
@@ -28,11 +43,27 @@ function App() {
         onViewChange={setCurrentView}
       />
       {currentView === "daily-plan" ? (
-        <ScheduleGrid pilots={pilots} timeSlots={timeSlots} />
-      ) : (
+        <ScheduleGrid
+          pilots={pilots}
+          timeSlots={timeSlots}
+          bookings={bookings}
+          unavailablePilots={unavailablePilots}
+          isPilotAvailableForTimeSlot={isPilotAvailableForTimeSlot}
+        />
+      ) : currentView === "availability" ? (
         <AvailabilityGrid weekStartDate={weekStartDate} timeSlots={timeSlots} />
-      )}
+      ) : currentView === "account" ? (
+        <Account />
+      ) : null}
     </div>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
 

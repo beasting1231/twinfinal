@@ -1,37 +1,37 @@
 import { BookingAvailable } from "./BookingAvailable";
+import type { Booking, UnavailablePilot, Pilot } from "../types/index";
 
 interface ScheduleGridProps {
-  pilots: string[];
+  pilots: Pilot[];
   timeSlots: string[];
+  bookings?: Booking[];
+  unavailablePilots?: UnavailablePilot[];
+  isPilotAvailableForTimeSlot: (pilotUid: string, timeSlot: string) => boolean;
 }
 
-// Mock booking data
-const mockBookings = [
-  { pilotIndex: 0, timeIndex: 1, customerName: "Sarah Johnson", pickupLocation: "Downtown Helipad", assignedPilots: ["Pilot 1"], bookingStatus: "confirmed" as const, span: 1, status: "booked" as const },
-  { pilotIndex: 0, timeIndex: 3, customerName: "Michael Chen", pickupLocation: "Airport Terminal", assignedPilots: ["Pilot 1", "Pilot 2"], bookingStatus: "pending" as const, span: 2, status: "booked" as const },
-  { pilotIndex: 2, timeIndex: 4, customerName: "David Kim", pickupLocation: "City Center", assignedPilots: ["Pilot 3"], bookingStatus: "cancelled" as const, span: 1, status: "booked" as const },
-  { pilotIndex: 1, timeIndex: 2, customerName: "Alex Thompson", pickupLocation: "Hotel Rooftop", assignedPilots: ["Pilot 2"], bookingStatus: "pending" as const, span: 1, status: "booked" as const },
-  { pilotIndex: 0, timeIndex: 0, customerName: "Corporate Group", pickupLocation: "Business District", assignedPilots: ["Pilot 1", "Pilot 2", "Pilot 3"], bookingStatus: "confirmed" as const, span: 3, status: "booked" as const },
-];
+export function ScheduleGrid({ pilots, timeSlots, bookings = [], unavailablePilots = [], isPilotAvailableForTimeSlot }: ScheduleGridProps) {
+  // Show empty state if no pilots are available
+  if (pilots.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-zinc-950">
+        <div className="text-center">
+          <p className="text-zinc-400 text-lg mb-2">No pilots available for this date</p>
+          <p className="text-zinc-500 text-sm">Pilots can mark their availability in the Availability screen</p>
+        </div>
+      </div>
+    );
+  }
 
-// Mock unavailable pilots (signed out for specific time slots)
-const mockUnavailablePilots = [
-  { pilotIndex: 1, timeIndex: 1 }, // Pilot 2 unavailable at time slot 1
-  { pilotIndex: 2, timeIndex: 1 }, // Pilot 3 unavailable at time slot 1
-  { pilotIndex: 2, timeIndex: 3 }, // Pilot 3 unavailable at time slot 3
-];
-
-export function ScheduleGrid({ pilots, timeSlots }: ScheduleGridProps) {
   // Helper function to check if a cell is booked
   const getBooking = (pilotIndex: number, timeIndex: number) => {
-    return mockBookings.find(
+    return bookings.find(
       booking => booking.pilotIndex === pilotIndex && booking.timeIndex === timeIndex
     );
   };
 
   // Helper function to check if a cell is occupied by a spanning booking
   const isCellOccupied = (pilotIndex: number, timeIndex: number) => {
-    return mockBookings.some(booking => {
+    return bookings.some(booking => {
       const bookingStart = booking.pilotIndex;
       const bookingEnd = booking.pilotIndex + (booking.span || 1) - 1;
       return booking.timeIndex === timeIndex && pilotIndex > bookingStart && pilotIndex <= bookingEnd;
@@ -40,7 +40,7 @@ export function ScheduleGrid({ pilots, timeSlots }: ScheduleGridProps) {
 
   // Helper function to check if a pilot is unavailable at a specific time
   const isPilotUnavailable = (pilotIndex: number, timeIndex: number) => {
-    return mockUnavailablePilots.some(
+    return unavailablePilots.some(
       unavailable => unavailable.pilotIndex === pilotIndex && unavailable.timeIndex === timeIndex
     );
   };
@@ -54,12 +54,12 @@ export function ScheduleGrid({ pilots, timeSlots }: ScheduleGridProps) {
           <div className="h-14" />
 
           {/* Pilot Headers */}
-          {pilots.map((pilot, index) => (
+          {pilots.map((p, index) => (
             <div
-              key={index}
+              key={p.uid}
               className="h-14 flex items-center justify-center bg-zinc-900 rounded-lg font-medium"
             >
-              {pilot}
+              {p.displayName}
             </div>
           ))}
 
@@ -85,22 +85,25 @@ export function ScheduleGrid({ pilots, timeSlots }: ScheduleGridProps) {
                 const span = booking?.span || 1;
                 const isUnavailable = isPilotUnavailable(pilotIndex, timeIndex);
 
+                // Check if pilot is available for this specific time slot
+                const isPilotAvailableThisSlot = isPilotAvailableForTimeSlot(pilot.uid, timeSlot);
+
                 // Determine cell status
                 let cellStatus: "available" | "booked" | "noPilot" = "available";
                 if (booking) {
                   cellStatus = "booked";
-                } else if (isUnavailable) {
+                } else if (isUnavailable || !isPilotAvailableThisSlot) {
                   cellStatus = "noPilot";
                 }
 
                 return (
                   <div
-                    key={`cell-${timeIndex}-${pilotIndex}`}
+                    key={`cell-${timeIndex}-${pilot.uid}`}
                     className="h-14"
                     style={{ gridColumn: `span ${span}` }}
                   >
                     <BookingAvailable
-                      pilotId={pilot}
+                      pilotId={pilot.displayName}
                       timeSlot={timeSlot}
                       status={cellStatus}
                       customerName={booking?.customerName}

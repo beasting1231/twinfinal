@@ -10,11 +10,11 @@ import {
 } from "@/components/ui/sheet";
 import { DatePicker } from "./DatePicker";
 import { WeekPicker } from "./WeekPicker";
+import { useAuth } from "../contexts/AuthContext";
 
-type View = "daily-plan" | "availability";
+type View = "daily-plan" | "availability" | "account";
 
 interface HeaderProps {
-  userName: string;
   date?: Date;
   onDateChange?: (date: Date) => void;
   weekStartDate?: Date;
@@ -24,7 +24,6 @@ interface HeaderProps {
 }
 
 export function Header({
-  userName,
   date,
   onDateChange,
   weekStartDate,
@@ -33,6 +32,16 @@ export function Header({
   onViewChange
 }: HeaderProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
+  const { currentUser, logout } = useAuth();
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      setSheetOpen(false);
+    } catch (error) {
+      console.error("Failed to log out:", error);
+    }
+  };
 
   const handleViewChange = (view: View) => {
     onViewChange(view);
@@ -71,14 +80,16 @@ export function Header({
                 Availability
               </button>
               <button
-                onClick={() => setSheetOpen(false)}
-                className="w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white"
+                onClick={() => handleViewChange("account")}
+                className={`w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white ${
+                  currentView === "account" ? "bg-zinc-800" : ""
+                }`}
               >
                 Account
               </button>
               <div className="my-2 border-t border-zinc-700" />
               <button
-                onClick={() => setSheetOpen(false)}
+                onClick={handleLogout}
                 className="w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-red-400 hover:text-red-300"
               >
                 Logout
@@ -98,7 +109,7 @@ export function Header({
 
         {/* Right: User Profile */}
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">{userName}</span>
+          <span className="text-sm font-medium">{currentUser?.displayName || currentUser?.email}</span>
         </div>
       </div>
     </header>

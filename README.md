@@ -1,73 +1,150 @@
-# React + TypeScript + Vite
+# Helicopter Booking System
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A real-time helicopter booking and scheduling application built with React, TypeScript, and Firebase.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+### Authentication
+- **Email/Password Login**: Secure user authentication with Firebase
+- **User Sign Up**: Create new accounts with email and password
+- **Session Management**: Automatic session persistence
+- **Logout**: Secure logout functionality
 
-## React Compiler
+### Daily Plan View
+- **Visual Schedule Grid**: Shows all pilots and time slots for the day
+- **Booking States**:
+  - 🟢 **Available**: Empty cells ready for booking
+  - 🔵 **Booked**: Shows customer name, pickup location, and assigned pilots
+  - ⚫ **No Pilot**: Indicates when a pilot is unavailable for a specific time slot
+- **Multi-Pilot Bookings**: Support for bookings requiring 2 or 3 pilots (spans multiple columns)
+- **Status Indicators**:
+  - 🟢 Green dot: Confirmed booking
+  - 🟡 Yellow dot: Pending booking
+  - 🔴 Red dot: Cancelled booking
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### Availability Grid View
+- **Weekly Overview**: 7-day calendar view
+- **Pilot Availability Management**: Toggle availability for specific time slots
+- **Visual Feedback**: Green (available) / Red (unavailable) indicators
 
-## Expanding the ESLint configuration
+## Tech Stack
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- **Frontend**: React 19, TypeScript, Vite
+- **Styling**: Tailwind CSS
+- **UI Components**: Radix UI
+- **Backend**: Firebase Firestore (real-time database)
+- **Date Management**: date-fns
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Getting Started
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+### Prerequisites
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+- Node.js (v16 or higher)
+- npm or yarn
+- Firebase account
+
+### Installation
+
+1. Clone the repository:
+   ```bash
+   git clone <your-repo-url>
+   cd twin
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Set up Firebase (see [FIREBASE_SETUP.md](./FIREBASE_SETUP.md))
+
+4. Create `.env` file:
+   ```bash
+   cp .env.example .env
+   ```
+
+5. Add your Firebase credentials to `.env`
+
+6. Start the development server:
+   ```bash
+   npm run dev
+   ```
+
+7. Open your browser to `http://localhost:5173` (or the port shown in terminal)
+
+## Firebase Setup
+
+For detailed Firebase setup instructions, see [FIREBASE_SETUP.md](./FIREBASE_SETUP.md)
+
+## Project Structure
+
+```
+twin/
+├── src/
+│   ├── components/
+│   │   ├── Auth/
+│   │   │   └── Login.tsx           # Login/Signup component
+│   │   ├── Header.tsx              # App header with navigation
+│   │   ├── ScheduleGrid.tsx        # Daily plan grid component
+│   │   ├── AvailabilityGrid.tsx    # Weekly availability view
+│   │   ├── BookingAvailable.tsx    # Individual booking cell
+│   │   ├── AvailabilityCell.tsx    # Individual availability cell
+│   │   └── ui/                     # Radix UI components
+│   ├── contexts/
+│   │   └── AuthContext.tsx         # Authentication context
+│   ├── firebase/
+│   │   └── config.ts               # Firebase configuration
+│   ├── hooks/
+│   │   └── useBookings.ts          # Custom hook for Firebase data
+│   ├── types/
+│   │   └── index.ts                # TypeScript type definitions
+│   ├── App.tsx                     # Main app component
+│   └── main.tsx                    # App entry point
+├── .env                            # Environment variables (not in repo)
+├── .env.example                    # Environment variables template
+├── FIREBASE_SETUP.md               # Firebase setup guide
+└── package.json
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Data Structure
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### Booking
+```typescript
+{
+  id?: string;
+  pilotIndex: number;              // 0, 1, 2 for Pilot 1, 2, 3
+  timeIndex: number;               // Index of time slot
+  customerName: string;            // Customer's name
+  pickupLocation: string;          // Pickup location
+  assignedPilots: string[];        // ["Pilot 1", "Pilot 2", ...]
+  bookingStatus: "confirmed" | "pending" | "cancelled";
+  span: number;                    // Number of pilots required (1-3)
+}
 ```
+
+### Unavailable Pilot
+```typescript
+{
+  id?: string;
+  pilotIndex: number;              // 0, 1, 2 for Pilot 1, 2, 3
+  timeIndex: number;               // Index of time slot
+}
+```
+
+## Available Scripts
+
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run preview` - Preview production build
+- `npm run lint` - Run ESLint
+
+## Contributing
+
+1. Create a feature branch
+2. Make your changes
+3. Test thoroughly
+4. Submit a pull request
+
+## License
+
+MIT
