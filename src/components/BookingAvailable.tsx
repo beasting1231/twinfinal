@@ -11,7 +11,6 @@ interface BookingAvailableProps {
 
 export function BookingAvailable({
   pilotId,
-  timeSlot,
   status = "available",
   customerName,
   pickupLocation,

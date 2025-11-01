@@ -7,9 +7,43 @@ interface ScheduleGridProps {
   bookings?: Booking[];
   unavailablePilots?: UnavailablePilot[];
   isPilotAvailableForTimeSlot: (pilotUid: string, timeSlot: string) => boolean;
+  loading?: boolean;
 }
 
-export function ScheduleGrid({ pilots, timeSlots, bookings = [], unavailablePilots = [], isPilotAvailableForTimeSlot }: ScheduleGridProps) {
+export function ScheduleGrid({ pilots, timeSlots, bookings = [], unavailablePilots = [], isPilotAvailableForTimeSlot, loading = false }: ScheduleGridProps) {
+  // Show skeleton loader while loading
+  if (loading) {
+    return (
+      <div className="flex-1 overflow-auto p-4 bg-zinc-950">
+        <div className="inline-block">
+          <div className="grid gap-2" style={{ gridTemplateColumns: `80px repeat(5, 220px)` }}>
+            {/* Header Row Skeleton */}
+            <div className="h-7" />
+            <div className="h-7 bg-zinc-900 rounded-lg animate-pulse" />
+            <div className="h-7 bg-zinc-900 rounded-lg animate-pulse" />
+            <div className="h-7 bg-zinc-900 rounded-lg animate-pulse" />
+            <div className="h-7 bg-zinc-900 rounded-lg animate-pulse" />
+            <div className="h-7 bg-zinc-900 rounded-lg animate-pulse" />
+
+            {/* Time Slot Rows Skeleton */}
+            {timeSlots.map((_timeSlot, index) => (
+              <div key={index} className="contents">
+                {/* Time label skeleton */}
+                <div className="h-14 bg-zinc-900 rounded-lg animate-pulse" />
+                {/* Skeleton cells */}
+                <div className="h-14 bg-zinc-800 rounded-lg animate-pulse" />
+                <div className="h-14 bg-zinc-800 rounded-lg animate-pulse" />
+                <div className="h-14 bg-zinc-800 rounded-lg animate-pulse" />
+                <div className="h-14 bg-zinc-800 rounded-lg animate-pulse" />
+                <div className="h-14 bg-zinc-800 rounded-lg animate-pulse" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Show empty state if no pilots are available
   if (pilots.length === 0) {
     return (
@@ -51,13 +85,13 @@ export function ScheduleGrid({ pilots, timeSlots, bookings = [], unavailablePilo
         <div className="grid gap-2" style={{ gridTemplateColumns: `80px repeat(${pilots.length}, 220px)` }}>
           {/* Header Row */}
           {/* Empty cell for top-left corner */}
-          <div className="h-14" />
+          <div className="h-7" />
 
           {/* Pilot Headers */}
-          {pilots.map((p, index) => (
+          {pilots.map((p) => (
             <div
               key={p.uid}
-              className="h-14 flex items-center justify-center bg-zinc-900 rounded-lg font-medium"
+              className="h-7 flex items-center justify-center bg-zinc-900 rounded-lg font-medium text-sm"
             >
               {p.displayName}
             </div>
@@ -78,18 +112,17 @@ export function ScheduleGrid({ pilots, timeSlots, bookings = [], unavailablePilo
               return 0;
             });
 
-            return (
-              <>
-                {/* Time Slot Label */}
-                <div
-                  key={`time-${timeIndex}`}
-                  className="h-14 flex items-center justify-center bg-zinc-900 rounded-lg font-medium text-sm"
-                >
-                  {timeSlot}
-                </div>
+            return [
+              // Time Slot Label
+              <div
+                key={`time-${timeIndex}`}
+                className="h-14 flex items-center justify-center bg-zinc-900 rounded-lg font-medium text-sm"
+              >
+                {timeSlot}
+              </div>,
 
-                {/* Booking Cells for each pilot */}
-                {sortedPilotsForSlot.map((pilot) => {
+              // Booking Cells for each pilot
+              ...sortedPilotsForSlot.map((pilot) => {
                   // Find the original pilot index for booking lookups
                   const pilotIndex = pilots.findIndex(p => p.uid === pilot.uid);
 
@@ -98,42 +131,41 @@ export function ScheduleGrid({ pilots, timeSlots, bookings = [], unavailablePilo
                     return null;
                   }
 
-                const booking = getBooking(pilotIndex, timeIndex);
-                const span = booking?.span || 1;
-                const isUnavailable = isPilotUnavailable(pilotIndex, timeIndex);
+                  const booking = getBooking(pilotIndex, timeIndex);
+                  const span = booking?.span || 1;
+                  const isUnavailable = isPilotUnavailable(pilotIndex, timeIndex);
 
-                // Check if pilot is available for this specific time slot
-                const isPilotAvailableThisSlot = isPilotAvailableForTimeSlot(pilot.uid, timeSlot);
+                  // Check if pilot is available for this specific time slot
+                  const isPilotAvailableThisSlot = isPilotAvailableForTimeSlot(pilot.uid, timeSlot);
 
-                // Determine cell status
-                let cellStatus: "available" | "booked" | "noPilot" = "available";
-                if (booking) {
-                  cellStatus = "booked";
-                } else if (isUnavailable || !isPilotAvailableThisSlot) {
-                  cellStatus = "noPilot";
-                }
+                  // Determine cell status
+                  let cellStatus: "available" | "booked" | "noPilot" = "available";
+                  if (booking) {
+                    cellStatus = "booked";
+                  } else if (isUnavailable || !isPilotAvailableThisSlot) {
+                    cellStatus = "noPilot";
+                  }
 
-                return (
-                  <div
-                    key={`cell-${timeIndex}-${pilot.uid}`}
-                    className="h-14"
-                    style={{ gridColumn: `span ${span}` }}
-                  >
-                    <BookingAvailable
-                      pilotId={pilot.displayName}
-                      timeSlot={timeSlot}
-                      status={cellStatus}
-                      customerName={booking?.customerName}
-                      pickupLocation={booking?.pickupLocation}
-                      assignedPilots={booking?.assignedPilots}
-                      bookingStatus={booking?.bookingStatus}
-                      span={span}
-                    />
-                  </div>
-                );
-              })}
-              </>
-            );
+                  return (
+                    <div
+                      key={`cell-${timeIndex}-${pilot.uid}`}
+                      className="h-14"
+                      style={{ gridColumn: `span ${span}` }}
+                    >
+                      <BookingAvailable
+                        pilotId={pilot.displayName}
+                        timeSlot={timeSlot}
+                        status={cellStatus}
+                        customerName={booking?.customerName}
+                        pickupLocation={booking?.pickupLocation}
+                        assignedPilots={booking?.assignedPilots}
+                        bookingStatus={booking?.bookingStatus}
+                        span={span}
+                      />
+                    </div>
+                  );
+              })
+            ];
           })}
         </div>
       </div>

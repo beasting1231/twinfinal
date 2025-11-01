@@ -30,11 +30,11 @@
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
+    --background: 240 5.9% 5.9%;
     --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
+    --card: 240 5.9% 5.9%;
     --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
+    --popover: 240 5.9% 5.9%;
     --popover-foreground: 210 40% 98%;
     --primary: 210 40% 98%;
     --primary-foreground: 222.2 47.4% 11.2%;
@@ -62,8 +62,11 @@
     border-color: hsl(var(--border));
   }
   body {
-    background-color: hsl(var(--background));
+    @apply bg-zinc-950;
     color: hsl(var(--foreground));
+  }
+  html {
+    @apply bg-zinc-950;
   }
 }
 

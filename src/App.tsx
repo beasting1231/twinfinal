@@ -4,7 +4,6 @@ import { Header } from "./components/Header";
 import { ScheduleGrid } from "./components/ScheduleGrid";
 import { AvailabilityGrid } from "./components/AvailabilityGrid";
 import { Account } from "./components/Account/Account";
-import { WeekPicker } from "./components/WeekPicker";
 import { useBookings } from "./hooks/useBookings";
 import { usePilots } from "./hooks/usePilots";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
@@ -19,7 +18,7 @@ function AppContent() {
   const { currentUser } = useAuth();
 
   // Fetch bookings and unavailable pilots from Firebase
-  const { bookings, unavailablePilots, loading, error } = useBookings();
+  const { bookings, unavailablePilots } = useBookings();
 
   // Fetch available pilots for the selected date
   const { pilots, loading: pilotsLoading, isPilotAvailableForTimeSlot } = usePilots(selectedDate);
@@ -49,6 +48,7 @@ function AppContent() {
           bookings={bookings}
           unavailablePilots={unavailablePilots}
           isPilotAvailableForTimeSlot={isPilotAvailableForTimeSlot}
+          loading={pilotsLoading}
         />
       ) : currentView === "availability" ? (
         <AvailabilityGrid weekStartDate={weekStartDate} timeSlots={timeSlots} />
