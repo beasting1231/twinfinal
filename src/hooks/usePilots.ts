@@ -79,8 +79,19 @@ export function usePilots(selectedDate: Date) {
 
         const pilotsData = await Promise.all(pilotPromises);
 
-        // Sort pilots alphabetically by displayName
-        pilotsData.sort((a, b) => a.displayName.localeCompare(b.displayName));
+        // Sort pilots by availability count (most available first), then alphabetically
+        pilotsData.sort((a, b) => {
+          const aAvailability = availabilityMap.get(a.uid)?.size || 0;
+          const bAvailability = availabilityMap.get(b.uid)?.size || 0;
+
+          // Sort by availability count descending (most available first)
+          if (bAvailability !== aAvailability) {
+            return bAvailability - aAvailability;
+          }
+
+          // If same availability, sort alphabetically
+          return a.displayName.localeCompare(b.displayName);
+        });
 
         setPilots(pilotsData);
         setPilotAvailability(availabilityMap);

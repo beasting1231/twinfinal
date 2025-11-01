@@ -64,22 +64,39 @@ export function ScheduleGrid({ pilots, timeSlots, bookings = [], unavailablePilo
           ))}
 
           {/* Time Slots and Booking Cells */}
-          {timeSlots.map((timeSlot, timeIndex) => (
-            <>
-              {/* Time Slot Label */}
-              <div
-                key={`time-${timeIndex}`}
-                className="h-14 flex items-center justify-center bg-zinc-900 rounded-lg font-medium text-sm"
-              >
-                {timeSlot}
-              </div>
+          {timeSlots.map((timeSlot, timeIndex) => {
+            // Sort pilots for this specific time slot: available first, then unavailable
+            const sortedPilotsForSlot = [...pilots].sort((a, b) => {
+              const aAvailable = isPilotAvailableForTimeSlot(a.uid, timeSlot);
+              const bAvailable = isPilotAvailableForTimeSlot(b.uid, timeSlot);
 
-              {/* Booking Cells for each pilot */}
-              {pilots.map((pilot, pilotIndex) => {
-                // Skip cells that are occupied by a spanning booking
-                if (isCellOccupied(pilotIndex, timeIndex)) {
-                  return null;
-                }
+              // Available pilots come first (left side)
+              if (aAvailable && !bAvailable) return -1;
+              if (!aAvailable && bAvailable) return 1;
+
+              // If both have same availability, maintain original order
+              return 0;
+            });
+
+            return (
+              <>
+                {/* Time Slot Label */}
+                <div
+                  key={`time-${timeIndex}`}
+                  className="h-14 flex items-center justify-center bg-zinc-900 rounded-lg font-medium text-sm"
+                >
+                  {timeSlot}
+                </div>
+
+                {/* Booking Cells for each pilot */}
+                {sortedPilotsForSlot.map((pilot) => {
+                  // Find the original pilot index for booking lookups
+                  const pilotIndex = pilots.findIndex(p => p.uid === pilot.uid);
+
+                  // Skip cells that are occupied by a spanning booking
+                  if (isCellOccupied(pilotIndex, timeIndex)) {
+                    return null;
+                  }
 
                 const booking = getBooking(pilotIndex, timeIndex);
                 const span = booking?.span || 1;
@@ -115,8 +132,9 @@ export function ScheduleGrid({ pilots, timeSlots, bookings = [], unavailablePilo
                   </div>
                 );
               })}
-            </>
-          ))}
+              </>
+            );
+          })}
         </div>
       </div>
     </div>
