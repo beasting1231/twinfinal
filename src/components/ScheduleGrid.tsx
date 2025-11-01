@@ -217,6 +217,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], u
           timeIndex={selectedCell.timeIndex}
           timeSlot={selectedCell.timeSlot}
           pilots={pilots}
+          bookings={bookings}
+          isPilotAvailableForTimeSlot={isPilotAvailableForTimeSlot}
           onSubmit={handleBookingSubmit}
         />
       )}
@@ -225,6 +227,10 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], u
         open={isDetailsModalOpen}
         onOpenChange={setIsDetailsModalOpen}
         booking={selectedBooking}
+        bookings={bookings}
+        pilots={pilots}
+        isPilotAvailableForTimeSlot={isPilotAvailableForTimeSlot}
+        timeSlots={timeSlots}
         onUpdate={onUpdateBooking}
         onDelete={onDeleteBooking}
       />
