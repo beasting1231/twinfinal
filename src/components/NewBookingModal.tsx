@@ -153,7 +153,7 @@ export function NewBookingModal({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 overflow-x-hidden">
           {/* Customer Name */}
           <div className="space-y-2">
             <Label htmlFor="customerName" className="text-white">
@@ -172,14 +172,24 @@ export function NewBookingModal({
             <Label htmlFor="numberOfPeople" className="text-white">
               Number of People <span className="text-red-500">*</span>
             </Label>
-            <Input
-              id="numberOfPeople"
-              type="number"
-              min="1"
-              value={numberOfPeople}
-              onChange={(e) => handleNumberOfPeopleChange(e.target.value)}
-              required
-            />
+            <div className="overflow-x-auto">
+              <div className="flex gap-2 pb-2">
+                {Array.from({ length: 30 }, (_, i) => i + 1).map((num) => (
+                  <button
+                    key={num}
+                    type="button"
+                    onClick={() => handleNumberOfPeopleChange(num.toString())}
+                    className={`flex-shrink-0 w-12 h-12 rounded-lg font-medium transition-colors ${
+                      numberOfPeople === num.toString()
+                        ? "bg-white text-black"
+                        : "bg-zinc-800 text-white hover:bg-zinc-700"
+                    }`}
+                  >
+                    {num}
+                  </button>
+                ))}
+              </div>
+            </div>
             <p className="text-xs text-zinc-500">
               Will reserve {span} {span === 1 ? "pilot" : "pilots"} for this booking
             </p>
