@@ -187,6 +187,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], u
                         customerName={booking?.customerName}
                         pickupLocation={booking?.pickupLocation}
                         assignedPilots={booking?.assignedPilots}
+                        pilotPayments={booking?.pilotPayments}
                         bookingStatus={booking?.bookingStatus}
                         span={span}
                         onAvailableClick={

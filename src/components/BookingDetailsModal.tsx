@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
 import { Button } from "./ui/button";
@@ -6,7 +6,9 @@ import { Label } from "./ui/label";
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Textarea } from "./ui/textarea";
-import type { Booking, Pilot } from "../types/index";
+import type { Booking, Pilot, PilotPayment, ReceiptFile } from "../types/index";
+import { useAuth } from "../contexts/AuthContext";
+import { Camera, Upload, Eye, Trash2 } from "lucide-react";
 
 interface BookingDetailsModalProps {
   open: boolean;
@@ -31,8 +33,11 @@ export function BookingDetailsModal({
   onUpdate,
   onDelete,
 }: BookingDetailsModalProps) {
+  const { currentUser } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [editedBooking, setEditedBooking] = useState<Booking | null>(null);
+  const [pilotPayments, setPilotPayments] = useState<PilotPayment[]>([]);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   // Calculate available slots at this time (excluding the current booking)
   const availableSlots = useMemo(() => {
@@ -94,6 +99,35 @@ export function BookingDetailsModal({
       setIsEditing(false);
     }
   }, [open]);
+
+  // Initialize pilot payments when booking changes
+  useEffect(() => {
+    if (booking) {
+      // If booking has existing payment data, use it
+      if (booking.pilotPayments) {
+        setPilotPayments(booking.pilotPayments);
+      } else {
+        // Initialize empty payment data for each assigned pilot
+        const initialPayments: PilotPayment[] = booking.assignedPilots.map(pilotName => ({
+          pilotName,
+          amount: "",
+          paymentMethod: "direkt" as const,
+          receiptFiles: []
+        }));
+        setPilotPayments(initialPayments);
+      }
+    }
+  }, [booking]);
+
+  // Sort pilot payments to show current user's section first
+  const sortedPilotPayments = useMemo(() => {
+    if (!currentUser?.displayName) return pilotPayments;
+
+    const currentUserPayment = pilotPayments.find(p => p.pilotName === currentUser.displayName);
+    const otherPayments = pilotPayments.filter(p => p.pilotName !== currentUser.displayName);
+
+    return currentUserPayment ? [currentUserPayment, ...otherPayments] : pilotPayments;
+  }, [pilotPayments, currentUser?.displayName]);
 
   if (!booking || !editedBooking) return null;
 
@@ -169,6 +203,72 @@ export function BookingDetailsModal({
         onDelete(booking.id);
         onOpenChange(false);
       }
+    }
+  };
+
+  const handlePaymentUpdate = (pilotName: string, field: keyof PilotPayment, value: any) => {
+    setPilotPayments(prev =>
+      prev.map(payment =>
+        payment.pilotName === pilotName
+          ? { ...payment, [field]: value }
+          : payment
+      )
+    );
+  };
+
+  const handleImageUpload = (pilotName: string, file: File) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64String = reader.result as string;
+      const receiptFile: ReceiptFile = {
+        data: base64String,
+        filename: file.name
+      };
+      setPilotPayments(prev =>
+        prev.map(payment =>
+          payment.pilotName === pilotName
+            ? { ...payment, receiptFiles: [...(payment.receiptFiles || []), receiptFile] }
+            : payment
+        )
+      );
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveReceipt = (pilotName: string, index: number) => {
+    setPilotPayments(prev =>
+      prev.map(payment =>
+        payment.pilotName === pilotName
+          ? { ...payment, receiptFiles: payment.receiptFiles?.filter((_, i) => i !== index) }
+          : payment
+      )
+    );
+  };
+
+  const handleSavePayments = async () => {
+    if (booking.id && onUpdate) {
+      try {
+        console.log("Saving payment details:", pilotPayments);
+
+        // Convert to Firestore-compatible format using deep clone
+        // This ensures all nested objects are plain JavaScript objects
+        const firestoreCompatiblePayments = JSON.parse(JSON.stringify(pilotPayments.map(payment => ({
+          pilotName: payment.pilotName,
+          amount: typeof payment.amount === 'string'
+            ? (payment.amount === '' || payment.amount === '-' ? 0 : parseFloat(payment.amount))
+            : payment.amount,
+          paymentMethod: payment.paymentMethod,
+          receiptFiles: payment.receiptFiles || []
+        }))));
+
+        await onUpdate(booking.id, { pilotPayments: firestoreCompatiblePayments });
+        onOpenChange(false);
+      } catch (error) {
+        console.error("Error saving payment details:", error);
+        alert("Failed to save payment details. Please try again.");
+      }
+    } else {
+      console.error("Cannot save: booking.id or onUpdate is missing", { bookingId: booking?.id, hasOnUpdate: !!onUpdate });
     }
   };
 
@@ -444,13 +544,220 @@ export function BookingDetailsModal({
             </div>
           </TabsContent>
 
-          <TabsContent value="payment" className="space-y-4">
-            <div className="text-center py-12 text-zinc-500">
-              <p>Payment information will be available soon</p>
-            </div>
+          <TabsContent value="payment" className="space-y-4 max-h-[60vh] overflow-y-auto">
+            {pilotPayments.length === 0 ? (
+              <div className="text-center py-12 text-zinc-500">
+                <p>No pilots assigned to this booking</p>
+              </div>
+            ) : (
+              <>
+                {sortedPilotPayments.map((payment, index) => {
+                  const isCurrentUser = payment.pilotName === currentUser?.displayName;
+                  return (<div
+                    key={payment.pilotName}
+                    className={`border rounded-lg p-4 space-y-4 ${
+                      isCurrentUser
+                        ? "border-blue-500 bg-blue-950/30"
+                        : "border-zinc-700 bg-zinc-900/50"
+                    }`}
+                  >
+                    {/* Pilot Name Header */}
+                    <div className="flex items-center justify-between border-b border-zinc-700 pb-2">
+                      <h3 className="text-white font-medium">
+                        {payment.pilotName}
+                        {isCurrentUser && (
+                          <span className="ml-2 text-xs bg-blue-500 text-white px-2 py-0.5 rounded">You</span>
+                        )}
+                      </h3>
+                      <span className="text-xs text-zinc-500">Pilot #{index + 1}</span>
+                    </div>
+
+                    {/* Amount Input */}
+                    <div className="space-y-2">
+                      <Label className="text-white">Amount</Label>
+                      <Input
+                        type="text"
+                        inputMode="decimal"
+                        value={payment.amount}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          // Allow empty string, negative sign, and valid numbers
+                          if (value === '' || value === '-' || !isNaN(parseFloat(value))) {
+                            handlePaymentUpdate(payment.pilotName, 'amount', value === '' || value === '-' ? value : parseFloat(value));
+                          }
+                        }}
+                        placeholder="0.00"
+                      />
+                    </div>
+
+                    {/* Payment Method Buttons */}
+                    <div className="space-y-2">
+                      <Label className="text-white">Payment Method</Label>
+                      <div className="grid grid-cols-3 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handlePaymentUpdate(payment.pilotName, 'paymentMethod', 'direkt')}
+                          className={`px-4 py-3 rounded-lg font-medium transition-colors ${
+                            payment.paymentMethod === 'direkt'
+                              ? "bg-white text-black"
+                              : "bg-zinc-800 text-white hover:bg-zinc-700"
+                          }`}
+                        >
+                          Direkt
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handlePaymentUpdate(payment.pilotName, 'paymentMethod', 'ticket')}
+                          className={`px-4 py-3 rounded-lg font-medium transition-colors ${
+                            payment.paymentMethod === 'ticket'
+                              ? "bg-white text-black"
+                              : "bg-zinc-800 text-white hover:bg-zinc-700"
+                          }`}
+                        >
+                          Ticket
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handlePaymentUpdate(payment.pilotName, 'paymentMethod', 'ccp')}
+                          className={`px-4 py-3 rounded-lg font-medium transition-colors ${
+                            payment.paymentMethod === 'ccp'
+                              ? "bg-white text-black"
+                              : "bg-zinc-800 text-white hover:bg-zinc-700"
+                          }`}
+                        >
+                          CCP
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Conditional Image Upload for Ticket/CCP */}
+                    {(payment.paymentMethod === 'ticket' || payment.paymentMethod === 'ccp') && (
+                      <div className="space-y-3">
+                        <Label className="text-white">Receipts/Tickets</Label>
+
+                        {/* Upload Buttons */}
+                        <div className="flex gap-2">
+                          {/* Camera Button */}
+                          <label className="flex-1">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              capture="environment"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  handleImageUpload(payment.pilotName, file);
+                                  e.target.value = '';
+                                }
+                              }}
+                              className="hidden"
+                            />
+                            <div className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-colors bg-zinc-800 text-white hover:bg-zinc-700 cursor-pointer">
+                              <Camera className="w-5 h-5" />
+                              <span>Camera</span>
+                            </div>
+                          </label>
+
+                          {/* Upload Button */}
+                          <label className="flex-1">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  handleImageUpload(payment.pilotName, file);
+                                  e.target.value = '';
+                                }
+                              }}
+                              className="hidden"
+                            />
+                            <div className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-colors bg-zinc-800 text-white hover:bg-zinc-700 cursor-pointer">
+                              <Upload className="w-5 h-5" />
+                              <span>Upload</span>
+                            </div>
+                          </label>
+                        </div>
+
+                        {/* Receipt Files List */}
+                        {payment.receiptFiles && payment.receiptFiles.length > 0 && (
+                          <div className="space-y-2 mt-3">
+                            {payment.receiptFiles.map((file, fileIndex) => (
+                              <div
+                                key={fileIndex}
+                                className="flex items-center justify-between bg-zinc-800 rounded-lg p-3 border border-zinc-700"
+                              >
+                                <span className="text-white text-sm truncate flex-1 mr-3">
+                                  {file.filename}
+                                </span>
+                                <div className="flex gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setPreviewImage(file.data)}
+                                    className="p-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                                    title="Preview"
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveReceipt(payment.pilotName, fileIndex)}
+                                    className="p-2 rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors"
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>);
+                })}
+
+                {/* Save Button */}
+                <div className="pt-4 sticky bottom-0 bg-zinc-950 pb-2">
+                  <Button
+                    onClick={handleSavePayments}
+                    className="w-full bg-white text-black hover:bg-zinc-200"
+                  >
+                    Save Payment Details
+                  </Button>
+                </div>
+              </>
+            )}
           </TabsContent>
         </Tabs>
       </DialogContent>
+
+      {/* Image Preview Modal */}
+      {previewImage && (
+        <Dialog open={!!previewImage} onOpenChange={() => setPreviewImage(null)}>
+          <DialogContent className="max-w-[90vw] max-h-[90vh]">
+            <DialogHeader>
+              <DialogTitle>Receipt Preview</DialogTitle>
+            </DialogHeader>
+            <div className="flex items-center justify-center p-4">
+              <img
+                src={previewImage}
+                alt="Receipt preview"
+                className="max-w-full max-h-[70vh] object-contain rounded-lg"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                onClick={() => setPreviewImage(null)}
+                variant="outline"
+                className="border-zinc-700 text-white hover:bg-zinc-800"
+              >
+                Close
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </Dialog>
   );
 }

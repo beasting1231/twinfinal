@@ -1,3 +1,15 @@
+export interface ReceiptFile {
+  data: string; // base64 encoded image
+  filename: string;
+}
+
+export interface PilotPayment {
+  pilotName: string;
+  amount: number | string; // string allows for temporary states like "-" or ""
+  paymentMethod: "direkt" | "ticket" | "ccp";
+  receiptFiles?: ReceiptFile[];
+}
+
 export interface Booking {
   id?: string;
   date: string; // ISO date string (YYYY-MM-DD)
@@ -13,6 +25,7 @@ export interface Booking {
   assignedPilots: string[];
   bookingStatus: "confirmed" | "pending" | "cancelled";
   span: number;
+  pilotPayments?: PilotPayment[];
 }
 
 export interface UnavailablePilot {
