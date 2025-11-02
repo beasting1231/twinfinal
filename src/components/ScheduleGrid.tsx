@@ -77,7 +77,13 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], u
     if (!contextMenu || !onUpdateBooking) return;
 
     const { booking, slotIndex } = contextMenu;
+    // Ensure array has proper length to avoid undefined values
+    const requiredLength = Math.max(booking.numberOfPeople, slotIndex + 1);
     const updatedPilots = [...booking.assignedPilots];
+    // Fill any missing positions with empty strings to prevent undefined
+    while (updatedPilots.length < requiredLength) {
+      updatedPilots.push("");
+    }
     updatedPilots[slotIndex] = pilotName;
 
     onUpdateBooking(booking.id!, { assignedPilots: updatedPilots });
@@ -88,7 +94,13 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], u
     if (!contextMenu || !onUpdateBooking) return;
 
     const { booking, slotIndex } = contextMenu;
+    // Ensure array has proper length to avoid undefined values
+    const requiredLength = Math.max(booking.numberOfPeople, slotIndex + 1);
     const updatedPilots = [...booking.assignedPilots];
+    // Fill any missing positions with empty strings to prevent undefined
+    while (updatedPilots.length < requiredLength) {
+      updatedPilots.push("");
+    }
     // Set the position to empty string instead of removing to preserve positions
     updatedPilots[slotIndex] = "";
 

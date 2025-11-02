@@ -64,7 +64,19 @@ export function useBookings() {
   // Update an existing booking
   const updateBooking = async (id: string, booking: Partial<Booking>) => {
     try {
-      await updateDoc(doc(db, "bookings", id), booking);
+      // Filter out undefined values from the update object (Firebase doesn't accept undefined)
+      const sanitizedBooking: any = {};
+      for (const [key, value] of Object.entries(booking)) {
+        if (value !== undefined) {
+          // Special handling for assignedPilots array to ensure no undefined values
+          if (key === 'assignedPilots' && Array.isArray(value)) {
+            sanitizedBooking[key] = value.map(pilot => pilot === undefined ? "" : pilot);
+          } else {
+            sanitizedBooking[key] = value;
+          }
+        }
+      }
+      await updateDoc(doc(db, "bookings", id), sanitizedBooking);
     } catch (err: any) {
       console.error("Error updating booking:", err);
       setError(err.message);
