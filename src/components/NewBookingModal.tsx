@@ -1,10 +1,10 @@
 import { useState, useMemo } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
+import { Dialog, DialogContent } from "./ui/dialog";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Label } from "./ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Textarea } from "./ui/textarea";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { format } from "date-fns";
 import type { Pilot, Booking } from "../types/index";
 
@@ -55,8 +55,9 @@ export function NewBookingModal({
   const [phoneNumber, setPhoneNumber] = useState("");
   const [email, setEmail] = useState("");
   const [notes, setNotes] = useState("");
-  const [bookingStatus, setBookingStatus] = useState<"confirmed" | "pending" | "cancelled">("confirmed");
-  const [selectedPilots, setSelectedPilots] = useState<string[]>([]);
+  const [commission, setCommission] = useState("");
+  const [femalePilotsRequired, setFemalePilotsRequired] = useState(0);
+  const [showAdditionalOptions, setShowAdditionalOptions] = useState(false);
 
   // Get pilots already assigned at this time
   const assignedPilotsAtThisTime = useMemo(() => {
@@ -81,49 +82,15 @@ export function NewBookingModal({
     return actuallyAvailablePilots;
   }, [pilots, assignedPilotsAtThisTime, isPilotAvailableForTimeSlot, timeSlot]);
 
-  // Get actually available pilots (not assigned and available for this time slot)
-  const availablePilots = useMemo(() => {
-    return pilots.filter((pilot) =>
+  // Calculate available female pilots at this time
+  const availableFemalePilots = useMemo(() => {
+    const availableFemalePilotsList = pilots.filter((pilot) =>
+      pilot.femalePilot &&
       !assignedPilotsAtThisTime.has(pilot.displayName) &&
       isPilotAvailableForTimeSlot(pilot.uid, timeSlot)
     );
+    return availableFemalePilotsList.length;
   }, [pilots, assignedPilotsAtThisTime, isPilotAvailableForTimeSlot, timeSlot]);
-
-  // Calculate flight counts for each pilot for the selected day
-  const pilotFlightCounts = useMemo(() => {
-    const selectedDateStr = format(selectedDate, "yyyy-MM-dd");
-    const bookingsForDay = bookings.filter(b => b.date === selectedDateStr);
-
-    const counts: Record<string, number> = {};
-    bookingsForDay.forEach(booking => {
-      booking.assignedPilots.forEach(pilotName => {
-        if (pilotName && pilotName !== "") {
-          counts[pilotName] = (counts[pilotName] || 0) + 1;
-        }
-      });
-    });
-    return counts;
-  }, [bookings, selectedDate]);
-
-  const handleNumberOfPeopleChange = (value: string) => {
-    setNumberOfPeople(value);
-    // Clear selected pilots when changing number of people
-    setSelectedPilots([]);
-  };
-
-  const handlePilotToggle = (pilotName: string) => {
-    const numPeople = parseInt(numberOfPeople);
-    if (isNaN(numPeople)) return;
-
-    if (selectedPilots.includes(pilotName)) {
-      setSelectedPilots(selectedPilots.filter(p => p !== pilotName));
-    } else {
-      // Only add if we haven't reached the number of people
-      if (selectedPilots.length < numPeople) {
-        setSelectedPilots([...selectedPilots, pilotName]);
-      }
-    }
-  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,12 +104,6 @@ export function NewBookingModal({
     const numPeople = parseInt(numberOfPeople);
     if (isNaN(numPeople) || numPeople < 1) {
       alert("Number of people must be a valid positive number");
-      return;
-    }
-
-    // Validate against available slots only if pilots are selected
-    if (selectedPilots.length > 0 && numPeople > availableSlots) {
-      alert(`Cannot book ${numPeople} ${numPeople === 1 ? 'passenger' : 'passengers'}. Only ${availableSlots} ${availableSlots === 1 ? 'slot is' : 'slots are'} available at this time.`);
       return;
     }
 
@@ -175,8 +136,8 @@ export function NewBookingModal({
       numberOfPeople: numPeople,
       pickupLocation: pickupLocation.trim(),
       bookingSource: bookingSource.trim(),
-      assignedPilots: selectedPilots,
-      bookingStatus,
+      assignedPilots: [], // Pilots will be assigned via the schedule grid
+      bookingStatus: "unconfirmed",
       span,
     };
 
@@ -190,6 +151,15 @@ export function NewBookingModal({
     if (notes.trim()) {
       bookingData.notes = notes.trim();
     }
+    if (commission.trim()) {
+      const commissionNum = parseFloat(commission);
+      if (!isNaN(commissionNum)) {
+        bookingData.commission = commissionNum;
+      }
+    }
+    if (femalePilotsRequired > 0) {
+      bookingData.femalePilotsRequired = femalePilotsRequired;
+    }
 
     onSubmit(bookingData);
 
@@ -201,8 +171,9 @@ export function NewBookingModal({
     setPhoneNumber("");
     setEmail("");
     setNotes("");
-    setBookingStatus("confirmed");
-    setSelectedPilots([]);
+    setCommission("");
+    setFemalePilotsRequired(0);
+    setShowAdditionalOptions(false);
     onOpenChange(false);
   };
 
@@ -215,22 +186,16 @@ export function NewBookingModal({
     setPhoneNumber("");
     setEmail("");
     setNotes("");
-    setBookingStatus("confirmed");
-    setSelectedPilots([]);
+    setCommission("");
+    setFemalePilotsRequired(0);
+    setShowAdditionalOptions(false);
     onOpenChange(false);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[90vw] max-w-[500px]">
-        <DialogHeader>
-          <DialogTitle>New Booking</DialogTitle>
-          <DialogDescription>
-            Create a new booking for {timeSlot}. Fill in the required fields marked with an asterisk.
-          </DialogDescription>
-        </DialogHeader>
-
-        <form onSubmit={handleSubmit} className="space-y-4 overflow-x-hidden">
+      <DialogContent className="w-[90vw] max-w-[500px] rounded-2xl">
+        <form onSubmit={handleSubmit} className="space-y-4 overflow-x-hidden px-1">
           {/* Customer Name */}
           <div className="space-y-2">
             <Label htmlFor="customerName" className="text-white">
@@ -257,7 +222,7 @@ export function NewBookingModal({
                     <button
                       key={num}
                       type="button"
-                      onClick={() => !isDisabled && handleNumberOfPeopleChange(num.toString())}
+                      onClick={() => !isDisabled && setNumberOfPeople(num.toString())}
                       disabled={isDisabled}
                       className={`flex-shrink-0 w-12 h-12 rounded-lg font-medium transition-colors ${
                         numberOfPeople === num.toString()
@@ -274,49 +239,6 @@ export function NewBookingModal({
               </div>
             </div>
           </div>
-
-          {/* Pilot Selection */}
-          {numberOfPeople && parseInt(numberOfPeople) > 0 && (
-            <div className="space-y-2">
-              <Label className="text-white">
-                Select Pilots
-              </Label>
-              <p className="text-xs text-zinc-500">
-                Select up to {numberOfPeople} {parseInt(numberOfPeople) === 1 ? "pilot" : "pilots"} for this booking ({selectedPilots.length} selected)
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                {availablePilots.map((pilot) => {
-                    const isSelected = selectedPilots.includes(pilot.displayName);
-                    const isDisabled = !isSelected && selectedPilots.length >= parseInt(numberOfPeople);
-                    // Calculate flight count including current selection
-                    const baseCount = pilotFlightCounts[pilot.displayName] || 0;
-                    const adjustedCount = isSelected ? baseCount + 1 : baseCount;
-                    return (
-                      <button
-                        key={pilot.uid}
-                        type="button"
-                        onClick={() => handlePilotToggle(pilot.displayName)}
-                        disabled={isDisabled}
-                        className={`px-4 py-2 rounded-lg font-medium transition-colors text-left relative ${
-                          isSelected
-                            ? "bg-white text-black"
-                            : isDisabled
-                            ? "bg-zinc-900 text-zinc-600 cursor-not-allowed"
-                            : "bg-zinc-800 text-white hover:bg-zinc-700"
-                        }`}
-                      >
-                        {pilot.displayName}
-                        {adjustedCount > 0 && (
-                          <span className="absolute top-1 right-1 bg-blue-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                            {adjustedCount}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-              </div>
-            </div>
-          )}
 
           {/* Pickup Location */}
           <div className="space-y-2">
@@ -370,34 +292,82 @@ export function NewBookingModal({
             />
           </div>
 
-          {/* Booking Status */}
+          {/* Additional Options - Collapsible */}
           <div className="space-y-2">
-            <Label htmlFor="bookingStatus" className="text-white">
-              Booking Status
-            </Label>
-            <Select value={bookingStatus} onValueChange={(value: "confirmed" | "pending" | "cancelled") => setBookingStatus(value)}>
-              <SelectTrigger id="bookingStatus">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="confirmed">Confirmed</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="cancelled">Cancelled</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+            <button
+              type="button"
+              onClick={() => setShowAdditionalOptions(!showAdditionalOptions)}
+              className="flex items-center justify-between w-full text-white hover:text-zinc-300 transition-colors"
+            >
+              <span className="text-sm font-medium">Additional Options</span>
+              {showAdditionalOptions ? (
+                <ChevronUp className="w-4 h-4" />
+              ) : (
+                <ChevronDown className="w-4 h-4" />
+              )}
+            </button>
 
-          {/* Additional Notes (Optional) */}
-          <div className="space-y-2">
-            <Label htmlFor="notes" className="text-white">
-              Additional Notes
-            </Label>
-            <Textarea
-              id="notes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={3}
-            />
+            {showAdditionalOptions && (
+              <div className="space-y-4 pt-2 border-t border-zinc-800">
+                {/* Commission (Optional) */}
+                <div className="space-y-2">
+                  <Label htmlFor="commission" className="text-white">
+                    Commission (per person)
+                  </Label>
+                  <Input
+                    id="commission"
+                    type="number"
+                    step="0.01"
+                    value={commission}
+                    onChange={(e) => setCommission(e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+
+                {/* Lady Pilots Required */}
+                <div className="space-y-2">
+                  <Label className="text-white">
+                    Lady Pilots Required
+                    {availableFemalePilots > 0 && (
+                      <span className="text-xs text-zinc-400 ml-2">
+                        ({availableFemalePilots} available)
+                      </span>
+                    )}
+                  </Label>
+                  <div className="overflow-x-auto">
+                    <div className="flex gap-2 pb-2">
+                      {Array.from({ length: Math.min(parseInt(numberOfPeople) || 0, availableFemalePilots) + 1 }, (_, i) => i).map((num) => (
+                        <button
+                          key={num}
+                          type="button"
+                          onClick={() => setFemalePilotsRequired(num)}
+                          className={`flex-shrink-0 w-12 h-12 rounded-lg font-medium transition-colors ${
+                            femalePilotsRequired === num
+                              ? "bg-white text-black"
+                              : "bg-zinc-800 text-white hover:bg-zinc-700"
+                          }`}
+                        >
+                          {num}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Additional Notes (Optional) */}
+                <div className="space-y-2">
+                  <Label htmlFor="notes" className="text-white">
+                    Additional Notes
+                  </Label>
+                  <Textarea
+                    id="notes"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    rows={3}
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Action Buttons */}

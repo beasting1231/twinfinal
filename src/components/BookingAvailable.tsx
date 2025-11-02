@@ -9,8 +9,9 @@ interface BookingAvailableProps {
   pickupLocation?: string;
   assignedPilots?: string[];
   pilotPayments?: PilotPayment[];
-  bookingStatus?: "confirmed" | "pending" | "cancelled";
+  bookingStatus?: "unconfirmed" | "confirmed" | "pending" | "cancelled";
   span?: number;
+  femalePilotsRequired?: number;
   onAvailableClick?: () => void;
   onBookedClick?: () => void;
   onContextMenu?: (slotIndex: number, position: { x: number; y: number }) => void;
@@ -25,6 +26,7 @@ export function BookingAvailable({
   pilotPayments = [],
   bookingStatus = "confirmed",
   span = 1,
+  femalePilotsRequired = 0,
   onAvailableClick,
   onBookedClick,
   onContextMenu
@@ -100,6 +102,7 @@ export function BookingAvailable({
 
   if (status === "booked") {
     const statusColors = {
+      unconfirmed: "bg-blue-500",
       confirmed: "bg-green-500",
       pending: "bg-yellow-500",
       cancelled: "bg-red-500"
@@ -126,24 +129,44 @@ export function BookingAvailable({
 
         {/* Pilot badges grid */}
         <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${span}, 1fr)` }}>
-          {assignedPilots.map((pilot, index) => {
+          {Array.from({ length: span }, (_, index) => {
+            const pilot = assignedPilots[index];
+
             // Find payment amount for this pilot
             const payment = pilotPayments?.find(p => p.pilotName === pilot);
             const amount = payment?.amount;
             // Convert to number if it's a string
             const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
 
-            // Show empty placeholder for unassigned positions
+            // Check if this position requires a female pilot
+            const requiresFemalePilot = index < femalePilotsRequired;
+
+            // Show red box with "lady pilot" text for unassigned positions that require female pilot
             if (!pilot || pilot === "") {
+              if (requiresFemalePilot) {
+                return (
+                  <div key={index} className="flex justify-center">
+                    <div className="text-xs text-white bg-red-600/80 rounded-t-lg px-2 py-0.5 w-[80%] text-center">
+                      lady pilot
+                    </div>
+                  </div>
+                );
+              }
               return <div key={index} className="flex justify-center" />;
             }
 
             return (
               <div key={index} className="flex justify-center">
-                <div className="text-xs text-zinc-300 bg-zinc-700/50 rounded-t-lg px-2 py-0.5 w-[80%] relative">
+                <div className={requiresFemalePilot
+                  ? "text-xs text-white bg-red-600/80 rounded-t-lg px-2 py-0.5 w-[80%] relative"
+                  : "text-xs text-zinc-300 bg-zinc-700/50 rounded-t-lg px-2 py-0.5 w-[80%] relative"
+                }>
                   <div className="text-center truncate">{pilot}</div>
                   {numAmount !== undefined && numAmount !== 0 && !isNaN(numAmount) && (
-                    <span className="absolute right-2 top-0.5 font-medium text-zinc-400">{numAmount}</span>
+                    <span className={requiresFemalePilot
+                      ? "absolute right-2 top-0.5 font-medium text-white"
+                      : "absolute right-2 top-0.5 font-medium text-zinc-400"
+                    }>{numAmount}</span>
                   )}
                 </div>
               </div>

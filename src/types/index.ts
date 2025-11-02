@@ -22,8 +22,10 @@ export interface Booking {
   phoneNumber?: string;
   email?: string;
   notes?: string;
+  commission?: number | null;
+  femalePilotsRequired?: number;
   assignedPilots: string[];
-  bookingStatus: "confirmed" | "pending" | "cancelled";
+  bookingStatus: "unconfirmed" | "confirmed" | "pending" | "cancelled";
   span: number;
   pilotPayments?: PilotPayment[];
 }

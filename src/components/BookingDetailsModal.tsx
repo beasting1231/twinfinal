@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
 import { Button } from "./ui/button";
 import { Label } from "./ui/label";
@@ -46,29 +46,8 @@ export function BookingDetailsModal({
   const [editedDateAvailability, setEditedDateAvailability] = useState<Map<string, Set<string>>>(new Map());
   const [editedDatePilots, setEditedDatePilots] = useState<Pilot[]>([]);
   const [editedDateBookings, setEditedDateBookings] = useState<Booking[]>([]);
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
 
-  // Get pilots already assigned at this time (excluding the current booking)
-  // Use editedBooking when in edit mode to recalculate for new time/date
-  const assignedPilotsAtThisTime = useMemo(() => {
-    if (!booking) return new Set<string>();
-
-    const targetTimeIndex = editedBooking?.timeIndex ?? booking.timeIndex;
-    const targetDate = editedBooking?.date ?? booking.date;
-
-    // Use editedDateBookings when in edit mode, otherwise use bookings from props
-    const bookingsToUse = isEditing ? editedDateBookings : bookings;
-
-    const bookingsAtThisTime = bookingsToUse.filter(
-      b => b.timeIndex === targetTimeIndex && b.date === targetDate && b.id !== booking.id
-    );
-    const assigned = new Set<string>();
-    bookingsAtThisTime.forEach(b => {
-      b.assignedPilots.forEach(pilot => {
-        if (pilot && pilot !== "") assigned.add(pilot);
-      });
-    });
-    return assigned;
-  }, [booking, editedBooking, bookings, isEditing, editedDateBookings]);
 
   // Create an availability check function that uses edited date data when in edit mode
   const checkPilotAvailability = (pilotUid: string, timeSlot: string): boolean => {
@@ -126,27 +105,6 @@ export function BookingDetailsModal({
     return availableSlotsPerTime[targetTimeIndex] ?? 0;
   }, [booking, editedBooking, availableSlotsPerTime]);
 
-  // Calculate flight counts for each pilot for the booking's day
-  // Use editedBooking when in edit mode to recalculate for new date
-  const pilotFlightCounts = useMemo(() => {
-    if (!booking) return {};
-
-    const targetDate = editedBooking?.date ?? booking.date;
-
-    // Use editedDateBookings when in edit mode, otherwise use bookings from props
-    const bookingsToUse = isEditing ? editedDateBookings : bookings;
-    const bookingsForDay = bookingsToUse.filter(b => b.date === targetDate);
-
-    const counts: Record<string, number> = {};
-    bookingsForDay.forEach(b => {
-      b.assignedPilots.forEach(pilotName => {
-        if (pilotName && pilotName !== "") {
-          counts[pilotName] = (counts[pilotName] || 0) + 1;
-        }
-      });
-    });
-    return counts;
-  }, [booking, editedBooking, bookings, isEditing, editedDateBookings]);
 
   useEffect(() => {
     if (booking) {
@@ -291,11 +249,6 @@ export function BookingDetailsModal({
 
   const handleSave = () => {
     if (booking.id && onUpdate) {
-      // Validate against available slots only if pilots are being assigned
-      if (editedBooking.assignedPilots.length > 0 && editedBooking.numberOfPeople > availableSlots) {
-        alert(`Cannot book ${editedBooking.numberOfPeople} ${editedBooking.numberOfPeople === 1 ? 'passenger' : 'passengers'}. Only ${availableSlots} ${availableSlots === 1 ? 'slot is' : 'slots are'} available at this time.`);
-        return;
-      }
 
       // Build update object with only changed fields
       const updates: any = {};
@@ -344,10 +297,6 @@ export function BookingDetailsModal({
       }
       if (editedBooking.span !== booking.span) {
         updates.span = editedBooking.span;
-      }
-      // Check if assignedPilots array has changed
-      if (JSON.stringify(editedBooking.assignedPilots) !== JSON.stringify(booking.assignedPilots)) {
-        updates.assignedPilots = editedBooking.assignedPilots;
       }
 
       // Update the booking in the database
@@ -449,35 +398,92 @@ export function BookingDetailsModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[90vw] max-w-[600px] overflow-x-hidden allow-select">
-        <DialogHeader>
-          <DialogTitle>Booking Details</DialogTitle>
-          <DialogDescription>
-            View and manage booking information
-          </DialogDescription>
-        </DialogHeader>
-
+      <DialogContent className="w-[90vw] max-w-[600px] overflow-x-hidden allow-select rounded-2xl" hideCloseButton>
         <Tabs defaultValue="details" className="w-full overflow-x-hidden">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="details">Booking Details</TabsTrigger>
             <TabsTrigger value="payment">Payment</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="details" className="space-y-4 overflow-x-hidden">
+          <TabsContent value="details" className="space-y-4 overflow-x-hidden px-1">
             {!isEditing ? (
               // DISPLAY MODE - Beautiful card layout
               <div className="space-y-3">
-                {/* Status Badge */}
-                <div className="flex items-center justify-between mb-4">
-                  <div className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium ${
-                    editedBooking.bookingStatus === 'confirmed'
-                      ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                      : editedBooking.bookingStatus === 'pending'
-                      ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
-                      : 'bg-red-500/20 text-red-400 border border-red-500/30'
-                  }`}>
+                {/* Status Badge Dropdown */}
+                <div className="flex items-center justify-between mb-4 relative">
+                  <button
+                    onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+                    className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium cursor-pointer transition-all hover:scale-105 ${
+                      editedBooking.bookingStatus === 'unconfirmed'
+                        ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-500/30'
+                        : editedBooking.bookingStatus === 'confirmed'
+                        ? 'bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30'
+                        : editedBooking.bookingStatus === 'pending'
+                        ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/30'
+                        : 'bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30'
+                    }`}
+                  >
                     {editedBooking.bookingStatus.charAt(0).toUpperCase() + editedBooking.bookingStatus.slice(1)}
-                  </div>
+                  </button>
+
+                  {showStatusDropdown && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-10"
+                        onClick={() => setShowStatusDropdown(false)}
+                      />
+                      <div className="absolute top-full left-0 mt-2 flex flex-col gap-2 bg-zinc-900 border border-zinc-700 rounded-lg p-2 shadow-xl z-20">
+                        <button
+                          onClick={() => {
+                            setEditedBooking({ ...editedBooking, bookingStatus: 'unconfirmed' });
+                            if (booking.id && onUpdate) {
+                              onUpdate(booking.id, { bookingStatus: 'unconfirmed' });
+                            }
+                            setShowStatusDropdown(false);
+                          }}
+                          className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium cursor-pointer transition-all hover:scale-105 bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-500/30"
+                        >
+                          Unconfirmed
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditedBooking({ ...editedBooking, bookingStatus: 'confirmed' });
+                            if (booking.id && onUpdate) {
+                              onUpdate(booking.id, { bookingStatus: 'confirmed' });
+                            }
+                            setShowStatusDropdown(false);
+                          }}
+                          className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium cursor-pointer transition-all hover:scale-105 bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30"
+                        >
+                          Confirmed
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditedBooking({ ...editedBooking, bookingStatus: 'pending' });
+                            if (booking.id && onUpdate) {
+                              onUpdate(booking.id, { bookingStatus: 'pending' });
+                            }
+                            setShowStatusDropdown(false);
+                          }}
+                          className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium cursor-pointer transition-all hover:scale-105 bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/30"
+                        >
+                          Pending
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditedBooking({ ...editedBooking, bookingStatus: 'cancelled' });
+                            if (booking.id && onUpdate) {
+                              onUpdate(booking.id, { bookingStatus: 'cancelled' });
+                            }
+                            setShowStatusDropdown(false);
+                          }}
+                          className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium cursor-pointer transition-all hover:scale-105 bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30"
+                        >
+                          Cancelled
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Customer Info Card */}
@@ -643,11 +649,9 @@ export function BookingDetailsModal({
                     type="date"
                     value={editedBooking.date}
                     onChange={(e) => {
-                      // Clear assigned pilots when changing date as availability may differ
                       setEditedBooking({
                         ...editedBooking,
-                        date: e.target.value,
-                        assignedPilots: []
+                        date: e.target.value
                       });
                     }}
                   />
@@ -659,19 +663,17 @@ export function BookingDetailsModal({
                   <Select
                     value={editedBooking.timeIndex.toString()}
                     onValueChange={(value) => {
-                      // Clear assigned pilots and reset position when changing time
                       setEditedBooking({
                         ...editedBooking,
                         timeIndex: parseInt(value),
-                        pilotIndex: 0,
-                        assignedPilots: []
+                        pilotIndex: 0
                       });
                     }}
                   >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="min-w-[280px]">
                       {timeSlots.map((slot, index) => {
                         const availableCount = availableSlotsPerTime[index] ?? 0;
                         const requiredPilots = editedBooking.numberOfPeople;
@@ -684,8 +686,8 @@ export function BookingDetailsModal({
                             className={isDisabled ? "opacity-50 cursor-not-allowed" : ""}
                           >
                             <div className="flex items-center justify-between gap-4 w-full">
-                              <span>{slot}</span>
-                              <span className={`text-xs px-2 py-0.5 rounded ${
+                              <span className="flex-shrink-0">{slot}</span>
+                              <span className={`text-xs px-2 py-0.5 rounded flex-shrink-0 ${
                                 availableCount < requiredPilots
                                   ? 'bg-red-900/50 text-red-400'
                                   : availableCount <= requiredPilots + 1
@@ -736,11 +738,9 @@ export function BookingDetailsModal({
                             type="button"
                             onClick={() => {
                               if (!isDisabled) {
-                                // Clear assigned pilots and update span when changing number of people
                                 setEditedBooking({
                                   ...editedBooking,
                                   numberOfPeople: num,
-                                  assignedPilots: [],
                                   span: num
                                 });
                               }
@@ -800,77 +800,13 @@ export function BookingDetailsModal({
                   />
                 </div>
 
-                {/* Assigned Pilots */}
-                <div className="space-y-2">
-                  <Label className="text-white">Assigned Pilots</Label>
-                  <p className="text-xs text-zinc-500">
-                    Select {editedBooking.numberOfPeople} {editedBooking.numberOfPeople === 1 ? "pilot" : "pilots"} ({editedBooking.assignedPilots.length} selected)
-                  </p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {editedDatePilots
-                      .filter((pilot) => {
-                        const timeSlot = timeSlots[editedBooking.timeIndex];
-                        return !assignedPilotsAtThisTime.has(pilot.displayName) &&
-                               checkPilotAvailability(pilot.uid, timeSlot);
-                      })
-                      .map((pilot) => {
-                        const isSelected = editedBooking.assignedPilots.includes(pilot.displayName);
-                        const isDisabled = !isSelected && editedBooking.assignedPilots.length >= editedBooking.numberOfPeople;
-                        // Calculate flight count including current edits
-                        const baseCount = pilotFlightCounts[pilot.displayName] || 0;
-                        const wasOriginallyAssigned = booking.assignedPilots.includes(pilot.displayName);
-                        let adjustedCount = baseCount;
-                        if (isSelected && !wasOriginallyAssigned) {
-                          // Newly added in this edit
-                          adjustedCount = baseCount + 1;
-                        } else if (!isSelected && wasOriginallyAssigned) {
-                          // Was assigned but now removed in this edit
-                          adjustedCount = baseCount - 1;
-                        }
-                        return (
-                          <button
-                            key={pilot.uid}
-                            type="button"
-                            onClick={() => {
-                              if (isSelected) {
-                                setEditedBooking({
-                                  ...editedBooking,
-                                  assignedPilots: editedBooking.assignedPilots.filter(p => p !== pilot.displayName)
-                                });
-                              } else if (!isDisabled) {
-                                setEditedBooking({
-                                  ...editedBooking,
-                                  assignedPilots: [...editedBooking.assignedPilots, pilot.displayName]
-                                });
-                              }
-                            }}
-                            disabled={isDisabled}
-                            className={`px-4 py-2 rounded-lg font-medium transition-colors text-left relative ${
-                              isSelected
-                                ? "bg-white text-black"
-                                : isDisabled
-                                ? "bg-zinc-900 text-zinc-600 cursor-not-allowed"
-                                : "bg-zinc-800 text-white hover:bg-zinc-700"
-                            }`}
-                          >
-                            {pilot.displayName}
-                            {adjustedCount > 0 && (
-                              <span className="absolute top-1 right-1 bg-blue-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                                {adjustedCount}
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })}
-                  </div>
-                </div>
 
                 {/* Booking Status */}
                 <div className="space-y-2">
                   <Label className="text-white">Booking Status</Label>
                   <Select
                     value={editedBooking.bookingStatus}
-                    onValueChange={(value: "confirmed" | "pending" | "cancelled") =>
+                    onValueChange={(value: "unconfirmed" | "confirmed" | "pending" | "cancelled") =>
                       setEditedBooking({ ...editedBooking, bookingStatus: value })
                     }
                   >
@@ -878,6 +814,7 @@ export function BookingDetailsModal({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="unconfirmed">Unconfirmed</SelectItem>
                       <SelectItem value="confirmed">Confirmed</SelectItem>
                       <SelectItem value="pending">Pending</SelectItem>
                       <SelectItem value="cancelled">Cancelled</SelectItem>
@@ -926,7 +863,8 @@ export function BookingDetailsModal({
                 <>
                   <Button
                     onClick={handleSave}
-                    className="flex-1 bg-white text-black hover:bg-zinc-200"
+                    disabled={availableSlots < editedBooking.numberOfPeople}
+                    className="flex-1 bg-white text-black hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
                   >
                     Save
                   </Button>

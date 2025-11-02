@@ -265,12 +265,13 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], u
           <div className="h-7" />
 
           {/* Pilot Headers */}
-          {pilots.map((p) => (
+          {pilots.map((p, index) => (
             <div
               key={p.uid}
-              className="h-7 flex items-center justify-center bg-zinc-900 rounded-lg font-medium text-sm"
+              className="h-7 flex items-center justify-center bg-zinc-900 rounded-lg font-medium text-sm gap-2"
             >
-              {p.displayName}
+              <span className="text-zinc-500">{index + 1}</span>
+              <span>{p.displayName}</span>
             </div>
           ))}
 
@@ -340,6 +341,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], u
                         pilotPayments={booking?.pilotPayments}
                         bookingStatus={booking?.bookingStatus}
                         span={span}
+                        femalePilotsRequired={booking?.femalePilotsRequired}
                         onAvailableClick={
                           cellStatus === "available"
                             ? () => handleAvailableCellClick(pilotIndex, timeIndex, timeSlot)
