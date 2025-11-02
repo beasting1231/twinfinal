@@ -2,6 +2,7 @@ import { useState } from "react";
 import { BookingAvailable } from "./BookingAvailable";
 import { NewBookingModal } from "./NewBookingModal";
 import { BookingDetailsModal } from "./BookingDetailsModal";
+import { PilotContextMenu } from "./PilotContextMenu";
 import type { Booking, UnavailablePilot, Pilot } from "../types/index";
 
 interface ScheduleGridProps {
@@ -23,6 +24,15 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], u
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
 
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{
+    isOpen: boolean;
+    position: { x: number; y: number };
+    booking: Booking;
+    slotIndex: number;
+    timeSlot: string;
+  } | null>(null);
+
   const handleAvailableCellClick = (pilotIndex: number, timeIndex: number, timeSlot: string) => {
     setSelectedCell({ pilotIndex, timeIndex, timeSlot });
     setIsModalOpen(true);
@@ -37,6 +47,45 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], u
     if (onAddBooking) {
       onAddBooking(booking);
     }
+  };
+
+  // Handle context menu on booking cell
+  const handleBookingContextMenu = (booking: Booking, timeSlot: string) => (
+    slotIndex: number,
+    position: { x: number; y: number }
+  ) => {
+    setContextMenu({
+      isOpen: true,
+      position,
+      booking,
+      slotIndex,
+      timeSlot,
+    });
+  };
+
+  // Handle pilot selection from context menu
+  const handleSelectPilot = (pilotName: string) => {
+    if (!contextMenu || !onUpdateBooking) return;
+
+    const { booking, slotIndex } = contextMenu;
+    const updatedPilots = [...booking.assignedPilots];
+    updatedPilots[slotIndex] = pilotName;
+
+    onUpdateBooking(booking.id!, { assignedPilots: updatedPilots });
+  };
+
+  // Handle pilot un-assignment from context menu
+  const handleUnassignPilot = () => {
+    if (!contextMenu || !onUpdateBooking) return;
+
+    const { booking, slotIndex } = contextMenu;
+    const updatedPilots = [...booking.assignedPilots];
+    // Set the position to empty string instead of removing to preserve positions
+    updatedPilots[slotIndex] = "";
+
+    onUpdateBooking(booking.id!, {
+      assignedPilots: updatedPilots,
+    });
   };
 
   // Show skeleton loader while loading
@@ -95,7 +144,9 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], u
   const isCellOccupied = (pilotIndex: number, timeIndex: number) => {
     return bookings.some(booking => {
       const bookingStart = booking.pilotIndex;
-      const bookingEnd = booking.pilotIndex + (booking.span || 1) - 1;
+      // Use numberOfPeople to determine span for proper cell occupation
+      const bookingSpan = booking.numberOfPeople || booking.span || 1;
+      const bookingEnd = booking.pilotIndex + bookingSpan - 1;
       return booking.timeIndex === timeIndex && pilotIndex > bookingStart && pilotIndex <= bookingEnd;
     });
   };
@@ -160,7 +211,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], u
                   }
 
                   const booking = getBooking(pilotIndex, timeIndex);
-                  const span = booking?.span || 1;
+                  // Use numberOfPeople as span to ensure proper column width
+                  const span = booking?.numberOfPeople || booking?.span || 1;
                   const isUnavailable = isPilotUnavailable(pilotIndex, timeIndex);
 
                   // Check if pilot is available for this specific time slot
@@ -200,6 +252,11 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], u
                             ? () => handleBookedCellClick(booking)
                             : undefined
                         }
+                        onContextMenu={
+                          cellStatus === "booked" && booking
+                            ? handleBookingContextMenu(booking, timeSlot)
+                            : undefined
+                        }
                       />
                     </div>
                   );
@@ -236,6 +293,49 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], u
         onUpdate={onUpdateBooking}
         onDelete={onDeleteBooking}
       />
+
+      {/* Pilot Context Menu */}
+      {contextMenu && (
+        <PilotContextMenu
+          isOpen={contextMenu.isOpen}
+          position={contextMenu.position}
+          availablePilots={pilots
+            .filter((pilot) => {
+              // Check if pilot is available for this time slot
+              if (!isPilotAvailableForTimeSlot(pilot.uid, contextMenu.timeSlot)) {
+                return false;
+              }
+
+              // Exclude pilots already assigned to this booking (to prevent double-assignment)
+              const alreadyAssignedToThisBooking = contextMenu.booking.assignedPilots
+                .filter((p, index) => p && p !== "" && index !== contextMenu.slotIndex)
+                .includes(pilot.displayName);
+
+              return !alreadyAssignedToThisBooking;
+            })
+            .sort((a, b) => {
+              // Count flights for each pilot on the selected date
+              const aFlightCount = bookings.filter(
+                (booking) =>
+                  booking.date === contextMenu.booking.date &&
+                  booking.assignedPilots.includes(a.displayName)
+              ).length;
+
+              const bFlightCount = bookings.filter(
+                (booking) =>
+                  booking.date === contextMenu.booking.date &&
+                  booking.assignedPilots.includes(b.displayName)
+              ).length;
+
+              // Sort by flight count (least to most)
+              return aFlightCount - bFlightCount;
+            })}
+          currentPilot={contextMenu.booking.assignedPilots[contextMenu.slotIndex]}
+          onSelectPilot={handleSelectPilot}
+          onUnassign={handleUnassignPilot}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </div>
   );
 }

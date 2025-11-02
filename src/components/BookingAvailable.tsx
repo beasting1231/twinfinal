@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import type { PilotPayment } from "../types/index";
 
 interface BookingAvailableProps {
@@ -12,6 +13,7 @@ interface BookingAvailableProps {
   span?: number;
   onAvailableClick?: () => void;
   onBookedClick?: () => void;
+  onContextMenu?: (slotIndex: number, position: { x: number; y: number }) => void;
 }
 
 export function BookingAvailable({
@@ -24,8 +26,78 @@ export function BookingAvailable({
   bookingStatus = "confirmed",
   span = 1,
   onAvailableClick,
-  onBookedClick
+  onBookedClick,
+  onContextMenu
 }: BookingAvailableProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const longPressTimerRef = useRef<number | null>(null);
+  const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
+
+  // Detect which slot was clicked based on x position
+  const getSlotIndexFromPosition = (clientX: number): number => {
+    if (!containerRef.current || span === 1) return 0;
+
+    const rect = containerRef.current.getBoundingClientRect();
+    const relativeX = clientX - rect.left;
+    const slotWidth = rect.width / span;
+    const slotIndex = Math.floor(relativeX / slotWidth);
+
+    return Math.max(0, Math.min(span - 1, slotIndex));
+  };
+
+  // Handle right-click (desktop)
+  const handleContextMenu = (e: React.MouseEvent) => {
+    if (status !== "booked" || !onContextMenu) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const slotIndex = getSlotIndexFromPosition(e.clientX);
+    onContextMenu(slotIndex, { x: e.clientX, y: e.clientY });
+  };
+
+  // Handle touch start (mobile long-press)
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (status !== "booked" || !onContextMenu) return;
+
+    const touch = e.touches[0];
+    touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
+
+    longPressTimerRef.current = window.setTimeout(() => {
+      if (touchStartPosRef.current) {
+        const slotIndex = getSlotIndexFromPosition(touchStartPosRef.current.x);
+        onContextMenu(slotIndex, touchStartPosRef.current);
+      }
+    }, 500); // 500ms long press
+  };
+
+  // Handle touch move (cancel long-press if finger moves)
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStartPosRef.current || !longPressTimerRef.current) return;
+
+    const touch = e.touches[0];
+    const deltaX = Math.abs(touch.clientX - touchStartPosRef.current.x);
+    const deltaY = Math.abs(touch.clientY - touchStartPosRef.current.y);
+
+    // Cancel long-press if finger moved more than 10px
+    if (deltaX > 10 || deltaY > 10) {
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
+      touchStartPosRef.current = null;
+    }
+  };
+
+  // Handle touch end (clear long-press timer)
+  const handleTouchEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    touchStartPosRef.current = null;
+  };
+
   if (status === "booked") {
     const statusColors = {
       confirmed: "bg-green-500",
@@ -35,8 +107,13 @@ export function BookingAvailable({
 
     return (
       <div
+        ref={containerRef}
         className="w-full h-full bg-blue-900/40 border border-blue-700/50 rounded-lg pt-2 px-2 flex flex-col justify-between cursor-pointer hover:bg-blue-900/50 transition-colors overflow-hidden relative"
         onClick={onBookedClick}
+        onContextMenu={handleContextMenu}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       >
         {/* Status indicator dot */}
         <div className={`absolute top-1 right-1 w-2 h-2 rounded-full ${statusColors[bookingStatus]}`} />
@@ -55,6 +132,11 @@ export function BookingAvailable({
             const amount = payment?.amount;
             // Convert to number if it's a string
             const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+
+            // Show empty placeholder for unassigned positions
+            if (!pilot || pilot === "") {
+              return <div key={index} className="flex justify-center" />;
+            }
 
             return (
               <div key={index} className="flex justify-center">

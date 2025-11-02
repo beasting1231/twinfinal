@@ -56,7 +56,9 @@ export function BookingDetailsModal({
     );
     const assigned = new Set<string>();
     bookingsAtThisTime.forEach(b => {
-      b.assignedPilots.forEach(pilot => assigned.add(pilot));
+      b.assignedPilots.forEach(pilot => {
+        if (pilot && pilot !== "") assigned.add(pilot);
+      });
     });
     return assigned;
   }, [booking, editedBooking, bookings]);
@@ -72,21 +74,45 @@ export function BookingDetailsModal({
     return isPilotAvailableForTimeSlot(pilotUid, timeSlot);
   };
 
+  // Calculate available slots for ALL time slots (for dropdown display)
+  const availableSlotsPerTime = useMemo(() => {
+    if (!booking || !editedBooking) return {};
+
+    const targetDate = editedBooking.date;
+    const slotsMap: Record<number, number> = {};
+
+    timeSlots.forEach((timeSlot, timeIndex) => {
+      // Get bookings at this specific time (excluding current booking)
+      const bookingsAtThisTime = bookings.filter(
+        b => b.timeIndex === timeIndex && b.date === targetDate && b.id !== booking.id
+      );
+      const assignedAtThisTime = new Set<string>();
+      bookingsAtThisTime.forEach(b => {
+        b.assignedPilots.forEach(pilot => {
+          if (pilot && pilot !== "") assignedAtThisTime.add(pilot);
+        });
+      });
+
+      // Count pilots available at this time slot
+      const availablePilots = pilots.filter((pilot) =>
+        !assignedAtThisTime.has(pilot.displayName) &&
+        checkPilotAvailability(pilot.uid, timeSlot)
+      ).length;
+
+      slotsMap[timeIndex] = availablePilots;
+    });
+
+    return slotsMap;
+  }, [booking, editedBooking, pilots, bookings, timeSlots, isEditing, editedDateAvailability, isPilotAvailableForTimeSlot]);
+
   // Calculate available slots at this time based on actually available pilots (excluding the current booking)
   // Use editedBooking when in edit mode to recalculate for new time/date
   const availableSlots = useMemo(() => {
     if (!booking) return 0;
 
     const targetTimeIndex = editedBooking?.timeIndex ?? booking.timeIndex;
-    const timeSlot = timeSlots[targetTimeIndex];
-    // Count pilots who are actually available at this time slot
-    const actuallyAvailablePilots = pilots.filter((pilot) =>
-      !assignedPilotsAtThisTime.has(pilot.displayName) &&
-      checkPilotAvailability(pilot.uid, timeSlot)
-    ).length;
-
-    return actuallyAvailablePilots;
-  }, [booking, editedBooking, pilots, assignedPilotsAtThisTime, isEditing, editedDateAvailability, isPilotAvailableForTimeSlot, timeSlots]);
+    return availableSlotsPerTime[targetTimeIndex] ?? 0;
+  }, [booking, editedBooking, availableSlotsPerTime]);
 
   // Calculate flight counts for each pilot for the booking's day
   // Use editedBooking when in edit mode to recalculate for new date
@@ -99,7 +125,9 @@ export function BookingDetailsModal({
     const counts: Record<string, number> = {};
     bookingsForDay.forEach(b => {
       b.assignedPilots.forEach(pilotName => {
-        counts[pilotName] = (counts[pilotName] || 0) + 1;
+        if (pilotName && pilotName !== "") {
+          counts[pilotName] = (counts[pilotName] || 0) + 1;
+        }
       });
     });
     return counts;
@@ -161,13 +189,15 @@ export function BookingDetailsModal({
       if (booking.pilotPayments) {
         setPilotPayments(booking.pilotPayments);
       } else {
-        // Initialize empty payment data for each assigned pilot
-        const initialPayments: PilotPayment[] = booking.assignedPilots.map(pilotName => ({
-          pilotName,
-          amount: "",
-          paymentMethod: "direkt" as const,
-          receiptFiles: []
-        }));
+        // Initialize empty payment data for each assigned pilot (excluding empty positions)
+        const initialPayments: PilotPayment[] = booking.assignedPilots
+          .filter(pilotName => pilotName && pilotName !== "")
+          .map(pilotName => ({
+            pilotName,
+            amount: "",
+            paymentMethod: "direkt" as const,
+            receiptFiles: []
+          }));
         setPilotPayments(initialPayments);
       }
     }
@@ -191,21 +221,9 @@ export function BookingDetailsModal({
 
   const handleSave = () => {
     if (booking.id && onUpdate) {
-      // Validate that there are pilots available at the selected time/date
-      if (availableSlots === 0) {
-        alert("No pilots are available at the selected date and time. Please choose a different time slot or date.");
-        return;
-      }
-
-      // Validate against available slots
-      if (editedBooking.numberOfPeople > availableSlots) {
+      // Validate against available slots only if pilots are being assigned
+      if (editedBooking.assignedPilots.length > 0 && editedBooking.numberOfPeople > availableSlots) {
         alert(`Cannot book ${editedBooking.numberOfPeople} ${editedBooking.numberOfPeople === 1 ? 'passenger' : 'passengers'}. Only ${availableSlots} ${availableSlots === 1 ? 'slot is' : 'slots are'} available at this time.`);
-        return;
-      }
-
-      // Validate pilots are selected
-      if (editedBooking.assignedPilots.length === 0) {
-        alert("Please select at least one pilot");
         return;
       }
 
@@ -505,11 +523,14 @@ export function BookingDetailsModal({
                 <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
                   <div className="text-xs text-zinc-500 mb-3">Assigned Pilots</div>
                   <div className="flex gap-2 flex-wrap">
-                    {booking.assignedPilots.map((pilot, index) => (
+                    {booking.assignedPilots.filter(pilot => pilot && pilot !== "").map((pilot, index) => (
                       <div key={index} className="bg-zinc-800 text-white px-3 py-2 rounded-lg text-sm font-medium border border-zinc-700">
                         {pilot}
                       </div>
                     ))}
+                    {booking.assignedPilots.filter(pilot => pilot && pilot !== "").length === 0 && (
+                      <div className="text-zinc-500 text-sm">No pilots assigned</div>
+                    )}
                   </div>
                 </div>
 
@@ -569,11 +590,31 @@ export function BookingDetailsModal({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {timeSlots.map((slot, index) => (
-                        <SelectItem key={index} value={index.toString()}>
-                          {slot}
-                        </SelectItem>
-                      ))}
+                      {timeSlots.map((slot, index) => {
+                        const availableCount = availableSlotsPerTime[index] ?? 0;
+                        const isDisabled = availableCount === 0;
+                        return (
+                          <SelectItem
+                            key={index}
+                            value={index.toString()}
+                            disabled={isDisabled}
+                            className={isDisabled ? "opacity-50 cursor-not-allowed" : ""}
+                          >
+                            <div className="flex items-center justify-between gap-4 w-full">
+                              <span>{slot}</span>
+                              <span className={`text-xs px-2 py-0.5 rounded ${
+                                availableCount === 0
+                                  ? 'bg-red-900/50 text-red-400'
+                                  : availableCount <= 2
+                                  ? 'bg-yellow-900/50 text-yellow-400'
+                                  : 'bg-green-900/50 text-green-400'
+                              }`}>
+                                {availableCount} available
+                              </span>
+                            </div>
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                 </div>
@@ -608,11 +649,12 @@ export function BookingDetailsModal({
                             type="button"
                             onClick={() => {
                               if (!isDisabled) {
-                                // Clear assigned pilots when changing number of people
+                                // Clear assigned pilots and update span when changing number of people
                                 setEditedBooking({
                                   ...editedBooking,
                                   numberOfPeople: num,
-                                  assignedPilots: []
+                                  assignedPilots: [],
+                                  span: num
                                 });
                               }
                             }}
@@ -706,14 +748,12 @@ export function BookingDetailsModal({
                               if (isSelected) {
                                 setEditedBooking({
                                   ...editedBooking,
-                                  assignedPilots: editedBooking.assignedPilots.filter(p => p !== pilot.displayName),
-                                  span: editedBooking.assignedPilots.length - 1
+                                  assignedPilots: editedBooking.assignedPilots.filter(p => p !== pilot.displayName)
                                 });
                               } else if (!isDisabled) {
                                 setEditedBooking({
                                   ...editedBooking,
-                                  assignedPilots: [...editedBooking.assignedPilots, pilot.displayName],
-                                  span: editedBooking.assignedPilots.length + 1
+                                  assignedPilots: [...editedBooking.assignedPilots, pilot.displayName]
                                 });
                               }
                             }}

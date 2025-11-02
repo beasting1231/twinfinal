@@ -63,7 +63,9 @@ export function NewBookingModal({
     const bookingsAtThisTime = bookings.filter(b => b.timeIndex === timeIndex);
     const assigned = new Set<string>();
     bookingsAtThisTime.forEach(booking => {
-      booking.assignedPilots.forEach(pilot => assigned.add(pilot));
+      booking.assignedPilots.forEach(pilot => {
+        if (pilot && pilot !== "") assigned.add(pilot);
+      });
     });
     return assigned;
   }, [bookings, timeIndex]);
@@ -95,7 +97,9 @@ export function NewBookingModal({
     const counts: Record<string, number> = {};
     bookingsForDay.forEach(booking => {
       booking.assignedPilots.forEach(pilotName => {
-        counts[pilotName] = (counts[pilotName] || 0) + 1;
+        if (pilotName && pilotName !== "") {
+          counts[pilotName] = (counts[pilotName] || 0) + 1;
+        }
       });
     });
     return counts;
@@ -136,20 +140,14 @@ export function NewBookingModal({
       return;
     }
 
-    // Validate against available slots
-    if (numPeople > availableSlots) {
+    // Validate against available slots only if pilots are selected
+    if (selectedPilots.length > 0 && numPeople > availableSlots) {
       alert(`Cannot book ${numPeople} ${numPeople === 1 ? 'passenger' : 'passengers'}. Only ${availableSlots} ${availableSlots === 1 ? 'slot is' : 'slots are'} available at this time.`);
       return;
     }
 
-    // Validate that pilots are selected
-    if (selectedPilots.length === 0) {
-      alert("Please select at least one pilot");
-      return;
-    }
-
-    // Calculate span based on selected pilots
-    const span = selectedPilots.length;
+    // Calculate span based on number of passengers
+    const span = numPeople;
 
     // Build booking object, only including optional fields if they have values
     const bookingData: any = {
@@ -264,10 +262,10 @@ export function NewBookingModal({
           {numberOfPeople && parseInt(numberOfPeople) > 0 && (
             <div className="space-y-2">
               <Label className="text-white">
-                Select Pilots <span className="text-red-500">*</span>
+                Select Pilots
               </Label>
               <p className="text-xs text-zinc-500">
-                Select {numberOfPeople} {parseInt(numberOfPeople) === 1 ? "pilot" : "pilots"} for this booking ({selectedPilots.length} selected)
+                Select up to {numberOfPeople} {parseInt(numberOfPeople) === 1 ? "pilot" : "pilots"} for this booking ({selectedPilots.length} selected)
               </p>
               <div className="grid grid-cols-2 gap-2">
                 {availablePilots.map((pilot) => {
