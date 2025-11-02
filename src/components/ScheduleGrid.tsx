@@ -268,9 +268,9 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], u
           {pilots.map((p, index) => (
             <div
               key={p.uid}
-              className="h-7 flex items-center justify-center bg-zinc-900 rounded-lg font-medium text-sm gap-2"
+              className={`h-7 flex items-center justify-center ${p.femalePilot ? 'bg-red-600/80' : 'bg-zinc-900'} rounded-lg font-medium text-sm gap-2`}
             >
-              <span className="text-zinc-500">{index + 1}</span>
+              <span className={p.femalePilot ? 'text-white' : 'text-zinc-500'}>{index + 1}</span>
               <span>{p.displayName}</span>
             </div>
           ))}
