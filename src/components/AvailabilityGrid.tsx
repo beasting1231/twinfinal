@@ -2,7 +2,7 @@ import { AvailabilityCell } from "./AvailabilityCell";
 import { format, addDays } from "date-fns";
 import { useAvailability } from "../hooks/useAvailability";
 import { getTimeSlotsByDate } from "../utils/timeSlots";
-import { useMemo } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 
 interface AvailabilityGridProps {
   weekStartDate: Date;
@@ -32,6 +32,12 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
 
   const { isAvailable, toggleAvailability, toggleDay, loading, saving, justSaved } = useAvailability();
 
+  // Zoom state
+  const [scale, setScale] = useState(1);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const initialDistanceRef = useRef<number | null>(null);
+  const initialScaleRef = useRef<number>(1);
+
   const handleToggleCell = async (dayIndex: number, timeSlot: string) => {
     await toggleAvailability(days[dayIndex], timeSlot);
   };
@@ -41,8 +47,65 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
     await toggleDay(days[dayIndex], dailyTimeSlots[dayIndex]);
   };
 
+  // Get distance between two touch points
+  const getDistance = (touch1: React.Touch, touch2: React.Touch) => {
+    const dx = touch1.clientX - touch2.clientX;
+    const dy = touch1.clientY - touch2.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  // Handle touch start for pinch zoom
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      const distance = getDistance(e.touches[0], e.touches[1]);
+      initialDistanceRef.current = distance;
+      initialScaleRef.current = scale;
+    }
+  };
+
+  // Handle touch move for pinch zoom
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 2 && initialDistanceRef.current) {
+      e.preventDefault();
+      const distance = getDistance(e.touches[0], e.touches[1]);
+      const scaleChange = distance / initialDistanceRef.current;
+      const newScale = Math.max(0.15, Math.min(2, initialScaleRef.current * scaleChange));
+      setScale(newScale);
+    }
+  };
+
+  // Handle touch end
+  const handleTouchEnd = () => {
+    initialDistanceRef.current = null;
+  };
+
+  // Add touch event listeners
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const preventDefault = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+      }
+    };
+
+    container.addEventListener('touchmove', preventDefault, { passive: false });
+
+    return () => {
+      container.removeEventListener('touchmove', preventDefault);
+    };
+  }, []);
+
   return (
-    <div className="flex-1 overflow-auto p-4 bg-zinc-950 flex justify-center relative">
+    <div
+      ref={containerRef}
+      className="flex-1 overflow-auto p-4 bg-zinc-950"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
       {/* Saving indicator */}
       {(saving || justSaved) && (
         <div className="fixed bottom-4 right-4 z-50">
@@ -64,7 +127,10 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
         </div>
       )}
 
-      <div className="inline-block">
+      <div
+        className="inline-block origin-top-left transition-transform duration-100"
+        style={{ transform: `scale(${scale})` }}
+      >
         <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(7, 200px)` }}>
           {/* Day Headers */}
           {days.map((day, index) => {
