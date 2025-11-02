@@ -34,9 +34,11 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
 
   // Zoom state
   const [scale, setScale] = useState(1);
+  const [isPinching, setIsPinching] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const initialDistanceRef = useRef<number | null>(null);
   const initialScaleRef = useRef<number>(1);
+  const rafRef = useRef<number | null>(null);
 
   const handleToggleCell = async (dayIndex: number, timeSlot: string) => {
     await toggleAvailability(days[dayIndex], timeSlot);
@@ -58,6 +60,7 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length === 2) {
       e.preventDefault();
+      setIsPinching(true);
       const distance = getDistance(e.touches[0], e.touches[1]);
       initialDistanceRef.current = distance;
       initialScaleRef.current = scale;
@@ -68,16 +71,32 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
   const handleTouchMove = (e: React.TouchEvent) => {
     if (e.touches.length === 2 && initialDistanceRef.current) {
       e.preventDefault();
-      const distance = getDistance(e.touches[0], e.touches[1]);
-      const scaleChange = distance / initialDistanceRef.current;
-      const newScale = Math.max(0.15, Math.min(2, initialScaleRef.current * scaleChange));
-      setScale(newScale);
+
+      // Cancel any pending animation frame
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+      }
+
+      // Use requestAnimationFrame for smoother updates
+      rafRef.current = requestAnimationFrame(() => {
+        const distance = getDistance(e.touches[0], e.touches[1]);
+        const scaleChange = distance / initialDistanceRef.current!;
+        const newScale = Math.max(0.15, Math.min(2, initialScaleRef.current * scaleChange));
+        setScale(newScale);
+      });
     }
   };
 
   // Handle touch end
   const handleTouchEnd = () => {
     initialDistanceRef.current = null;
+    setIsPinching(false);
+
+    // Cancel any pending animation frame
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
   };
 
   // Add touch event listeners
@@ -128,7 +147,7 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
       )}
 
       <div
-        className="inline-block origin-top-left transition-transform duration-100"
+        className={`inline-block origin-top-left ${!isPinching ? 'transition-transform duration-100' : ''}`}
         style={{ transform: `scale(${scale})` }}
       >
         <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(7, 200px)` }}>

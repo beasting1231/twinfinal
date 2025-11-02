@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { X, UserCheck } from "lucide-react";
 import type { Pilot } from "../types/index";
 
@@ -6,6 +6,7 @@ interface PilotContextMenuProps {
   isOpen: boolean;
   position: { x: number; y: number };
   availablePilots: Pilot[];
+  pilotFlightCounts?: Record<string, number>;
   currentPilot?: string;
   onSelectPilot: (pilotName: string) => void;
   onUnassign: () => void;
@@ -16,17 +17,19 @@ export function PilotContextMenu({
   isOpen,
   position,
   availablePilots,
+  pilotFlightCounts = {},
   currentPilot,
   onSelectPilot,
   onUnassign,
   onClose,
 }: PilotContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
+  const [isPositioned, setIsPositioned] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
 
-    const handleClickOutside = (event: MouseEvent) => {
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         onClose();
       }
@@ -39,13 +42,22 @@ export function PilotContextMenu({
     };
 
     document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("touchstart", handleClickOutside);
     document.addEventListener("keydown", handleEscape);
 
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
       document.removeEventListener("keydown", handleEscape);
     };
   }, [isOpen, onClose]);
+
+  // Reset positioning state when menu opens
+  useEffect(() => {
+    if (isOpen) {
+      setIsPositioned(false);
+    }
+  }, [isOpen]);
 
   // Adjust position to keep menu on screen
   useEffect(() => {
@@ -53,24 +65,27 @@ export function PilotContextMenu({
 
     const menu = menuRef.current;
     const rect = menu.getBoundingClientRect();
-    const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
 
-    let adjustedLeft = position.x;
+    // Position menu to the left of the touch point (anchor at top-right)
+    let adjustedLeft = position.x - rect.width;
     let adjustedTop = position.y;
 
-    // Adjust horizontal position if menu goes off screen
-    if (rect.right > viewportWidth) {
-      adjustedLeft = viewportWidth - rect.width - 10;
+    // Adjust horizontal position if menu goes off left edge
+    if (adjustedLeft < 10) {
+      adjustedLeft = 10;
     }
 
-    // Adjust vertical position if menu goes off screen
+    // Adjust vertical position if menu goes off bottom
     if (rect.bottom > viewportHeight) {
       adjustedTop = viewportHeight - rect.height - 10;
     }
 
     menu.style.left = `${adjustedLeft}px`;
     menu.style.top = `${adjustedTop}px`;
+
+    // Mark as positioned to make visible
+    setIsPositioned(true);
   }, [isOpen, position]);
 
   if (!isOpen) return null;
@@ -78,13 +93,17 @@ export function PilotContextMenu({
   return (
     <>
       {/* Backdrop */}
-      <div className="fixed inset-0 z-40" onClick={onClose} />
+      <div className="fixed inset-0 z-40" />
 
       {/* Context Menu */}
       <div
         ref={menuRef}
-        className="fixed z-50 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl py-1 min-w-[180px] max-h-[400px] overflow-y-auto"
+        className={`fixed z-50 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl py-1 min-w-[180px] max-h-[400px] overflow-y-auto transition-opacity duration-75 ${
+          isPositioned ? 'opacity-100' : 'opacity-0'
+        }`}
         style={{ left: position.x, top: position.y }}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="px-3 py-1.5 text-xs font-medium text-zinc-400 border-b border-zinc-700">
@@ -113,6 +132,7 @@ export function PilotContextMenu({
           <div className="py-1">
             {availablePilots.map((pilot) => {
               const isCurrent = currentPilot === pilot.displayName;
+              const flightCount = pilotFlightCounts[pilot.displayName] || 0;
               return (
                 <button
                   key={pilot.uid}
@@ -124,7 +144,14 @@ export function PilotContextMenu({
                     isCurrent ? "text-green-400" : "text-white"
                   }`}
                 >
-                  <span>{pilot.displayName}</span>
+                  <div className="flex items-center gap-2">
+                    <span>{pilot.displayName}</span>
+                    {flightCount > 0 && (
+                      <span className="bg-blue-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                        {flightCount}
+                      </span>
+                    )}
+                  </div>
                   {isCurrent && <UserCheck className="w-4 h-4" />}
                 </button>
               );

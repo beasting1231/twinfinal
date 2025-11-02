@@ -35,9 +35,11 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], u
 
   // Zoom state
   const [scale, setScale] = useState(1);
+  const [isPinching, setIsPinching] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const initialDistanceRef = useRef<number | null>(null);
   const initialScaleRef = useRef<number>(1);
+  const rafRef = useRef<number | null>(null);
 
   const handleAvailableCellClick = (pilotIndex: number, timeIndex: number, timeSlot: string) => {
     setSelectedCell({ pilotIndex, timeIndex, timeSlot });
@@ -105,6 +107,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], u
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length === 2) {
       e.preventDefault();
+      setIsPinching(true);
       const distance = getDistance(e.touches[0], e.touches[1]);
       initialDistanceRef.current = distance;
       initialScaleRef.current = scale;
@@ -115,16 +118,32 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], u
   const handleTouchMove = (e: React.TouchEvent) => {
     if (e.touches.length === 2 && initialDistanceRef.current) {
       e.preventDefault();
-      const distance = getDistance(e.touches[0], e.touches[1]);
-      const scaleChange = distance / initialDistanceRef.current;
-      const newScale = Math.max(0.15, Math.min(2, initialScaleRef.current * scaleChange));
-      setScale(newScale);
+
+      // Cancel any pending animation frame
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+      }
+
+      // Use requestAnimationFrame for smoother updates
+      rafRef.current = requestAnimationFrame(() => {
+        const distance = getDistance(e.touches[0], e.touches[1]);
+        const scaleChange = distance / initialDistanceRef.current!;
+        const newScale = Math.max(0.15, Math.min(2, initialScaleRef.current * scaleChange));
+        setScale(newScale);
+      });
     }
   };
 
   // Handle touch end
   const handleTouchEnd = () => {
     initialDistanceRef.current = null;
+    setIsPinching(false);
+
+    // Cancel any pending animation frame
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
   };
 
   // Add touch event listeners
@@ -224,7 +243,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], u
       onTouchEnd={handleTouchEnd}
     >
       <div
-        className="inline-block origin-top-left transition-transform duration-100"
+        className={`inline-block origin-top-left ${!isPinching ? 'transition-transform duration-100' : ''}`}
         style={{ transform: `scale(${scale})` }}
       >
         <div className="grid gap-2" style={{ gridTemplateColumns: `80px repeat(${pilots.length}, 220px)` }}>
@@ -372,12 +391,33 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], u
                 return false;
               }
 
-              // Exclude pilots already assigned to this booking (to prevent double-assignment)
+              // Exclude pilots already assigned to this booking (to prevent double-assignment within same booking)
               const alreadyAssignedToThisBooking = contextMenu.booking.assignedPilots
                 .filter((p, index) => p && p !== "" && index !== contextMenu.slotIndex)
                 .includes(pilot.displayName);
 
-              return !alreadyAssignedToThisBooking;
+              if (alreadyAssignedToThisBooking) {
+                return false;
+              }
+
+              // Exclude pilots already assigned to other bookings at the same time
+              const alreadyAssignedToOtherBooking = bookings.some(booking => {
+                // Skip the current booking we're editing
+                if (booking.id === contextMenu.booking.id) {
+                  return false;
+                }
+
+                // Check if this booking is at the same time and date
+                if (booking.timeIndex === contextMenu.booking.timeIndex &&
+                    booking.date === contextMenu.booking.date) {
+                  // Check if this pilot is assigned to this booking
+                  return booking.assignedPilots.some(p => p && p !== "" && p === pilot.displayName);
+                }
+
+                return false;
+              });
+
+              return !alreadyAssignedToOtherBooking;
             })
             .sort((a, b) => {
               // Count flights for each pilot on the selected date
@@ -396,6 +436,16 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], u
               // Sort by flight count (least to most)
               return aFlightCount - bFlightCount;
             })}
+          pilotFlightCounts={bookings
+            .filter(booking => booking.date === contextMenu.booking.date)
+            .reduce((counts, booking) => {
+              booking.assignedPilots.forEach(pilotName => {
+                if (pilotName && pilotName !== "") {
+                  counts[pilotName] = (counts[pilotName] || 0) + 1;
+                }
+              });
+              return counts;
+            }, {} as Record<string, number>)}
           currentPilot={contextMenu.booking.assignedPilots[contextMenu.slotIndex]}
           onSelectPilot={handleSelectPilot}
           onUnassign={handleUnassignPilot}
