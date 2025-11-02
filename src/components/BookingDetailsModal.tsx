@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
 import { Button } from "./ui/button";
@@ -6,9 +6,11 @@ import { Label } from "./ui/label";
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Textarea } from "./ui/textarea";
-import type { Booking, Pilot, PilotPayment, ReceiptFile } from "../types/index";
+import type { Booking, Pilot, PilotPayment, ReceiptFile, UnavailablePilot } from "../types/index";
 import { useAuth } from "../contexts/AuthContext";
-import { Camera, Upload, Eye, Trash2 } from "lucide-react";
+import { Camera, Upload, Eye, Trash2, Calendar, Clock, MapPin, Users, Phone, Mail, FileText, User, PhoneCall, Send } from "lucide-react";
+import { collection, query, where, getDocs } from "firebase/firestore";
+import { db } from "../firebase/config";
 
 interface BookingDetailsModalProps {
   open: boolean;
@@ -17,6 +19,7 @@ interface BookingDetailsModalProps {
   bookings: Booking[];
   pilots: Pilot[];
   isPilotAvailableForTimeSlot: (pilotUid: string, timeSlot: string) => boolean;
+  unavailablePilots?: UnavailablePilot[];
   timeSlots: string[];
   onUpdate?: (id: string, booking: Partial<Booking>) => void;
   onDelete?: (id: string) => void;
@@ -38,46 +41,60 @@ export function BookingDetailsModal({
   const [editedBooking, setEditedBooking] = useState<Booking | null>(null);
   const [pilotPayments, setPilotPayments] = useState<PilotPayment[]>([]);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
-
-  // Calculate available slots at this time (excluding the current booking)
-  const availableSlots = useMemo(() => {
-    if (!booking) return 0;
-
-    // Get bookings at this time index, excluding the current booking
-    const bookingsAtThisTime = bookings.filter(
-      b => b.timeIndex === booking.timeIndex && b.id !== booking.id
-    );
-
-    // Calculate total occupied slots
-    const occupiedSlots = bookingsAtThisTime.reduce((sum, b) => sum + b.span, 0);
-
-    // Calculate how many slots are free from the booking position to the end
-    const slotsFromThisPosition = pilots.length - booking.pilotIndex;
-    const totalAvailable = pilots.length - occupiedSlots;
-
-    // Return the minimum of slots available from this position and total available
-    return Math.min(slotsFromThisPosition, totalAvailable);
-  }, [booking, bookings, pilots.length]);
+  const [editedDateAvailability, setEditedDateAvailability] = useState<Map<string, Set<string>>>(new Map());
 
   // Get pilots already assigned at this time (excluding the current booking)
+  // Use editedBooking when in edit mode to recalculate for new time/date
   const assignedPilotsAtThisTime = useMemo(() => {
     if (!booking) return new Set<string>();
 
+    const targetTimeIndex = editedBooking?.timeIndex ?? booking.timeIndex;
+    const targetDate = editedBooking?.date ?? booking.date;
+
     const bookingsAtThisTime = bookings.filter(
-      b => b.timeIndex === booking.timeIndex && b.id !== booking.id
+      b => b.timeIndex === targetTimeIndex && b.date === targetDate && b.id !== booking.id
     );
     const assigned = new Set<string>();
     bookingsAtThisTime.forEach(b => {
       b.assignedPilots.forEach(pilot => assigned.add(pilot));
     });
     return assigned;
-  }, [booking, bookings]);
+  }, [booking, editedBooking, bookings]);
+
+  // Create an availability check function that uses edited date data when in edit mode
+  const checkPilotAvailability = (pilotUid: string, timeSlot: string): boolean => {
+    if (isEditing && editedBooking?.date !== booking?.date) {
+      // Use fetched availability for edited date
+      const slots = editedDateAvailability.get(pilotUid);
+      return slots ? slots.has(timeSlot) : false;
+    }
+    // Use parent's availability check for current date
+    return isPilotAvailableForTimeSlot(pilotUid, timeSlot);
+  };
+
+  // Calculate available slots at this time based on actually available pilots (excluding the current booking)
+  // Use editedBooking when in edit mode to recalculate for new time/date
+  const availableSlots = useMemo(() => {
+    if (!booking) return 0;
+
+    const targetTimeIndex = editedBooking?.timeIndex ?? booking.timeIndex;
+    const timeSlot = timeSlots[targetTimeIndex];
+    // Count pilots who are actually available at this time slot
+    const actuallyAvailablePilots = pilots.filter((pilot) =>
+      !assignedPilotsAtThisTime.has(pilot.displayName) &&
+      checkPilotAvailability(pilot.uid, timeSlot)
+    ).length;
+
+    return actuallyAvailablePilots;
+  }, [booking, editedBooking, pilots, assignedPilotsAtThisTime, isEditing, editedDateAvailability, isPilotAvailableForTimeSlot, timeSlots]);
 
   // Calculate flight counts for each pilot for the booking's day
+  // Use editedBooking when in edit mode to recalculate for new date
   const pilotFlightCounts = useMemo(() => {
     if (!booking) return {};
 
-    const bookingsForDay = bookings.filter(b => b.date === booking.date);
+    const targetDate = editedBooking?.date ?? booking.date;
+    const bookingsForDay = bookings.filter(b => b.date === targetDate);
 
     const counts: Record<string, number> = {};
     bookingsForDay.forEach(b => {
@@ -86,7 +103,7 @@ export function BookingDetailsModal({
       });
     });
     return counts;
-  }, [booking, bookings]);
+  }, [booking, editedBooking, bookings]);
 
   useEffect(() => {
     if (booking) {
@@ -99,6 +116,43 @@ export function BookingDetailsModal({
       setIsEditing(false);
     }
   }, [open]);
+
+  // Fetch pilot availability for the edited date
+  useEffect(() => {
+    if (!editedBooking || !isEditing) return;
+
+    async function fetchAvailabilityForEditedDate() {
+      if (!editedBooking) return; // Additional null check for TypeScript
+
+      try {
+        const dateStr = editedBooking.date;
+
+        // Query availability collection for the edited date
+        const availabilityQuery = query(
+          collection(db, "availability"),
+          where("date", "==", dateStr)
+        );
+
+        const availabilitySnapshot = await getDocs(availabilityQuery);
+
+        // Build availability map
+        const availabilityMap = new Map<string, Set<string>>();
+        availabilitySnapshot.docs.forEach((doc) => {
+          const data = doc.data();
+          if (!availabilityMap.has(data.userId)) {
+            availabilityMap.set(data.userId, new Set());
+          }
+          availabilityMap.get(data.userId)!.add(data.timeSlot);
+        });
+
+        setEditedDateAvailability(availabilityMap);
+      } catch (err) {
+        console.error("Error fetching availability for edited date:", err);
+      }
+    }
+
+    fetchAvailabilityForEditedDate();
+  }, [editedBooking?.date, isEditing]);
 
   // Initialize pilot payments when booking changes
   useEffect(() => {
@@ -137,6 +191,18 @@ export function BookingDetailsModal({
 
   const handleSave = () => {
     if (booking.id && onUpdate) {
+      // Validate that there are pilots available at the selected time/date
+      if (availableSlots === 0) {
+        alert("No pilots are available at the selected date and time. Please choose a different time slot or date.");
+        return;
+      }
+
+      // Validate against available slots
+      if (editedBooking.numberOfPeople > availableSlots) {
+        alert(`Cannot book ${editedBooking.numberOfPeople} ${editedBooking.numberOfPeople === 1 ? 'passenger' : 'passengers'}. Only ${availableSlots} ${availableSlots === 1 ? 'slot is' : 'slots are'} available at this time.`);
+        return;
+      }
+
       // Validate pilots are selected
       if (editedBooking.assignedPilots.length === 0) {
         alert("Please select at least one pilot");
@@ -146,6 +212,15 @@ export function BookingDetailsModal({
       // Build update object with only changed fields
       const updates: any = {};
 
+      if (editedBooking.date !== booking.date) {
+        updates.date = editedBooking.date;
+      }
+      if (editedBooking.timeIndex !== booking.timeIndex) {
+        updates.timeIndex = editedBooking.timeIndex;
+      }
+      if (editedBooking.pilotIndex !== booking.pilotIndex) {
+        updates.pilotIndex = editedBooking.pilotIndex;
+      }
       if (editedBooking.customerName !== booking.customerName) {
         updates.customerName = editedBooking.customerName;
       }
@@ -289,119 +364,325 @@ export function BookingDetailsModal({
           </TabsList>
 
           <TabsContent value="details" className="space-y-4 overflow-x-hidden">
-            {/* Customer Name */}
-            <div className="space-y-2">
-              <Label className="text-white">Customer Name</Label>
-              <Input
-                value={editedBooking.customerName}
-                onChange={(e) => setEditedBooking({ ...editedBooking, customerName: e.target.value })}
-                disabled={!isEditing}
-              />
-            </div>
-
-            {/* Number of People */}
-            <div className="space-y-2">
-              <Label className="text-white">Number of People</Label>
-              {isEditing ? (
-                <div className="overflow-x-auto">
-                  <div className="flex gap-2 pb-2">
-                    {Array.from({ length: 30 }, (_, i) => i + 1).map((num) => {
-                      const isDisabled = num > availableSlots;
-                      return (
-                        <button
-                          key={num}
-                          type="button"
-                          onClick={() => {
-                            if (!isDisabled) {
-                              // Clear assigned pilots when changing number of people
-                              setEditedBooking({
-                                ...editedBooking,
-                                numberOfPeople: num,
-                                assignedPilots: []
-                              });
-                            }
-                          }}
-                          disabled={isDisabled}
-                          className={`flex-shrink-0 w-12 h-12 rounded-lg font-medium transition-colors ${
-                            editedBooking.numberOfPeople === num
-                              ? "bg-white text-black"
-                              : isDisabled
-                              ? "bg-zinc-900 text-zinc-600 cursor-not-allowed"
-                              : "bg-zinc-800 text-white hover:bg-zinc-700"
-                          }`}
-                        >
-                          {num}
-                        </button>
-                      );
-                    })}
+            {!isEditing ? (
+              // DISPLAY MODE - Beautiful card layout
+              <div className="space-y-3">
+                {/* Status Badge */}
+                <div className="flex items-center justify-between mb-4">
+                  <div className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium ${
+                    editedBooking.bookingStatus === 'confirmed'
+                      ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                      : editedBooking.bookingStatus === 'pending'
+                      ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+                      : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                  }`}>
+                    {editedBooking.bookingStatus.charAt(0).toUpperCase() + editedBooking.bookingStatus.slice(1)}
                   </div>
                 </div>
-              ) : (
-                <Input
-                  type="number"
-                  min="1"
-                  value={editedBooking.numberOfPeople}
-                  disabled={true}
-                />
-              )}
-            </div>
 
-            {/* Pickup Location */}
-            <div className="space-y-2">
-              <Label className="text-white">Pickup Location</Label>
-              <Input
-                value={editedBooking.pickupLocation}
-                onChange={(e) => setEditedBooking({ ...editedBooking, pickupLocation: e.target.value })}
-                disabled={!isEditing}
-              />
-            </div>
+                {/* Customer Info Card */}
+                <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <User className="w-5 h-5 text-zinc-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs text-zinc-500 mb-1">Customer</div>
+                      <div className="text-lg font-semibold text-white break-words">{editedBooking.customerName}</div>
+                    </div>
+                  </div>
+                </div>
 
-            {/* Booking Source */}
-            <div className="space-y-2">
-              <Label className="text-white">Booking Source</Label>
-              <Input
-                value={editedBooking.bookingSource}
-                onChange={(e) => setEditedBooking({ ...editedBooking, bookingSource: e.target.value })}
-                disabled={!isEditing}
-              />
-            </div>
+                {/* Date & Time Card */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
+                    <div className="flex items-center gap-2 text-zinc-500 mb-2">
+                      <Calendar className="w-4 h-4" />
+                      <span className="text-xs">Date</span>
+                    </div>
+                    <div className="text-white font-medium">
+                      {new Date(editedBooking.date + 'T00:00:00').toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric'
+                      })}
+                    </div>
+                  </div>
+                  <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
+                    <div className="flex items-center gap-2 text-zinc-500 mb-2">
+                      <Clock className="w-4 h-4" />
+                      <span className="text-xs">Time</span>
+                    </div>
+                    <div className="text-white font-medium">{timeSlots[editedBooking.timeIndex]}</div>
+                  </div>
+                </div>
 
-            {/* Phone Number */}
-            <div className="space-y-2">
-              <Label className="text-white">Phone Number</Label>
-              <Input
-                type="tel"
-                value={editedBooking.phoneNumber || ""}
-                onChange={(e) => setEditedBooking({ ...editedBooking, phoneNumber: e.target.value })}
-                disabled={!isEditing}
-              />
-            </div>
+                {/* Location & People */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
+                    <div className="flex items-center gap-2 text-zinc-500 mb-2">
+                      <MapPin className="w-4 h-4" />
+                      <span className="text-xs">Location</span>
+                    </div>
+                    <div className="text-white font-medium break-words">{editedBooking.pickupLocation}</div>
+                  </div>
+                  <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
+                    <div className="flex items-center gap-2 text-zinc-500 mb-2">
+                      <Users className="w-4 h-4" />
+                      <span className="text-xs">Passengers</span>
+                    </div>
+                    <div className="text-white font-medium">{editedBooking.numberOfPeople}</div>
+                  </div>
+                </div>
 
-            {/* Email */}
-            <div className="space-y-2">
-              <Label className="text-white">Email</Label>
-              <Input
-                type="email"
-                value={editedBooking.email || ""}
-                onChange={(e) => setEditedBooking({ ...editedBooking, email: e.target.value })}
-                disabled={!isEditing}
-              />
-            </div>
+                {/* Source */}
+                <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
+                  <div className="flex items-center gap-2 text-zinc-500 mb-2">
+                    <FileText className="w-4 h-4" />
+                    <span className="text-xs">Booking Source</span>
+                  </div>
+                  <div className="text-white font-medium">{editedBooking.bookingSource}</div>
+                </div>
 
-            {/* Assigned Pilots */}
-            <div className="space-y-2">
-              <Label className="text-white">Assigned Pilots</Label>
-              {isEditing ? (
-                <>
+                {/* Contact Info */}
+                {(editedBooking.phoneNumber || editedBooking.email) && (
+                  <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 space-y-3">
+                    {editedBooking.phoneNumber && (
+                      <div className="flex items-center gap-3">
+                        <Phone className="w-4 h-4 text-zinc-500 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs text-zinc-500 mb-0.5">Phone</div>
+                          <div className="text-white break-words">
+                            {editedBooking.phoneNumber}
+                          </div>
+                        </div>
+                        <div className="flex gap-2 flex-shrink-0">
+                          <a
+                            href={`https://wa.me/${editedBooking.phoneNumber.replace(/[^0-9]/g, '')}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-2 rounded-lg bg-[#25D366] hover:bg-[#20BA5A] text-white transition-colors"
+                            title="WhatsApp"
+                          >
+                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
+                            </svg>
+                          </a>
+                          <a
+                            href={`tel:${editedBooking.phoneNumber}`}
+                            className="p-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                            title="Call"
+                          >
+                            <PhoneCall className="w-4 h-4" />
+                          </a>
+                        </div>
+                      </div>
+                    )}
+                    {editedBooking.email && (
+                      <div className="flex items-center gap-3">
+                        <Mail className="w-4 h-4 text-zinc-500 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs text-zinc-500 mb-0.5">Email</div>
+                          <div className="text-white break-words">
+                            {editedBooking.email}
+                          </div>
+                        </div>
+                        <div className="flex gap-2 flex-shrink-0">
+                          <a
+                            href={`mailto:${editedBooking.email}`}
+                            className="p-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                            title="Send Email"
+                          >
+                            <Send className="w-4 h-4" />
+                          </a>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Assigned Pilots */}
+                <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
+                  <div className="text-xs text-zinc-500 mb-3">Assigned Pilots</div>
+                  <div className="flex gap-2 flex-wrap">
+                    {booking.assignedPilots.map((pilot, index) => (
+                      <div key={index} className="bg-zinc-800 text-white px-3 py-2 rounded-lg text-sm font-medium border border-zinc-700">
+                        {pilot}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Additional Notes */}
+                {editedBooking.notes && (
+                  <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
+                    <div className="text-xs text-zinc-500 mb-2">Notes</div>
+                    <div className="text-white text-sm leading-relaxed whitespace-pre-wrap break-words">{editedBooking.notes}</div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              // EDIT MODE - Form layout
+              <div className="space-y-4">
+                {/* Customer Name */}
+                <div className="space-y-2">
+                  <Label className="text-white">Customer Name</Label>
+                  <Input
+                    value={editedBooking.customerName}
+                    onChange={(e) => setEditedBooking({ ...editedBooking, customerName: e.target.value })}
+                  />
+                </div>
+
+                {/* Date */}
+                <div className="space-y-2">
+                  <Label className="text-white">Date</Label>
+                  <Input
+                    type="date"
+                    value={editedBooking.date}
+                    onChange={(e) => {
+                      // Clear assigned pilots when changing date as availability may differ
+                      setEditedBooking({
+                        ...editedBooking,
+                        date: e.target.value,
+                        assignedPilots: []
+                      });
+                    }}
+                  />
+                </div>
+
+                {/* Time Slot */}
+                <div className="space-y-2">
+                  <Label className="text-white">Time Slot</Label>
+                  <Select
+                    value={editedBooking.timeIndex.toString()}
+                    onValueChange={(value) => {
+                      // Clear assigned pilots and reset position when changing time
+                      setEditedBooking({
+                        ...editedBooking,
+                        timeIndex: parseInt(value),
+                        pilotIndex: 0,
+                        assignedPilots: []
+                      });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {timeSlots.map((slot, index) => (
+                        <SelectItem key={index} value={index.toString()}>
+                          {slot}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Available Slots Warning */}
+                {availableSlots === 0 && (
+                  <div className="bg-red-950 border border-red-700 text-red-200 px-4 py-3 rounded-lg">
+                    <p className="text-sm font-medium">No pilots available at this time</p>
+                    <p className="text-xs mt-1">Please select a different date or time slot.</p>
+                  </div>
+                )}
+
+                {/* Available Slots Info */}
+                {availableSlots > 0 && (
+                  <div className="bg-blue-950 border border-blue-700 text-blue-200 px-4 py-3 rounded-lg">
+                    <p className="text-sm">
+                      {availableSlots} {availableSlots === 1 ? 'pilot is' : 'pilots are'} available at this time
+                    </p>
+                  </div>
+                )}
+
+                {/* Number of People */}
+                <div className="space-y-2">
+                  <Label className="text-white">Number of People</Label>
+                  <div className="overflow-x-auto">
+                    <div className="flex gap-2 pb-2">
+                      {Array.from({ length: 30 }, (_, i) => i + 1).map((num) => {
+                        const isDisabled = num > availableSlots;
+                        return (
+                          <button
+                            key={num}
+                            type="button"
+                            onClick={() => {
+                              if (!isDisabled) {
+                                // Clear assigned pilots when changing number of people
+                                setEditedBooking({
+                                  ...editedBooking,
+                                  numberOfPeople: num,
+                                  assignedPilots: []
+                                });
+                              }
+                            }}
+                            disabled={isDisabled}
+                            className={`flex-shrink-0 w-12 h-12 rounded-lg font-medium transition-colors ${
+                              editedBooking.numberOfPeople === num
+                                ? "bg-white text-black"
+                                : isDisabled
+                                ? "bg-zinc-900 text-zinc-600 cursor-not-allowed"
+                                : "bg-zinc-800 text-white hover:bg-zinc-700"
+                            }`}
+                          >
+                            {num}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Pickup Location */}
+                <div className="space-y-2">
+                  <Label className="text-white">Pickup Location</Label>
+                  <Input
+                    value={editedBooking.pickupLocation}
+                    onChange={(e) => setEditedBooking({ ...editedBooking, pickupLocation: e.target.value })}
+                  />
+                </div>
+
+                {/* Booking Source */}
+                <div className="space-y-2">
+                  <Label className="text-white">Booking Source</Label>
+                  <Input
+                    value={editedBooking.bookingSource}
+                    onChange={(e) => setEditedBooking({ ...editedBooking, bookingSource: e.target.value })}
+                  />
+                </div>
+
+                {/* Phone Number */}
+                <div className="space-y-2">
+                  <Label className="text-white">Phone Number</Label>
+                  <Input
+                    type="tel"
+                    value={editedBooking.phoneNumber || ""}
+                    onChange={(e) => setEditedBooking({ ...editedBooking, phoneNumber: e.target.value })}
+                  />
+                </div>
+
+                {/* Email */}
+                <div className="space-y-2">
+                  <Label className="text-white">Email</Label>
+                  <Input
+                    type="email"
+                    value={editedBooking.email || ""}
+                    onChange={(e) => setEditedBooking({ ...editedBooking, email: e.target.value })}
+                  />
+                </div>
+
+                {/* Assigned Pilots */}
+                <div className="space-y-2">
+                  <Label className="text-white">Assigned Pilots</Label>
                   <p className="text-xs text-zinc-500">
                     Select {editedBooking.numberOfPeople} {editedBooking.numberOfPeople === 1 ? "pilot" : "pilots"} ({editedBooking.assignedPilots.length} selected)
                   </p>
                   <div className="grid grid-cols-2 gap-2">
                     {pilots
                       .filter((pilot) => {
-                        const timeSlot = timeSlots[booking.timeIndex];
+                        const timeSlot = timeSlots[editedBooking.timeIndex];
                         return !assignedPilotsAtThisTime.has(pilot.displayName) &&
-                               isPilotAvailableForTimeSlot(pilot.uid, timeSlot);
+                               checkPilotAvailability(pilot.uid, timeSlot);
                       })
                       .map((pilot) => {
                         const isSelected = editedBooking.assignedPilots.includes(pilot.displayName);
@@ -455,49 +736,39 @@ export function BookingDetailsModal({
                         );
                       })}
                   </div>
-                </>
-              ) : (
-                <div className="flex gap-2 flex-wrap">
-                  {booking.assignedPilots.map((pilot, index) => (
-                    <div key={index} className="bg-zinc-700 text-white px-3 py-1.5 rounded-md text-sm">
-                      {pilot}
-                    </div>
-                  ))}
                 </div>
-              )}
-            </div>
 
-            {/* Booking Status */}
-            <div className="space-y-2">
-              <Label className="text-white">Booking Status</Label>
-              <Select
-                value={editedBooking.bookingStatus}
-                onValueChange={(value: "confirmed" | "pending" | "cancelled") =>
-                  setEditedBooking({ ...editedBooking, bookingStatus: value })
-                }
-                disabled={!isEditing}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="confirmed">Confirmed</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="cancelled">Cancelled</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+                {/* Booking Status */}
+                <div className="space-y-2">
+                  <Label className="text-white">Booking Status</Label>
+                  <Select
+                    value={editedBooking.bookingStatus}
+                    onValueChange={(value: "confirmed" | "pending" | "cancelled") =>
+                      setEditedBooking({ ...editedBooking, bookingStatus: value })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="confirmed">Confirmed</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="cancelled">Cancelled</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-            {/* Additional Notes */}
-            <div className="space-y-2">
-              <Label className="text-white">Additional Notes</Label>
-              <Textarea
-                value={editedBooking.notes || ""}
-                onChange={(e) => setEditedBooking({ ...editedBooking, notes: e.target.value })}
-                disabled={!isEditing}
-                rows={3}
-              />
-            </div>
+                {/* Additional Notes */}
+                <div className="space-y-2">
+                  <Label className="text-white">Additional Notes</Label>
+                  <Textarea
+                    value={editedBooking.notes || ""}
+                    onChange={(e) => setEditedBooking({ ...editedBooking, notes: e.target.value })}
+                    rows={3}
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Action Buttons */}
             <div className="flex gap-3 pt-4">

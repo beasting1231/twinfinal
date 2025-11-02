@@ -58,22 +58,6 @@ export function NewBookingModal({
   const [bookingStatus, setBookingStatus] = useState<"confirmed" | "pending" | "cancelled">("confirmed");
   const [selectedPilots, setSelectedPilots] = useState<string[]>([]);
 
-  // Calculate available slots at this time
-  const availableSlots = useMemo(() => {
-    // Get bookings at this time index
-    const bookingsAtThisTime = bookings.filter(b => b.timeIndex === timeIndex);
-
-    // Calculate total occupied slots
-    const occupiedSlots = bookingsAtThisTime.reduce((sum, booking) => sum + booking.span, 0);
-
-    // Calculate how many slots are free from the clicked position to the end
-    const slotsFromThisPosition = pilots.length - pilotIndex;
-    const totalAvailable = pilots.length - occupiedSlots;
-
-    // Return the minimum of slots available from this position and total available
-    return Math.min(slotsFromThisPosition, totalAvailable);
-  }, [bookings, timeIndex, pilots.length, pilotIndex]);
-
   // Get pilots already assigned at this time
   const assignedPilotsAtThisTime = useMemo(() => {
     const bookingsAtThisTime = bookings.filter(b => b.timeIndex === timeIndex);
@@ -83,6 +67,25 @@ export function NewBookingModal({
     });
     return assigned;
   }, [bookings, timeIndex]);
+
+  // Calculate available slots at this time based on actually available pilots
+  const availableSlots = useMemo(() => {
+    // Count pilots who are actually available at this time slot
+    const actuallyAvailablePilots = pilots.filter((pilot) =>
+      !assignedPilotsAtThisTime.has(pilot.displayName) &&
+      isPilotAvailableForTimeSlot(pilot.uid, timeSlot)
+    ).length;
+
+    return actuallyAvailablePilots;
+  }, [pilots, assignedPilotsAtThisTime, isPilotAvailableForTimeSlot, timeSlot]);
+
+  // Get actually available pilots (not assigned and available for this time slot)
+  const availablePilots = useMemo(() => {
+    return pilots.filter((pilot) =>
+      !assignedPilotsAtThisTime.has(pilot.displayName) &&
+      isPilotAvailableForTimeSlot(pilot.uid, timeSlot)
+    );
+  }, [pilots, assignedPilotsAtThisTime, isPilotAvailableForTimeSlot, timeSlot]);
 
   // Calculate flight counts for each pilot for the selected day
   const pilotFlightCounts = useMemo(() => {
@@ -130,6 +133,12 @@ export function NewBookingModal({
     const numPeople = parseInt(numberOfPeople);
     if (isNaN(numPeople) || numPeople < 1) {
       alert("Number of people must be a valid positive number");
+      return;
+    }
+
+    // Validate against available slots
+    if (numPeople > availableSlots) {
+      alert(`Cannot book ${numPeople} ${numPeople === 1 ? 'passenger' : 'passengers'}. Only ${availableSlots} ${availableSlots === 1 ? 'slot is' : 'slots are'} available at this time.`);
       return;
     }
 
@@ -261,12 +270,7 @@ export function NewBookingModal({
                 Select {numberOfPeople} {parseInt(numberOfPeople) === 1 ? "pilot" : "pilots"} for this booking ({selectedPilots.length} selected)
               </p>
               <div className="grid grid-cols-2 gap-2">
-                {pilots
-                  .filter((pilot) =>
-                    !assignedPilotsAtThisTime.has(pilot.displayName) &&
-                    isPilotAvailableForTimeSlot(pilot.uid, timeSlot)
-                  )
-                  .map((pilot) => {
+                {availablePilots.map((pilot) => {
                     const isSelected = selectedPilots.includes(pilot.displayName);
                     const isDisabled = !isSelected && selectedPilots.length >= parseInt(numberOfPeople);
                     // Calculate flight count including current selection

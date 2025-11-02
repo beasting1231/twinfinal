@@ -1,15 +1,34 @@
 import { AvailabilityCell } from "./AvailabilityCell";
 import { format, addDays } from "date-fns";
 import { useAvailability } from "../hooks/useAvailability";
+import { getTimeSlotsByDate } from "../utils/timeSlots";
+import { useMemo } from "react";
 
 interface AvailabilityGridProps {
   weekStartDate: Date;
-  timeSlots: string[];
+  timeSlots?: string[]; // Made optional for backwards compatibility
 }
 
-export function AvailabilityGrid({ weekStartDate, timeSlots }: AvailabilityGridProps) {
+export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
   // Generate the 7 days of the week starting from weekStartDate
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStartDate, i));
+
+  // Get time slots for each day based on the date
+  const dailyTimeSlots = useMemo(() => {
+    return days.map(day => getTimeSlotsByDate(day));
+  }, [days]);
+
+  // Get all unique time slots across the week for rendering rows
+  const allTimeSlots = useMemo(() => {
+    const allSlots = new Set<string>();
+    dailyTimeSlots.forEach(slots => slots.forEach(slot => allSlots.add(slot)));
+    // Sort time slots chronologically
+    return Array.from(allSlots).sort((a, b) => {
+      const [aHour, aMin] = a.split(':').map(Number);
+      const [bHour, bMin] = b.split(':').map(Number);
+      return (aHour * 60 + aMin) - (bHour * 60 + bMin);
+    });
+  }, [dailyTimeSlots]);
 
   const { isAvailable, toggleAvailability, toggleDay, loading, saving, justSaved } = useAvailability();
 
@@ -18,7 +37,8 @@ export function AvailabilityGrid({ weekStartDate, timeSlots }: AvailabilityGridP
   };
 
   const handleToggleColumn = async (dayIndex: number) => {
-    await toggleDay(days[dayIndex], timeSlots);
+    // Use the time slots specific to that day
+    await toggleDay(days[dayIndex], dailyTimeSlots[dayIndex]);
   };
 
   return (
@@ -65,8 +85,11 @@ export function AvailabilityGrid({ weekStartDate, timeSlots }: AvailabilityGridP
           })}
 
           {/* Time Slots and Availability Cells */}
-          {timeSlots.map((timeSlot, timeIndex) => (
+          {allTimeSlots.map((timeSlot, timeIndex) => (
             days.map((day, dayIndex) => {
+              // Check if this time slot is valid for this specific day
+              const isValidSlot = dailyTimeSlots[dayIndex].includes(timeSlot);
+
               if (loading) {
                 return (
                   <div
@@ -74,6 +97,18 @@ export function AvailabilityGrid({ weekStartDate, timeSlots }: AvailabilityGridP
                     className="h-14"
                   >
                     <div className="w-full h-14 bg-zinc-800 rounded-lg animate-pulse" />
+                  </div>
+                );
+              }
+
+              // If this time slot doesn't exist for this day, show a disabled cell
+              if (!isValidSlot) {
+                return (
+                  <div
+                    key={`cell-${timeIndex}-${dayIndex}`}
+                    className="h-14"
+                  >
+                    <div className="w-full h-14 bg-zinc-900/30 rounded-lg border border-zinc-800/50" />
                   </div>
                 );
               }

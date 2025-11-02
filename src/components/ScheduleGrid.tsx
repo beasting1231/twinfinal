@@ -231,6 +231,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], u
         bookings={bookings}
         pilots={pilots}
         isPilotAvailableForTimeSlot={isPilotAvailableForTimeSlot}
+        unavailablePilots={unavailablePilots}
         timeSlots={timeSlots}
         onUpdate={onUpdateBooking}
         onDelete={onDeleteBooking}

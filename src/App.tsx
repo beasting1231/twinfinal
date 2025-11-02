@@ -8,6 +8,7 @@ import { useBookings } from "./hooks/useBookings";
 import { usePilots } from "./hooks/usePilots";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { Login } from "./components/Auth/Login";
+import { getTimeSlotsByDate } from "./utils/timeSlots";
 
 type View = "daily-plan" | "availability" | "account";
 
@@ -29,8 +30,8 @@ function AppContent() {
   // Fetch available pilots for the selected date
   const { pilots, loading: pilotsLoading, isPilotAvailableForTimeSlot } = usePilots(selectedDate);
 
-  // Time slots for the schedule
-  const timeSlots = ["7:30", "8:30", "9:45", "11:00", "12:30", "14:00", "15:30", "16:45"];
+  // Time slots for the schedule - dynamically determined based on the selected date
+  const timeSlots = useMemo(() => getTimeSlotsByDate(selectedDate), [selectedDate]);
 
   // Show login if user is not authenticated
   if (!currentUser) {
@@ -61,7 +62,7 @@ function AppContent() {
           onDeleteBooking={deleteBooking}
         />
       ) : currentView === "availability" ? (
-        <AvailabilityGrid weekStartDate={weekStartDate} timeSlots={timeSlots} />
+        <AvailabilityGrid weekStartDate={weekStartDate} />
       ) : currentView === "account" ? (
         <Account />
       ) : null}
