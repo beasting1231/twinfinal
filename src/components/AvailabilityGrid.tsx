@@ -22,17 +22,7 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
     return days.map(day => getTimeSlotsByDate(day));
   }, [days]);
 
-  // Get all unique time slots across the week for rendering rows
-  const allTimeSlots = useMemo(() => {
-    const allSlots = new Set<string>();
-    dailyTimeSlots.forEach(slots => slots.forEach(slot => allSlots.add(slot)));
-    // Sort time slots chronologically
-    return Array.from(allSlots).sort((a, b) => {
-      const [aHour, aMin] = a.split(':').map(Number);
-      const [bHour, bMin] = b.split(':').map(Number);
-      return (aHour * 60 + aMin) - (bHour * 60 + bMin);
-    });
-  }, [dailyTimeSlots]);
+  // No longer need to create a union of all time slots - each day will render its own slots independently
 
   const { isAvailable, toggleAvailability, toggleDay, loading, saving, justSaved } = useAvailability();
   const { bookings } = useBookings();
@@ -100,25 +90,30 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
       return false;
     }
 
-    // Check if there's a booking where current user is assigned
-    const userProfile = currentUser.displayName || currentUser.email || "Unknown";
-    const hasBookingWithCurrentUser = bookings.some(booking => {
-      return (
-        booking.date === dateStr &&
-        booking.timeIndex === timeSlotIndex &&
-        booking.assignedPilots.some(pilot => pilot === userProfile)
-      );
+    // Check if there are any bookings at this time
+    const bookingsAtThisTime = bookings.filter(booking => {
+      return booking.date === dateStr && booking.timeIndex === timeSlotIndex;
     });
 
-    if (!hasBookingWithCurrentUser) {
+    if (bookingsAtThisTime.length === 0) {
       return false;
     }
 
-    // Check if there are other available pilots for this time slot
+    // Count how many other pilots are available (excluding current user)
     const otherAvailablePilots = otherPilotsAvailability.get(key) || 0;
 
-    // Lock if there are no other available pilots
-    return otherAvailablePilots === 0;
+    // Check if any booking would be under-staffed if this pilot signs out
+    for (const booking of bookingsAtThisTime) {
+      const requiredPilots = booking.numberOfPeople;
+
+      // If removing this pilot would leave fewer pilots than required, lock the cell
+      // otherAvailablePilots doesn't include current user, so we compare directly
+      if (otherAvailablePilots < requiredPilots) {
+        return true;
+      }
+    }
+
+    return false;
   };
 
   // Zoom state
@@ -240,68 +235,48 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
         style={{ transform: `scale(${scale})` }}
       >
         <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(7, 200px)` }}>
-          {/* Day Headers */}
-          {days.map((day, index) => {
+          {/* Day columns - each renders header + its own time slots independently */}
+          {days.map((day, dayIndex) => {
             const dayName = format(day, 'EEE').toUpperCase();
             const monthDay = format(day, 'MMM d').toUpperCase();
+            const timeSlots = dailyTimeSlots[dayIndex];
 
             return (
-              <button
-                key={index}
-                onClick={() => handleToggleColumn(index)}
-                className="h-14 flex flex-col items-center justify-center bg-zinc-900 rounded-lg font-medium text-sm hover:bg-zinc-800 transition-colors cursor-pointer"
-                disabled={loading}
-              >
-                <div className="text-xs text-zinc-400">{dayName}</div>
-                <div>{monthDay}</div>
-              </button>
+              <div key={dayIndex} className="flex flex-col gap-2">
+                {/* Day Header */}
+                <button
+                  onClick={() => handleToggleColumn(dayIndex)}
+                  className="h-14 flex flex-col items-center justify-center bg-zinc-900 rounded-lg font-medium text-sm hover:bg-zinc-800 transition-colors cursor-pointer"
+                  disabled={loading}
+                >
+                  <div className="text-xs text-zinc-400">{dayName}</div>
+                  <div>{monthDay}</div>
+                </button>
+
+                {/* Time Slots for this day */}
+                {loading ? (
+                  // Loading skeleton
+                  timeSlots.map((_, slotIndex) => (
+                    <div key={`skeleton-${dayIndex}-${slotIndex}`} className="h-14">
+                      <div className="w-full h-14 bg-zinc-800 rounded-lg animate-pulse" />
+                    </div>
+                  ))
+                ) : (
+                  // Actual availability cells
+                  timeSlots.map((timeSlot, slotIndex) => (
+                    <div key={`cell-${dayIndex}-${slotIndex}`} className="h-14">
+                      <AvailabilityCell
+                        timeSlot={timeSlot}
+                        isAvailable={isAvailable(day, timeSlot)}
+                        isLocked={isCellLocked(day, timeSlot)}
+                        onToggle={() => handleToggleCell(dayIndex, timeSlot)}
+                      />
+                    </div>
+                  ))
+                )}
+              </div>
             );
           })}
-
-          {/* Time Slots and Availability Cells */}
-          {allTimeSlots.map((timeSlot, timeIndex) => (
-            days.map((day, dayIndex) => {
-              // Check if this time slot is valid for this specific day
-              const isValidSlot = dailyTimeSlots[dayIndex].includes(timeSlot);
-
-              if (loading) {
-                return (
-                  <div
-                    key={`skeleton-${timeIndex}-${dayIndex}`}
-                    className="h-14"
-                  >
-                    <div className="w-full h-14 bg-zinc-800 rounded-lg animate-pulse" />
-                  </div>
-                );
-              }
-
-              // If this time slot doesn't exist for this day, show a disabled cell
-              if (!isValidSlot) {
-                return (
-                  <div
-                    key={`cell-${timeIndex}-${dayIndex}`}
-                    className="h-14"
-                  >
-                    <div className="w-full h-14 bg-zinc-900/30 rounded-lg border border-zinc-800/50" />
-                  </div>
-                );
-              }
-
-              return (
-                <div
-                  key={`cell-${timeIndex}-${dayIndex}`}
-                  className="h-14"
-                >
-                  <AvailabilityCell
-                    timeSlot={timeSlot}
-                    isAvailable={isAvailable(day, timeSlot)}
-                    isLocked={isCellLocked(day, timeSlot)}
-                    onToggle={() => handleToggleCell(dayIndex, timeSlot)}
-                  />
-                </div>
-              );
-            })
-          ))}
         </div>
       </div>
     </div>
