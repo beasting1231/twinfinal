@@ -1,8 +1,12 @@
 import { AvailabilityCell } from "./AvailabilityCell";
 import { format, addDays } from "date-fns";
 import { useAvailability } from "../hooks/useAvailability";
+import { useBookings } from "../hooks/useBookings";
+import { useAuth } from "../contexts/AuthContext";
 import { getTimeSlotsByDate } from "../utils/timeSlots";
 import { useMemo, useState, useRef, useEffect } from "react";
+import { collection, query, where, getDocs } from "firebase/firestore";
+import { db } from "../firebase/config";
 
 interface AvailabilityGridProps {
   weekStartDate: Date;
@@ -31,6 +35,91 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
   }, [dailyTimeSlots]);
 
   const { isAvailable, toggleAvailability, toggleDay, loading, saving, justSaved } = useAvailability();
+  const { bookings } = useBookings();
+  const { currentUser } = useAuth();
+
+  // State to track other pilots' availability for each date/time
+  const [otherPilotsAvailability, setOtherPilotsAvailability] = useState<Map<string, number>>(new Map());
+
+  // Fetch availability data for all pilots to determine if cells should be locked
+  useEffect(() => {
+    async function fetchAllPilotsAvailability() {
+      if (!currentUser) return;
+
+      try {
+        const availabilityMap = new Map<string, number>();
+
+        // For each day in the week
+        for (const day of days) {
+          const dateStr = format(day, "yyyy-MM-dd");
+
+          // Query availability for this date
+          const availabilityQuery = query(
+            collection(db, "availability"),
+            where("date", "==", dateStr)
+          );
+
+          const availabilitySnapshot = await getDocs(availabilityQuery);
+
+          // Count availability per time slot (excluding current user)
+          availabilitySnapshot.docs.forEach((doc) => {
+            const data = doc.data();
+            if (data.userId !== currentUser.uid) {
+              const key = `${dateStr}-${data.timeSlot}`;
+              availabilityMap.set(key, (availabilityMap.get(key) || 0) + 1);
+            }
+          });
+        }
+
+        setOtherPilotsAvailability(availabilityMap);
+      } catch (error) {
+        console.error("Error fetching pilots availability:", error);
+      }
+    }
+
+    fetchAllPilotsAvailability();
+  }, [days, currentUser]);
+
+  // Function to check if a cell should be locked (cannot be toggled to unavailable)
+  const isCellLocked = (day: Date, timeSlot: string): boolean => {
+    if (!currentUser) return false;
+
+    const dateStr = format(day, "yyyy-MM-dd");
+    const key = `${dateStr}-${timeSlot}`;
+
+    // Only lock if user is currently available
+    if (!isAvailable(day, timeSlot)) {
+      return false;
+    }
+
+    // Get time slots for this date to match bookings
+    const timeSlotsForDate = getTimeSlotsByDate(day);
+    const timeSlotIndex = timeSlotsForDate.indexOf(timeSlot);
+
+    if (timeSlotIndex === -1) {
+      return false;
+    }
+
+    // Check if there's a booking where current user is assigned
+    const userProfile = currentUser.displayName || currentUser.email || "Unknown";
+    const hasBookingWithCurrentUser = bookings.some(booking => {
+      return (
+        booking.date === dateStr &&
+        booking.timeIndex === timeSlotIndex &&
+        booking.assignedPilots.some(pilot => pilot === userProfile)
+      );
+    });
+
+    if (!hasBookingWithCurrentUser) {
+      return false;
+    }
+
+    // Check if there are other available pilots for this time slot
+    const otherAvailablePilots = otherPilotsAvailability.get(key) || 0;
+
+    // Lock if there are no other available pilots
+    return otherAvailablePilots === 0;
+  };
 
   // Zoom state
   const [scale, setScale] = useState(1);
@@ -206,6 +295,7 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
                   <AvailabilityCell
                     timeSlot={timeSlot}
                     isAvailable={isAvailable(day, timeSlot)}
+                    isLocked={isCellLocked(day, timeSlot)}
                     onToggle={() => handleToggleCell(dayIndex, timeSlot)}
                   />
                 </div>

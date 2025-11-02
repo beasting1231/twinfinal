@@ -149,10 +149,27 @@ export function NewBookingModal({
     // Calculate span based on number of passengers
     const span = numPeople;
 
+    // Find the leftmost available pilot position
+    // Get indices of all available pilots at this time
+    const availablePilotIndices = pilots
+      .map((pilot, index) => ({
+        index,
+        pilot,
+        isAvailable: !assignedPilotsAtThisTime.has(pilot.displayName) &&
+                     isPilotAvailableForTimeSlot(pilot.uid, timeSlot)
+      }))
+      .filter(p => p.isAvailable)
+      .map(p => p.index);
+
+    // Use the smallest index (leftmost position)
+    const startingPilotIndex = availablePilotIndices.length > 0
+      ? Math.min(...availablePilotIndices)
+      : pilotIndex;
+
     // Build booking object, only including optional fields if they have values
     const bookingData: any = {
       date: format(selectedDate, "yyyy-MM-dd"),
-      pilotIndex,
+      pilotIndex: startingPilotIndex,
       timeIndex,
       customerName: customerName.trim(),
       numberOfPeople: numPeople,
