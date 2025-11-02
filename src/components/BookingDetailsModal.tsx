@@ -367,7 +367,7 @@ export function BookingDetailsModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[90vw] max-w-[600px] overflow-x-hidden">
+      <DialogContent className="w-[90vw] max-w-[600px] overflow-x-hidden allow-select">
         <DialogHeader>
           <DialogTitle>Booking Details</DialogTitle>
           <DialogDescription>
@@ -592,7 +592,8 @@ export function BookingDetailsModal({
                     <SelectContent>
                       {timeSlots.map((slot, index) => {
                         const availableCount = availableSlotsPerTime[index] ?? 0;
-                        const isDisabled = availableCount === 0;
+                        const requiredPilots = editedBooking.numberOfPeople;
+                        const isDisabled = availableCount < requiredPilots;
                         return (
                           <SelectItem
                             key={index}
@@ -603,9 +604,9 @@ export function BookingDetailsModal({
                             <div className="flex items-center justify-between gap-4 w-full">
                               <span>{slot}</span>
                               <span className={`text-xs px-2 py-0.5 rounded ${
-                                availableCount === 0
+                                availableCount < requiredPilots
                                   ? 'bg-red-900/50 text-red-400'
-                                  : availableCount <= 2
+                                  : availableCount <= requiredPilots + 1
                                   ? 'bg-yellow-900/50 text-yellow-400'
                                   : 'bg-green-900/50 text-green-400'
                               }`}>
@@ -620,18 +621,22 @@ export function BookingDetailsModal({
                 </div>
 
                 {/* Available Slots Warning */}
-                {availableSlots === 0 && (
+                {availableSlots < editedBooking.numberOfPeople && (
                   <div className="bg-red-950 border border-red-700 text-red-200 px-4 py-3 rounded-lg">
-                    <p className="text-sm font-medium">No pilots available at this time</p>
-                    <p className="text-xs mt-1">Please select a different date or time slot.</p>
+                    <p className="text-sm font-medium">
+                      Insufficient pilots available at this time
+                    </p>
+                    <p className="text-xs mt-1">
+                      This booking requires {editedBooking.numberOfPeople} {editedBooking.numberOfPeople === 1 ? 'pilot' : 'pilots'}, but only {availableSlots} {availableSlots === 1 ? 'is' : 'are'} available. Please select a different date or time slot.
+                    </p>
                   </div>
                 )}
 
                 {/* Available Slots Info */}
-                {availableSlots > 0 && (
+                {availableSlots >= editedBooking.numberOfPeople && (
                   <div className="bg-blue-950 border border-blue-700 text-blue-200 px-4 py-3 rounded-lg">
                     <p className="text-sm">
-                      {availableSlots} {availableSlots === 1 ? 'pilot is' : 'pilots are'} available at this time
+                      {availableSlots} {availableSlots === 1 ? 'pilot is' : 'pilots are'} available at this time ({editedBooking.numberOfPeople} required)
                     </p>
                   </div>
                 )}
