@@ -16,9 +16,10 @@ interface ScheduleGridProps {
   onAddBooking?: (booking: Omit<Booking, "id">) => void;
   onUpdateBooking?: (id: string, booking: Partial<Booking>) => void;
   onDeleteBooking?: (id: string) => void;
+  onNavigateToDate?: (date: Date) => void;
 }
 
-export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], unavailablePilots = [], isPilotAvailableForTimeSlot, loading = false, onAddBooking, onUpdateBooking, onDeleteBooking }: ScheduleGridProps) {
+export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], unavailablePilots = [], isPilotAvailableForTimeSlot, loading = false, onAddBooking, onUpdateBooking, onDeleteBooking, onNavigateToDate }: ScheduleGridProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedCell, setSelectedCell] = useState<{ pilotIndex: number; timeIndex: number; timeSlot: string } | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
@@ -377,6 +378,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], u
         timeSlots={timeSlots}
         onUpdate={onUpdateBooking}
         onDelete={onDeleteBooking}
+        onNavigateToDate={onNavigateToDate}
       />
 
       {/* Pilot Context Menu */}

@@ -60,6 +60,7 @@ function AppContent() {
           onAddBooking={addBooking}
           onUpdateBooking={updateBooking}
           onDeleteBooking={deleteBooking}
+          onNavigateToDate={setSelectedDate}
         />
       ) : currentView === "availability" ? (
         <AvailabilityGrid weekStartDate={weekStartDate} />

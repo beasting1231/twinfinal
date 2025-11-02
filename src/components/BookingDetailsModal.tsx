@@ -23,6 +23,7 @@ interface BookingDetailsModalProps {
   timeSlots: string[];
   onUpdate?: (id: string, booking: Partial<Booking>) => void;
   onDelete?: (id: string) => void;
+  onNavigateToDate?: (date: Date) => void;
 }
 
 export function BookingDetailsModal({
@@ -35,6 +36,7 @@ export function BookingDetailsModal({
   timeSlots,
   onUpdate,
   onDelete,
+  onNavigateToDate,
 }: BookingDetailsModalProps) {
   const { currentUser } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
@@ -42,6 +44,8 @@ export function BookingDetailsModal({
   const [pilotPayments, setPilotPayments] = useState<PilotPayment[]>([]);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [editedDateAvailability, setEditedDateAvailability] = useState<Map<string, Set<string>>>(new Map());
+  const [editedDatePilots, setEditedDatePilots] = useState<Pilot[]>([]);
+  const [editedDateBookings, setEditedDateBookings] = useState<Booking[]>([]);
 
   // Get pilots already assigned at this time (excluding the current booking)
   // Use editedBooking when in edit mode to recalculate for new time/date
@@ -51,7 +55,10 @@ export function BookingDetailsModal({
     const targetTimeIndex = editedBooking?.timeIndex ?? booking.timeIndex;
     const targetDate = editedBooking?.date ?? booking.date;
 
-    const bookingsAtThisTime = bookings.filter(
+    // Use editedDateBookings when in edit mode, otherwise use bookings from props
+    const bookingsToUse = isEditing ? editedDateBookings : bookings;
+
+    const bookingsAtThisTime = bookingsToUse.filter(
       b => b.timeIndex === targetTimeIndex && b.date === targetDate && b.id !== booking.id
     );
     const assigned = new Set<string>();
@@ -61,16 +68,16 @@ export function BookingDetailsModal({
       });
     });
     return assigned;
-  }, [booking, editedBooking, bookings]);
+  }, [booking, editedBooking, bookings, isEditing, editedDateBookings]);
 
   // Create an availability check function that uses edited date data when in edit mode
   const checkPilotAvailability = (pilotUid: string, timeSlot: string): boolean => {
-    if (isEditing && editedBooking?.date !== booking?.date) {
-      // Use fetched availability for edited date
+    if (isEditing) {
+      // Always use fetched availability when in edit mode
       const slots = editedDateAvailability.get(pilotUid);
       return slots ? slots.has(timeSlot) : false;
     }
-    // Use parent's availability check for current date
+    // Use parent's availability check for view mode
     return isPilotAvailableForTimeSlot(pilotUid, timeSlot);
   };
 
@@ -81,29 +88,34 @@ export function BookingDetailsModal({
     const targetDate = editedBooking.date;
     const slotsMap: Record<number, number> = {};
 
-    timeSlots.forEach((timeSlot, timeIndex) => {
-      // Get bookings at this specific time (excluding current booking)
-      const bookingsAtThisTime = bookings.filter(
-        b => b.timeIndex === timeIndex && b.date === targetDate && b.id !== booking.id
-      );
-      const assignedAtThisTime = new Set<string>();
-      bookingsAtThisTime.forEach(b => {
-        b.assignedPilots.forEach(pilot => {
-          if (pilot && pilot !== "") assignedAtThisTime.add(pilot);
-        });
-      });
+    // Use editedDatePilots and editedDateBookings when in edit mode, otherwise use from props
+    const pilotsToUse = isEditing ? editedDatePilots : pilots;
+    const bookingsToUse = isEditing ? editedDateBookings : bookings;
 
-      // Count pilots available at this time slot
-      const availablePilots = pilots.filter((pilot) =>
-        !assignedAtThisTime.has(pilot.displayName) &&
+    timeSlots.forEach((timeSlot, timeIndex) => {
+      // Count total pilots available at this time slot
+      const totalAvailablePilots = pilotsToUse.filter((pilot) =>
         checkPilotAvailability(pilot.uid, timeSlot)
       ).length;
 
-      slotsMap[timeIndex] = availablePilots;
+      // Get bookings at this specific time (excluding current booking)
+      const bookingsAtThisTime = bookingsToUse.filter(
+        b => b.timeIndex === timeIndex && b.date === targetDate && b.id !== booking.id
+      );
+
+      // Count total passengers booked at this time (regardless of pilot assignment)
+      const totalPassengersBooked = bookingsAtThisTime.reduce((sum, b) => {
+        return sum + (b.numberOfPeople || 0);
+      }, 0);
+
+      // Available slots = total available pilots - total passengers already booked
+      const availableSlots = totalAvailablePilots - totalPassengersBooked;
+
+      slotsMap[timeIndex] = Math.max(0, availableSlots);
     });
 
     return slotsMap;
-  }, [booking, editedBooking, pilots, bookings, timeSlots, isEditing, editedDateAvailability, isPilotAvailableForTimeSlot]);
+  }, [booking, editedBooking, pilots, editedDatePilots, bookings, editedDateBookings, timeSlots, isEditing, editedDateAvailability, isPilotAvailableForTimeSlot]);
 
   // Calculate available slots at this time based on actually available pilots (excluding the current booking)
   // Use editedBooking when in edit mode to recalculate for new time/date
@@ -120,7 +132,10 @@ export function BookingDetailsModal({
     if (!booking) return {};
 
     const targetDate = editedBooking?.date ?? booking.date;
-    const bookingsForDay = bookings.filter(b => b.date === targetDate);
+
+    // Use editedDateBookings when in edit mode, otherwise use bookings from props
+    const bookingsToUse = isEditing ? editedDateBookings : bookings;
+    const bookingsForDay = bookingsToUse.filter(b => b.date === targetDate);
 
     const counts: Record<string, number> = {};
     bookingsForDay.forEach(b => {
@@ -131,7 +146,7 @@ export function BookingDetailsModal({
       });
     });
     return counts;
-  }, [booking, editedBooking, bookings]);
+  }, [booking, editedBooking, bookings, isEditing, editedDateBookings]);
 
   useEffect(() => {
     if (booking) {
@@ -145,11 +160,17 @@ export function BookingDetailsModal({
     }
   }, [open]);
 
-  // Fetch pilot availability for the edited date
+  // Fetch pilot availability, pilot data, and bookings for the edited date
   useEffect(() => {
-    if (!editedBooking || !isEditing) return;
+    if (!editedBooking || !isEditing) {
+      // Clear data when not editing
+      setEditedDateAvailability(new Map());
+      setEditedDatePilots([]);
+      setEditedDateBookings([]);
+      return;
+    }
 
-    async function fetchAvailabilityForEditedDate() {
+    async function fetchDataForEditedDate() {
       if (!editedBooking) return; // Additional null check for TypeScript
 
       try {
@@ -163,10 +184,14 @@ export function BookingDetailsModal({
 
         const availabilitySnapshot = await getDocs(availabilityQuery);
 
-        // Build availability map
+        // Get unique pilot IDs and build availability map
+        const pilotIds = new Set<string>();
         const availabilityMap = new Map<string, Set<string>>();
+
         availabilitySnapshot.docs.forEach((doc) => {
           const data = doc.data();
+          pilotIds.add(data.userId);
+
           if (!availabilityMap.has(data.userId)) {
             availabilityMap.set(data.userId, new Set());
           }
@@ -174,12 +199,57 @@ export function BookingDetailsModal({
         });
 
         setEditedDateAvailability(availabilityMap);
+
+        // Fetch pilot details for all pilots with availability on this date
+        if (pilotIds.size > 0) {
+          const pilotPromises = Array.from(pilotIds).map(async (uid) => {
+            const profileQuery = query(
+              collection(db, "userProfiles"),
+              where("uid", "==", uid)
+            );
+            const profileSnapshot = await getDocs(profileQuery);
+
+            if (profileSnapshot.empty) {
+              return {
+                uid,
+                displayName: "Unknown Pilot",
+                femalePilot: false,
+              };
+            }
+
+            const profileData = profileSnapshot.docs[0].data();
+            return {
+              uid: profileData.uid,
+              displayName: profileData.displayName || "Unknown Pilot",
+              femalePilot: profileData.femalePilot || false,
+            };
+          });
+
+          const pilotsData = await Promise.all(pilotPromises);
+          setEditedDatePilots(pilotsData);
+        } else {
+          setEditedDatePilots([]);
+        }
+
+        // Fetch bookings for the edited date
+        const bookingsQuery = query(
+          collection(db, "bookings"),
+          where("date", "==", dateStr)
+        );
+
+        const bookingsSnapshot = await getDocs(bookingsQuery);
+        const bookingsData = bookingsSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        } as Booking));
+
+        setEditedDateBookings(bookingsData);
       } catch (err) {
-        console.error("Error fetching availability for edited date:", err);
+        console.error("Error fetching data for edited date:", err);
       }
     }
 
-    fetchAvailabilityForEditedDate();
+    fetchDataForEditedDate();
   }, [editedBooking?.date, isEditing]);
 
   // Initialize pilot payments when booking changes
@@ -280,8 +350,20 @@ export function BookingDetailsModal({
         updates.assignedPilots = editedBooking.assignedPilots;
       }
 
+      // Update the booking in the database
       onUpdate(booking.id, updates);
+
+      // Close edit mode
       setIsEditing(false);
+
+      // Close the modal
+      onOpenChange(false);
+
+      // Navigate to the booking's date (use the edited date)
+      if (onNavigateToDate) {
+        const bookingDate = new Date(editedBooking.date + 'T00:00:00');
+        onNavigateToDate(bookingDate);
+      }
     }
   };
 
@@ -725,7 +807,7 @@ export function BookingDetailsModal({
                     Select {editedBooking.numberOfPeople} {editedBooking.numberOfPeople === 1 ? "pilot" : "pilots"} ({editedBooking.assignedPilots.length} selected)
                   </p>
                   <div className="grid grid-cols-2 gap-2">
-                    {pilots
+                    {editedDatePilots
                       .filter((pilot) => {
                         const timeSlot = timeSlots[editedBooking.timeIndex];
                         return !assignedPilotsAtThisTime.has(pilot.displayName) &&
