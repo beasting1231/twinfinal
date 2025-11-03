@@ -407,6 +407,13 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], u
                 return false;
               }
 
+              // Check if booking requires female pilots
+              if (contextMenu.booking.femalePilotsRequired && contextMenu.booking.femalePilotsRequired > 0) {
+                if (!pilot.femalePilot) {
+                  return false;
+                }
+              }
+
               // Exclude pilots already assigned to this booking (to prevent double-assignment within same booking)
               const alreadyAssignedToThisBooking = contextMenu.booking.assignedPilots
                 .filter((p, index) => p && p !== "" && index !== contextMenu.slotIndex)
