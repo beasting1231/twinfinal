@@ -291,6 +291,11 @@ export function BookingDetailsModal({
       // Build update object with only changed fields
       const updates: any = {};
 
+      // Check if date or time has changed
+      const dateOrTimeChanged =
+        editedBooking.date !== booking.date ||
+        editedBooking.timeIndex !== booking.timeIndex;
+
       if (editedBooking.date !== booking.date) {
         updates.date = editedBooking.date;
       }
@@ -335,6 +340,12 @@ export function BookingDetailsModal({
       }
       if (editedBooking.span !== booking.span) {
         updates.span = editedBooking.span;
+      }
+
+      // If date or time changed, clear assigned pilots and payment info
+      if (dateOrTimeChanged) {
+        updates.assignedPilots = [];
+        updates.pilotPayments = [];
       }
 
       // Update the booking in the database
