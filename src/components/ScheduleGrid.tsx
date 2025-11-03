@@ -407,8 +407,9 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], u
                 return false;
               }
 
-              // Check if booking requires female pilots
-              if (contextMenu.booking.femalePilotsRequired && contextMenu.booking.femalePilotsRequired > 0) {
+              // Check if this specific position requires a female pilot
+              // Only the first N positions require female pilots, where N = femalePilotsRequired
+              if (contextMenu.booking.femalePilotsRequired && contextMenu.slotIndex < contextMenu.booking.femalePilotsRequired) {
                 if (!pilot.femalePilot) {
                   return false;
                 }
