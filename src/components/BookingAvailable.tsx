@@ -119,7 +119,7 @@ export function BookingAvailable({
         onTouchEnd={handleTouchEnd}
       >
         {/* Status indicator bar */}
-        <div className={`absolute top-0 right-0 w-[5px] h-full rounded-l-sm ${statusColors[bookingStatus]}`} />
+        <div className={`absolute top-0 right-0 w-[5px] h-full ${statusColors[bookingStatus]}`} />
 
         <div className="flex-1 min-h-0 overflow-hidden">
           <div className="font-semibold text-sm text-white truncate">

@@ -71,26 +71,45 @@ export function NewBookingModal({
     return assigned;
   }, [bookings, timeIndex]);
 
+  // Calculate occupied pilot positions at this time
+  const occupiedPilotIndices = useMemo(() => {
+    const bookingsAtThisTime = bookings.filter(b =>
+      b.timeIndex === timeIndex &&
+      b.date === format(selectedDate, "yyyy-MM-dd")
+    );
+    const occupied = new Set<number>();
+    bookingsAtThisTime.forEach(booking => {
+      // Mark all positions occupied by this booking based on its span
+      const bookingSpan = booking.numberOfPeople || booking.span || 1;
+      for (let i = 0; i < bookingSpan; i++) {
+        occupied.add(booking.pilotIndex + i);
+      }
+    });
+    return occupied;
+  }, [bookings, timeIndex, selectedDate]);
+
   // Calculate available slots at this time based on actually available pilots
   const availableSlots = useMemo(() => {
     // Count pilots who are actually available at this time slot
-    const actuallyAvailablePilots = pilots.filter((pilot) =>
+    const actuallyAvailablePilots = pilots.filter((pilot, index) =>
       !assignedPilotsAtThisTime.has(pilot.displayName) &&
-      isPilotAvailableForTimeSlot(pilot.uid, timeSlot)
+      isPilotAvailableForTimeSlot(pilot.uid, timeSlot) &&
+      !occupiedPilotIndices.has(index)
     ).length;
 
     return actuallyAvailablePilots;
-  }, [pilots, assignedPilotsAtThisTime, isPilotAvailableForTimeSlot, timeSlot]);
+  }, [pilots, assignedPilotsAtThisTime, isPilotAvailableForTimeSlot, timeSlot, occupiedPilotIndices]);
 
   // Calculate available female pilots at this time
   const availableFemalePilots = useMemo(() => {
-    const availableFemalePilotsList = pilots.filter((pilot) =>
+    const availableFemalePilotsList = pilots.filter((pilot, index) =>
       pilot.femalePilot &&
       !assignedPilotsAtThisTime.has(pilot.displayName) &&
-      isPilotAvailableForTimeSlot(pilot.uid, timeSlot)
+      isPilotAvailableForTimeSlot(pilot.uid, timeSlot) &&
+      !occupiedPilotIndices.has(index)
     );
     return availableFemalePilotsList.length;
-  }, [pilots, assignedPilotsAtThisTime, isPilotAvailableForTimeSlot, timeSlot]);
+  }, [pilots, assignedPilotsAtThisTime, isPilotAvailableForTimeSlot, timeSlot, occupiedPilotIndices]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,7 +136,8 @@ export function NewBookingModal({
         index,
         pilot,
         isAvailable: !assignedPilotsAtThisTime.has(pilot.displayName) &&
-                     isPilotAvailableForTimeSlot(pilot.uid, timeSlot)
+                     isPilotAvailableForTimeSlot(pilot.uid, timeSlot) &&
+                     !occupiedPilotIndices.has(index)
       }))
       .filter(p => p.isAvailable)
       .map(p => p.index);
