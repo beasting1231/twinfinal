@@ -312,33 +312,37 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], u
                   // Get all bookings at this position
                   const allBookings = getAllBookingsAt(pilotIndex, timeIndex);
 
-                  // If there are multiple bookings, render each one
+                  // If there are multiple bookings at the same position, stack them vertically
                   if (allBookings.length > 1) {
-                    return allBookings.map((booking, bookingIdx) => {
-                      const span = booking.numberOfPeople || booking.span || 1;
-                      return (
-                        <div
-                          key={`cell-${timeIndex}-${pilot.uid}-${booking.id || bookingIdx}`}
-                          className="h-14"
-                          style={{ gridColumn: `span ${span}` }}
-                        >
-                          <BookingAvailable
-                            pilotId={pilot.displayName}
-                            timeSlot={timeSlot}
-                            status="booked"
-                            customerName={booking.customerName}
-                            pickupLocation={booking.pickupLocation}
-                            assignedPilots={booking.assignedPilots}
-                            pilotPayments={booking.pilotPayments}
-                            bookingStatus={booking.bookingStatus}
-                            span={span}
-                            femalePilotsRequired={booking.femalePilotsRequired}
-                            onBookedClick={() => handleBookedCellClick(booking)}
-                            onContextMenu={handleBookingContextMenu(booking, timeSlot)}
-                          />
+                    const maxSpan = Math.max(...allBookings.map(b => b.numberOfPeople || b.span || 1));
+                    return [(
+                      <div
+                        key={`cell-${timeIndex}-${pilot.uid}-multi`}
+                        className="h-14"
+                        style={{ gridColumn: `span ${maxSpan}` }}
+                      >
+                        <div className="flex flex-col gap-0.5 h-full">
+                          {allBookings.map((booking, bookingIdx) => (
+                            <div key={booking.id || bookingIdx} className="flex-1 min-h-0">
+                              <BookingAvailable
+                                pilotId={pilot.displayName}
+                                timeSlot={timeSlot}
+                                status="booked"
+                                customerName={booking.customerName}
+                                pickupLocation={booking.pickupLocation}
+                                assignedPilots={booking.assignedPilots}
+                                pilotPayments={booking.pilotPayments}
+                                bookingStatus={booking.bookingStatus}
+                                span={booking.numberOfPeople || booking.span || 1}
+                                femalePilotsRequired={booking.femalePilotsRequired}
+                                onBookedClick={() => handleBookedCellClick(booking)}
+                                onContextMenu={handleBookingContextMenu(booking, timeSlot)}
+                              />
+                            </div>
+                          ))}
                         </div>
-                      );
-                    });
+                      </div>
+                    )];
                   }
 
                   // Single or no booking - use existing logic
