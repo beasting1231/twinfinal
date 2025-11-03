@@ -21,21 +21,22 @@ export function BookingSourceAutocomplete({
 }: BookingSourceAutocompleteProps) {
   const { bookingSources } = useBookingSources();
   const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [filteredSources, setFilteredSources] = useState(bookingSources);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Update filtered sources when bookingSources changes or value changes
+  // Update filtered sources based on search query
   useEffect(() => {
-    if (value.trim() === "") {
+    if (searchQuery.trim() === "") {
       setFilteredSources(bookingSources);
     } else {
-      const searchTerm = value.toLowerCase();
+      const searchTerm = searchQuery.toLowerCase();
       const filtered = bookingSources.filter((source) =>
         source.name.toLowerCase().includes(searchTerm)
       );
       setFilteredSources(filtered);
     }
-  }, [value, bookingSources]);
+  }, [searchQuery, bookingSources]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -45,6 +46,7 @@ export function BookingSourceAutocomplete({
         !containerRef.current.contains(event.target as Node)
       ) {
         setIsOpen(false);
+        setSearchQuery("");
       }
     };
 
@@ -53,17 +55,28 @@ export function BookingSourceAutocomplete({
   }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    onChange(e.target.value);
+    const newValue = e.target.value;
+    onChange(newValue);
+    setSearchQuery(newValue);
     setIsOpen(true);
   };
 
   const handleSelectSource = (sourceName: string) => {
     onChange(sourceName);
+    setSearchQuery("");
     setIsOpen(false);
   };
 
   const handleInputFocus = () => {
+    setSearchQuery("");
     setIsOpen(true);
+  };
+
+  const handleDropdownToggle = () => {
+    if (!isOpen) {
+      setSearchQuery("");
+    }
+    setIsOpen(!isOpen);
   };
 
   return (
@@ -83,7 +96,7 @@ export function BookingSourceAutocomplete({
         />
         <button
           type="button"
-          onClick={() => setIsOpen(!isOpen)}
+          onClick={handleDropdownToggle}
           className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white transition-colors"
         >
           <ChevronDown
@@ -112,10 +125,10 @@ export function BookingSourceAutocomplete({
               </div>
             ) : (
               <div className="px-4 py-3 text-zinc-500 text-sm">
-                {value.trim() ? (
+                {searchQuery.trim() ? (
                   <>
-                    No matches found. Press Enter or click outside to create{" "}
-                    <span className="text-white font-medium">"{value}"</span>
+                    No matches found. Type to create{" "}
+                    <span className="text-white font-medium">"{searchQuery}"</span>
                   </>
                 ) : (
                   "No booking sources yet"
