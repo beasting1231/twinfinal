@@ -15,6 +15,9 @@ interface BookingAvailableProps {
   onAvailableClick?: () => void;
   onBookedClick?: () => void;
   onContextMenu?: (slotIndex: number, position: { x: number; y: number }) => void;
+  onNoPilotContextMenu?: (position: { x: number; y: number }) => void;
+  onAvailableContextMenu?: (position: { x: number; y: number }) => void;
+  isCurrentUserPilot?: boolean; // Whether this cell is for the current user
 }
 
 export function BookingAvailable({
@@ -29,11 +32,16 @@ export function BookingAvailable({
   femalePilotsRequired = 0,
   onAvailableClick,
   onBookedClick,
-  onContextMenu
+  onContextMenu,
+  onNoPilotContextMenu,
+  onAvailableContextMenu,
+  isCurrentUserPilot = false
 }: BookingAvailableProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const longPressTimerRef = useRef<number | null>(null);
   const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
+
+  console.log("BookingAvailable render:", { pilotId, status, isCurrentUserPilot, hasNoPilotHandler: !!onNoPilotContextMenu, hasAvailableHandler: !!onAvailableContextMenu });
 
   // Detect which slot was clicked based on x position
   const getSlotIndexFromPosition = (clientX: number): number => {
@@ -177,9 +185,70 @@ export function BookingAvailable({
     );
   }
 
+  // Handle context menu for noPilot cells
+  const handleNoPilotContextMenu = (e: React.MouseEvent) => {
+    console.log("handleNoPilotContextMenu called", { status, onNoPilotContextMenu, isCurrentUserPilot });
+    if (status !== "noPilot" || !onNoPilotContextMenu || !isCurrentUserPilot) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    console.log("NoPilot cell context menu triggered");
+    onNoPilotContextMenu({ x: e.clientX, y: e.clientY });
+  };
+
+  // Handle touch start for noPilot cells (mobile long-press)
+  const handleNoPilotTouchStart = (e: React.TouchEvent) => {
+    if (status !== "noPilot" || !onNoPilotContextMenu || !isCurrentUserPilot) return;
+
+    const touch = e.touches[0];
+    touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
+
+    longPressTimerRef.current = window.setTimeout(() => {
+      if (touchStartPosRef.current) {
+        console.log("NoPilot cell touch long-press triggered");
+        onNoPilotContextMenu(touchStartPosRef.current);
+      }
+    }, 500); // 500ms long press
+  };
+
+  // Handle context menu for available cells
+  const handleAvailableContextMenu = (e: React.MouseEvent) => {
+    if (status !== "available" || !onAvailableContextMenu || !isCurrentUserPilot) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    console.log("Available cell context menu triggered");
+    onAvailableContextMenu({ x: e.clientX, y: e.clientY });
+  };
+
+  // Handle touch start for available cells (mobile long-press)
+  const handleAvailableTouchStart = (e: React.TouchEvent) => {
+    if (status !== "available" || !onAvailableContextMenu || !isCurrentUserPilot) return;
+
+    const touch = e.touches[0];
+    touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
+
+    longPressTimerRef.current = window.setTimeout(() => {
+      if (touchStartPosRef.current) {
+        console.log("Available cell touch long-press triggered");
+        onAvailableContextMenu(touchStartPosRef.current);
+      }
+    }, 500); // 500ms long press
+  };
+
   if (status === "noPilot") {
     return (
-      <div className="w-full h-full bg-zinc-900 rounded-lg flex items-center justify-center cursor-not-allowed">
+      <div
+        className={`w-full h-full bg-zinc-900 rounded-lg flex items-center justify-center ${
+          isCurrentUserPilot ? 'cursor-pointer hover:bg-zinc-800' : 'cursor-not-allowed'
+        }`}
+        onContextMenu={handleNoPilotContextMenu}
+        onTouchStart={handleNoPilotTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
         <div className="text-xs text-zinc-500">no {pilotId.toLowerCase()}</div>
       </div>
     );
@@ -189,6 +258,10 @@ export function BookingAvailable({
     <div
       className="w-full h-full bg-zinc-800 rounded-lg hover:bg-zinc-700 transition-colors cursor-pointer"
       onClick={onAvailableClick}
+      onContextMenu={handleAvailableContextMenu}
+      onTouchStart={handleAvailableTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
     >
       {/* Empty booking cell - available for booking */}
     </div>

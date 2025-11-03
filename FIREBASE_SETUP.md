@@ -55,7 +55,7 @@ VITE_FIREBASE_APP_ID=your_app_id
 
 ## Step 5: Firestore Collections Structure
 
-The app uses three collections:
+The app uses two collections:
 
 ### `bookings` collection
 Each document should have:
@@ -66,11 +66,6 @@ Each document should have:
 - `assignedPilots` (array of strings): Array of pilot names (e.g., ["Pilot 1", "Pilot 2"])
 - `bookingStatus` (string): One of "confirmed", "pending", or "cancelled"
 - `span` (number): Number of columns to span (1, 2, or 3)
-
-### `unavailablePilots` collection
-Each document should have:
-- `pilotIndex` (number): Index of the pilot (0, 1, 2, etc.)
-- `timeIndex` (number): Index of the time slot (0, 1, 2, etc.)
 
 ### `availability` collection
 Each document represents a time slot when a user is available:
@@ -94,9 +89,6 @@ service cloud.firestore {
   match /databases/{database}/documents {
     // Require authentication for all operations
     match /bookings/{bookingId} {
-      allow read, write: if request.auth != null;
-    }
-    match /unavailablePilots/{pilotId} {
       allow read, write: if request.auth != null;
     }
     match /availability/{availabilityId} {

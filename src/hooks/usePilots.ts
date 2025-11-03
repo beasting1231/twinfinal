@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { collection, query, where, getDocs, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { format } from "date-fns";
 import type { Pilot } from "../types/index";
@@ -16,94 +16,103 @@ export function usePilots(selectedDate: Date) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function fetchAvailablePilots() {
-      try {
-        setLoading(true);
-        setError(null);
+    setLoading(true);
+    setError(null);
 
-        const dateStr = format(selectedDate, "yyyy-MM-dd");
+    const dateStr = format(selectedDate, "yyyy-MM-dd");
 
-        // Query availability collection for the selected date
-        const availabilityQuery = query(
-          collection(db, "availability"),
-          where("date", "==", dateStr)
-        );
+    // Query availability collection for the selected date
+    const availabilityQuery = query(
+      collection(db, "availability"),
+      where("date", "==", dateStr)
+    );
 
-        const availabilitySnapshot = await getDocs(availabilityQuery);
+    // Subscribe to real-time updates
+    const unsubscribe = onSnapshot(
+      availabilityQuery,
+      async (availabilitySnapshot) => {
+        try {
+          // Get unique pilot IDs and their available time slots
+          const pilotIds = new Set<string>();
+          const availabilityMap = new Map<string, Set<string>>();
 
-        // Get unique pilot IDs and their available time slots
-        const pilotIds = new Set<string>();
-        const availabilityMap = new Map<string, Set<string>>();
+          availabilitySnapshot.docs.forEach((doc) => {
+            const data = doc.data();
+            pilotIds.add(data.userId);
 
-        availabilitySnapshot.docs.forEach((doc) => {
-          const data = doc.data();
-          pilotIds.add(data.userId);
+            if (!availabilityMap.has(data.userId)) {
+              availabilityMap.set(data.userId, new Set());
+            }
+            availabilityMap.get(data.userId)!.add(data.timeSlot);
+          });
 
-          if (!availabilityMap.has(data.userId)) {
-            availabilityMap.set(data.userId, new Set());
+          // If no pilots are available, return empty array
+          if (pilotIds.size === 0) {
+            setPilots([]);
+            setPilotAvailability(new Map());
+            setLoading(false);
+            return;
           }
-          availabilityMap.get(data.userId)!.add(data.timeSlot);
-        });
 
-        // If no pilots are available, return empty array
-        if (pilotIds.size === 0) {
-          setPilots([]);
-          setLoading(false);
-          return;
-        }
+          // Fetch pilot details from userProfiles
+          const pilotPromises = Array.from(pilotIds).map(async (uid) => {
+            const profileQuery = query(
+              collection(db, "userProfiles"),
+              where("uid", "==", uid)
+            );
+            const profileSnapshot = await getDocs(profileQuery);
 
-        // Fetch pilot details from userProfiles
-        const pilotPromises = Array.from(pilotIds).map(async (uid) => {
-          const profileQuery = query(
-            collection(db, "userProfiles"),
-            where("uid", "==", uid)
-          );
-          const profileSnapshot = await getDocs(profileQuery);
+            if (profileSnapshot.empty) {
+              // Fallback: if no profile exists, return basic info
+              return {
+                uid,
+                displayName: "Unknown Pilot",
+                femalePilot: false,
+              };
+            }
 
-          if (profileSnapshot.empty) {
-            // Fallback: if no profile exists, return basic info
+            const profileData = profileSnapshot.docs[0].data();
             return {
-              uid,
-              displayName: "Unknown Pilot",
-              femalePilot: false,
+              uid: profileData.uid,
+              displayName: profileData.displayName || "Unknown Pilot",
+              femalePilot: profileData.femalePilot || false,
             };
-          }
+          });
 
-          const profileData = profileSnapshot.docs[0].data();
-          return {
-            uid: profileData.uid,
-            displayName: profileData.displayName || "Unknown Pilot",
-            femalePilot: profileData.femalePilot || false,
-          };
-        });
+          const pilotsData = await Promise.all(pilotPromises);
 
-        const pilotsData = await Promise.all(pilotPromises);
+          // Sort pilots by availability count (most available first), then alphabetically
+          pilotsData.sort((a, b) => {
+            const aAvailability = availabilityMap.get(a.uid)?.size || 0;
+            const bAvailability = availabilityMap.get(b.uid)?.size || 0;
 
-        // Sort pilots by availability count (most available first), then alphabetically
-        pilotsData.sort((a, b) => {
-          const aAvailability = availabilityMap.get(a.uid)?.size || 0;
-          const bAvailability = availabilityMap.get(b.uid)?.size || 0;
+            // Sort by availability count descending (most available first)
+            if (bAvailability !== aAvailability) {
+              return bAvailability - aAvailability;
+            }
 
-          // Sort by availability count descending (most available first)
-          if (bAvailability !== aAvailability) {
-            return bAvailability - aAvailability;
-          }
+            // If same availability, sort alphabetically
+            return a.displayName.localeCompare(b.displayName);
+          });
 
-          // If same availability, sort alphabetically
-          return a.displayName.localeCompare(b.displayName);
-        });
-
-        setPilots(pilotsData);
-        setPilotAvailability(availabilityMap);
-        setLoading(false);
-      } catch (err: any) {
+          setPilots(pilotsData);
+          setPilotAvailability(availabilityMap);
+          setLoading(false);
+        } catch (err: any) {
+          console.error("Error processing pilots:", err);
+          setError(err.message);
+          setLoading(false);
+        }
+      },
+      (err) => {
         console.error("Error fetching pilots:", err);
         setError(err.message);
         setLoading(false);
       }
-    }
+    );
 
-    fetchAvailablePilots();
+    // Cleanup subscription on unmount or date change
+    return () => unsubscribe();
   }, [selectedDate]);
 
   const isPilotAvailableForTimeSlot = (pilotUid: string, timeSlot: string): boolean => {

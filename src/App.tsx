@@ -18,8 +18,8 @@ function AppContent() {
   const [weekStartDate, setWeekStartDate] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
   const { currentUser } = useAuth();
 
-  // Fetch bookings and unavailable pilots from Firebase
-  const { bookings, unavailablePilots, addBooking, updateBooking, deleteBooking } = useBookings();
+  // Fetch bookings from Firebase
+  const { bookings, addBooking, updateBooking, deleteBooking } = useBookings();
 
   // Filter bookings for the selected date
   const filteredBookings = useMemo(() => {
@@ -54,9 +54,9 @@ function AppContent() {
           pilots={pilots}
           timeSlots={timeSlots}
           bookings={filteredBookings}
-          unavailablePilots={unavailablePilots}
           isPilotAvailableForTimeSlot={isPilotAvailableForTimeSlot}
           loading={pilotsLoading}
+          currentUserDisplayName={currentUser?.displayName || undefined}
           onAddBooking={addBooking}
           onUpdateBooking={updateBooking}
           onDeleteBooking={deleteBooking}

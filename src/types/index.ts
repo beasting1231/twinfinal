@@ -30,12 +30,6 @@ export interface Booking {
   pilotPayments?: PilotPayment[];
 }
 
-export interface UnavailablePilot {
-  id?: string;
-  pilotIndex: number;
-  timeIndex: number;
-}
-
 export interface UserProfile {
   uid: string;
   displayName: string;

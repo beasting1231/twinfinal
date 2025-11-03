@@ -6,7 +6,7 @@ import { Label } from "./ui/label";
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Textarea } from "./ui/textarea";
-import type { Booking, Pilot, PilotPayment, ReceiptFile, UnavailablePilot } from "../types/index";
+import type { Booking, Pilot, PilotPayment, ReceiptFile } from "../types/index";
 import { useAuth } from "../contexts/AuthContext";
 import { Camera, Upload, Eye, Trash2, Calendar, Clock, MapPin, Users, Phone, Mail, FileText, User, PhoneCall, Send } from "lucide-react";
 import { collection, query, where, getDocs } from "firebase/firestore";
@@ -19,7 +19,6 @@ interface BookingDetailsModalProps {
   bookings: Booking[];
   pilots: Pilot[];
   isPilotAvailableForTimeSlot: (pilotUid: string, timeSlot: string) => boolean;
-  unavailablePilots?: UnavailablePilot[];
   timeSlots: string[];
   onUpdate?: (id: string, booking: Partial<Booking>) => void;
   onDelete?: (id: string) => void;

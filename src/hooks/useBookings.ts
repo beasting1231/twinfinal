@@ -1,11 +1,10 @@
 import { useState, useEffect } from "react";
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from "firebase/firestore";
 import { db } from "../firebase/config";
-import type { Booking, UnavailablePilot } from "../types/index";
+import type { Booking } from "../types/index";
 
 export function useBookings() {
   const [bookings, setBookings] = useState<Booking[]>([]);
-  const [unavailablePilots, setUnavailablePilots] = useState<UnavailablePilot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,26 +27,9 @@ export function useBookings() {
       }
     );
 
-    // Subscribe to unavailable pilots collection
-    const unsubscribeUnavailable = onSnapshot(
-      collection(db, "unavailablePilots"),
-      (snapshot) => {
-        const unavailableData = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as UnavailablePilot[];
-        setUnavailablePilots(unavailableData);
-      },
-      (err) => {
-        console.error("Error fetching unavailable pilots:", err);
-        setError(err.message);
-      }
-    );
-
     // Cleanup subscriptions on unmount
     return () => {
       unsubscribeBookings();
-      unsubscribeUnavailable();
     };
   }, []);
 
@@ -93,35 +75,12 @@ export function useBookings() {
     }
   };
 
-  // Add an unavailable pilot slot
-  const addUnavailablePilot = async (unavailable: Omit<UnavailablePilot, "id">) => {
-    try {
-      await addDoc(collection(db, "unavailablePilots"), unavailable);
-    } catch (err: any) {
-      console.error("Error adding unavailable pilot:", err);
-      setError(err.message);
-    }
-  };
-
-  // Remove an unavailable pilot slot
-  const removeUnavailablePilot = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, "unavailablePilots", id));
-    } catch (err: any) {
-      console.error("Error removing unavailable pilot:", err);
-      setError(err.message);
-    }
-  };
-
   return {
     bookings,
-    unavailablePilots,
     loading,
     error,
     addBooking,
     updateBooking,
     deleteBooking,
-    addUnavailablePilot,
-    removeUnavailablePilot,
   };
 }

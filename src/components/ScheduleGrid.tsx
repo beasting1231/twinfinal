@@ -3,23 +3,24 @@ import { BookingAvailable } from "./BookingAvailable";
 import { NewBookingModal } from "./NewBookingModal";
 import { BookingDetailsModal } from "./BookingDetailsModal";
 import { PilotContextMenu } from "./PilotContextMenu";
-import type { Booking, UnavailablePilot, Pilot } from "../types/index";
+import { AvailabilityContextMenu } from "./AvailabilityContextMenu";
+import type { Booking, Pilot } from "../types/index";
 
 interface ScheduleGridProps {
   selectedDate: Date;
   pilots: Pilot[];
   timeSlots: string[];
   bookings?: Booking[];
-  unavailablePilots?: UnavailablePilot[];
   isPilotAvailableForTimeSlot: (pilotUid: string, timeSlot: string) => boolean;
   loading?: boolean;
+  currentUserDisplayName?: string;
   onAddBooking?: (booking: Omit<Booking, "id">) => void;
   onUpdateBooking?: (id: string, booking: Partial<Booking>) => void;
   onDeleteBooking?: (id: string) => void;
   onNavigateToDate?: (date: Date) => void;
 }
 
-export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], unavailablePilots = [], isPilotAvailableForTimeSlot, loading = false, onAddBooking, onUpdateBooking, onDeleteBooking, onNavigateToDate }: ScheduleGridProps) {
+export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], isPilotAvailableForTimeSlot, loading = false, currentUserDisplayName, onAddBooking, onUpdateBooking, onDeleteBooking, onNavigateToDate }: ScheduleGridProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedCell, setSelectedCell] = useState<{ pilotIndex: number; timeIndex: number; timeSlot: string } | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
@@ -32,6 +33,15 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], u
     booking: Booking;
     slotIndex: number;
     timeSlot: string;
+  } | null>(null);
+
+  // Availability context menu state
+  const [availabilityContextMenu, setAvailabilityContextMenu] = useState<{
+    isOpen: boolean;
+    position: { x: number; y: number };
+    pilotIndex: number;
+    timeIndex: number;
+    isSignedOut: boolean;
   } | null>(null);
 
   // Zoom state
@@ -107,6 +117,95 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], u
     onUpdateBooking(booking.id!, {
       assignedPilots: updatedPilots,
     });
+  };
+
+  // Handle opening availability context menu
+  const handleNoPilotContextMenu = (pilotIndex: number, timeIndex: number) => (position: { x: number; y: number }) => {
+    console.log("handleNoPilotContextMenu called in ScheduleGrid", { pilotIndex, timeIndex, position, currentUserDisplayName });
+
+    // Check if pilot is currently available (has record in availability collection)
+    const pilot = pilots[pilotIndex];
+    const timeSlot = timeSlots[timeIndex];
+
+    // If pilot is available, there's a record in the availability collection
+    // If pilot is NOT available (signed out), there's NO record
+    const isPilotAvailable = pilot && isPilotAvailableForTimeSlot(pilot.uid, timeSlot);
+    const isSignedOut = !isPilotAvailable;
+
+    console.log("Setting availability context menu", { isPilotAvailable, isSignedOut });
+    setAvailabilityContextMenu({
+      isOpen: true,
+      position,
+      pilotIndex,
+      timeIndex,
+      isSignedOut,
+    });
+  };
+
+  // Handle signing in (marking as available - ADD to availability collection)
+  const handleSignIn = async () => {
+    if (!availabilityContextMenu) return;
+
+    const { pilotIndex, timeIndex } = availabilityContextMenu;
+    const pilot = pilots[pilotIndex];
+    const timeSlot = timeSlots[timeIndex];
+
+    if (!pilot || !currentUserDisplayName) return;
+
+    try {
+      const { addDoc, collection } = await import("firebase/firestore");
+      const { db } = await import("../firebase/config");
+      const { format } = await import("date-fns");
+      const { currentUser } = await import("../contexts/AuthContext").then(m => ({ currentUser: pilot }));
+
+      // Add to availability collection
+      await addDoc(collection(db, "availability"), {
+        userId: pilot.uid,
+        date: format(selectedDate, "yyyy-MM-dd"),
+        timeSlot: timeSlot,
+      });
+
+      console.log("Signed in successfully");
+      setAvailabilityContextMenu(null);
+    } catch (error) {
+      console.error("Error signing in:", error);
+    }
+  };
+
+  // Handle signing out (marking as unavailable - DELETE from availability collection)
+  const handleSignOut = async () => {
+    if (!availabilityContextMenu) return;
+
+    const { pilotIndex, timeIndex } = availabilityContextMenu;
+    const pilot = pilots[pilotIndex];
+    const timeSlot = timeSlots[timeIndex];
+
+    if (!pilot || !currentUserDisplayName) return;
+
+    try {
+      const { query, collection, where, getDocs, deleteDoc } = await import("firebase/firestore");
+      const { db } = await import("../firebase/config");
+      const { format } = await import("date-fns");
+
+      const dateStr = format(selectedDate, "yyyy-MM-dd");
+
+      // Delete from availability collection
+      const q = query(
+        collection(db, "availability"),
+        where("userId", "==", pilot.uid),
+        where("date", "==", dateStr),
+        where("timeSlot", "==", timeSlot)
+      );
+
+      const snapshot = await getDocs(q);
+      const deletePromises = snapshot.docs.map((doc) => deleteDoc(doc.ref));
+      await Promise.all(deletePromises);
+
+      console.log("Signed out successfully");
+      setAvailabilityContextMenu(null);
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
   };
 
   // Get distance between two touch points
@@ -240,12 +339,6 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], u
     });
   };
 
-  // Helper function to check if a pilot is unavailable at a specific time
-  const isPilotUnavailable = (pilotIndex: number, timeIndex: number) => {
-    return unavailablePilots.some(
-      unavailable => unavailable.pilotIndex === pilotIndex && unavailable.timeIndex === timeIndex
-    );
-  };
 
   return (
     <div
@@ -342,9 +435,30 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], u
                   }
 
                   // No booking - check if available
-                  const isUnavailable = isPilotUnavailable(pilotIndex, timeIndex);
                   const isPilotAvailableThisSlot = isPilotAvailableForTimeSlot(pilot.uid, timeSlot);
-                  const cellStatus = (isUnavailable || !isPilotAvailableThisSlot) ? "noPilot" : "available";
+                  const cellStatus = isPilotAvailableThisSlot ? "available" : "noPilot";
+
+                  // Check if this cell is for the current user
+                  const isCurrentUserPilot = currentUserDisplayName === pilot.displayName;
+
+                  // Debug logging
+                  if (timeIndex === 0) { // Only log for first time slot to avoid spam
+                    console.log("Cell for pilot:", {
+                      pilotName: pilot.displayName,
+                      currentUserDisplayName,
+                      isCurrentUserPilot,
+                      cellStatus,
+                      hasNoPilotHandler: !!(cellStatus === "noPilot" && isCurrentUserPilot),
+                      hasAvailableHandler: !!(cellStatus === "available" && isCurrentUserPilot)
+                    });
+                  }
+
+                  // Check if pilot can sign out (not assigned to any booking at this time)
+                  const isPilotAssignedAtThisTime = bookings.some(booking =>
+                    booking.timeIndex === timeIndex &&
+                    booking.assignedPilots.some(p => p && p !== "" && p === pilot.displayName)
+                  );
+                  const canSignOut = !isPilotAssignedAtThisTime;
 
                   return [(
                     <div
@@ -357,9 +471,20 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], u
                         timeSlot={timeSlot}
                         status={cellStatus}
                         span={1}
+                        isCurrentUserPilot={isCurrentUserPilot}
                         onAvailableClick={
                           cellStatus === "available"
                             ? () => handleAvailableCellClick(pilotIndex, timeIndex, timeSlot)
+                            : undefined
+                        }
+                        onNoPilotContextMenu={
+                          cellStatus === "noPilot" && isCurrentUserPilot
+                            ? handleNoPilotContextMenu(pilotIndex, timeIndex)
+                            : undefined
+                        }
+                        onAvailableContextMenu={
+                          cellStatus === "available" && isCurrentUserPilot
+                            ? handleNoPilotContextMenu(pilotIndex, timeIndex)
                             : undefined
                         }
                       />
@@ -393,7 +518,6 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], u
         bookings={bookings}
         pilots={pilots}
         isPilotAvailableForTimeSlot={isPilotAvailableForTimeSlot}
-        unavailablePilots={unavailablePilots}
         timeSlots={timeSlots}
         onUpdate={onUpdateBooking}
         onDelete={onDeleteBooking}
@@ -479,6 +603,30 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], u
           onSelectPilot={handleSelectPilot}
           onUnassign={handleUnassignPilot}
           onClose={() => setContextMenu(null)}
+        />
+      )}
+
+      {/* Availability Context Menu */}
+      {availabilityContextMenu && (
+        <AvailabilityContextMenu
+          isOpen={availabilityContextMenu.isOpen}
+          position={availabilityContextMenu.position}
+          isSignedOut={availabilityContextMenu.isSignedOut}
+          canSignOut={(() => {
+            // Check if pilot is assigned to any booking at this time
+            const pilot = pilots[availabilityContextMenu.pilotIndex];
+            if (!pilot) return false;
+
+            const isPilotAssignedAtThisTime = bookings.some(booking =>
+              booking.timeIndex === availabilityContextMenu.timeIndex &&
+              booking.assignedPilots.some(p => p && p !== "" && p === pilot.displayName)
+            );
+
+            return !isPilotAssignedAtThisTime;
+          })()}
+          onSignIn={handleSignIn}
+          onSignOut={handleSignOut}
+          onClose={() => setAvailabilityContextMenu(null)}
         />
       )}
     </div>
