@@ -213,7 +213,7 @@ export function BookingDetailsModal({
   useEffect(() => {
     if (booking) {
       // If booking has existing payment data, use it
-      if (booking.pilotPayments) {
+      if (booking.pilotPayments && booking.pilotPayments.length > 0) {
         setPilotPayments(booking.pilotPayments);
       } else {
         // Initialize empty payment data for each assigned pilot (excluding empty positions)
@@ -229,6 +229,33 @@ export function BookingDetailsModal({
       }
     }
   }, [booking]);
+
+  // Update pilot payments when edited booking's assigned pilots change
+  useEffect(() => {
+    if (editedBooking && editedBooking.assignedPilots) {
+      const currentPilotNames = editedBooking.assignedPilots.filter(p => p && p !== "");
+      const existingPilotNames = pilotPayments.map(p => p.pilotName);
+
+      // Check if pilot list has changed
+      const pilotsChanged =
+        currentPilotNames.length !== existingPilotNames.length ||
+        currentPilotNames.some(name => !existingPilotNames.includes(name));
+
+      if (pilotsChanged) {
+        // Keep existing payment data for pilots that are still assigned
+        const updatedPayments = currentPilotNames.map(pilotName => {
+          const existingPayment = pilotPayments.find(p => p.pilotName === pilotName);
+          return existingPayment || {
+            pilotName,
+            amount: "",
+            paymentMethod: "direkt" as const,
+            receiptFiles: []
+          };
+        });
+        setPilotPayments(updatedPayments);
+      }
+    }
+  }, [editedBooking?.assignedPilots]);
 
   // Sort pilot payments to show current user's section first
   const sortedPilotPayments = useMemo(() => {
@@ -420,7 +447,10 @@ export function BookingDetailsModal({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="w-[90vw] max-w-[600px] overflow-x-hidden allow-select rounded-2xl" hideCloseButton>
+      <DialogContent className="w-[90vw] max-w-[600px] overflow-x-hidden allow-select rounded-2xl" hideCloseButton aria-describedby={undefined}>
+        <div className="sr-only">
+          <DialogTitle>Booking Details</DialogTitle>
+        </div>
         <Tabs defaultValue="details" className="w-full overflow-x-hidden">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="details">Booking Details</TabsTrigger>
@@ -903,7 +933,7 @@ export function BookingDetailsModal({
           </TabsContent>
 
           <TabsContent value="payment" className="space-y-4 max-h-[60vh] overflow-y-auto">
-            {pilotPayments.length === 0 ? (
+            {sortedPilotPayments.length === 0 ? (
               <div className="text-center py-12 text-zinc-500">
                 <p>No pilots assigned to this booking</p>
               </div>

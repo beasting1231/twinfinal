@@ -7,6 +7,7 @@ interface BookingAvailableProps {
   status?: "available" | "booked" | "noPilot";
   customerName?: string;
   pickupLocation?: string;
+  bookingSource?: string;
   assignedPilots?: string[];
   pilotPayments?: PilotPayment[];
   bookingStatus?: "unconfirmed" | "confirmed" | "pending" | "cancelled";
@@ -26,6 +27,7 @@ export function BookingAvailable({
   status = "available",
   customerName,
   pickupLocation,
+  bookingSource,
   assignedPilots = [],
   pilotPayments = [],
   bookingStatus = "confirmed",
@@ -157,7 +159,7 @@ export function BookingAvailable({
 
         <div className="flex-1 min-h-0 overflow-hidden">
           <div className="font-semibold text-sm text-white truncate">
-            {customerName} - {pickupLocation}
+            {bookingSource} - {pickupLocation} - {customerName}
           </div>
         </div>
 
