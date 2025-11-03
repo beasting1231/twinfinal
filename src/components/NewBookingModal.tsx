@@ -8,6 +8,7 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import { format } from "date-fns";
 import type { Pilot, Booking } from "../types/index";
 import { useEditing } from "../contexts/EditingContext";
+import { BookingSourceAutocomplete } from "./BookingSourceAutocomplete";
 
 interface NewBookingModalProps {
   open: boolean;
@@ -286,17 +287,11 @@ export function NewBookingModal({
           </div>
 
           {/* Booking Source */}
-          <div className="space-y-2">
-            <Label htmlFor="bookingSource" className="text-white">
-              Booking Source <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              id="bookingSource"
-              value={bookingSource}
-              onChange={(e) => setBookingSource(e.target.value)}
-              required
-            />
-          </div>
+          <BookingSourceAutocomplete
+            value={bookingSource}
+            onChange={setBookingSource}
+            required
+          />
 
           {/* Phone Number (Optional) */}
           <div className="space-y-2">

@@ -12,6 +12,7 @@ import { useEditing } from "../contexts/EditingContext";
 import { Camera, Upload, Eye, Trash2, Calendar, Clock, MapPin, Users, Phone, Mail, FileText, User, PhoneCall, Send } from "lucide-react";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../firebase/config";
+import { BookingSourceAutocomplete } from "./BookingSourceAutocomplete";
 
 interface BookingDetailsModalProps {
   open: boolean;
@@ -835,13 +836,11 @@ export function BookingDetailsModal({
                 </div>
 
                 {/* Booking Source */}
-                <div className="space-y-2">
-                  <Label className="text-white">Booking Source</Label>
-                  <Input
-                    value={editedBooking.bookingSource}
-                    onChange={(e) => setEditedBooking({ ...editedBooking, bookingSource: e.target.value })}
-                  />
-                </div>
+                <BookingSourceAutocomplete
+                  value={editedBooking.bookingSource}
+                  onChange={(value) => setEditedBooking({ ...editedBooking, bookingSource: value })}
+                  label="Booking Source"
+                />
 
                 {/* Phone Number */}
                 <div className="space-y-2">
