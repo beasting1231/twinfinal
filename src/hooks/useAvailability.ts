@@ -111,14 +111,17 @@ export function useAvailability() {
       console.log("All available?", allAvailable);
 
       if (allAvailable) {
-        // Delete all slots for this day
-        const q = query(
-          collection(db, "availability"),
-          where("userId", "==", currentUser.uid),
-          where("date", "==", dateStr)
-        );
-        const snapshot = await getDocs(q);
-        const deletePromises = snapshot.docs.map((doc) => deleteDoc(doc.ref));
+        // Delete only the specified slots (not all slots for the day)
+        const deletePromises = timeSlots.map(async (slot) => {
+          const q = query(
+            collection(db, "availability"),
+            where("userId", "==", currentUser.uid),
+            where("date", "==", dateStr),
+            where("timeSlot", "==", slot)
+          );
+          const snapshot = await getDocs(q);
+          return Promise.all(snapshot.docs.map((doc) => deleteDoc(doc.ref)));
+        });
         await Promise.all(deletePromises);
       } else {
         // Add all slots for this day

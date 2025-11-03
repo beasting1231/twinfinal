@@ -395,8 +395,31 @@ export function BookingDetailsModal({
     }
   };
 
+  // Handle modal close - clear pilots and payments if status is cancelled
+  const handleOpenChange = (newOpen: boolean) => {
+    console.log("Modal closing:", {
+      newOpen,
+      bookingStatus: editedBooking?.bookingStatus,
+      bookingId: booking?.id,
+      hasOnUpdate: !!onUpdate
+    });
+
+    // If modal is closing and booking status is cancelled, clear pilots and payments
+    if (!newOpen && editedBooking?.bookingStatus === 'cancelled' && booking?.id && onUpdate) {
+      console.log("Clearing pilots and payments for cancelled booking");
+      const emptyPilots = Array(editedBooking.numberOfPeople).fill("");
+      onUpdate(booking.id, {
+        assignedPilots: emptyPilots,
+        pilotPayments: []
+      });
+    }
+
+    // Call original onOpenChange
+    onOpenChange(newOpen);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="w-[90vw] max-w-[600px] overflow-x-hidden allow-select rounded-2xl" hideCloseButton>
         <Tabs defaultValue="details" className="w-full overflow-x-hidden">
           <TabsList className="grid w-full grid-cols-2">
@@ -851,7 +874,7 @@ export function BookingDetailsModal({
                     Delete
                   </Button>
                   <Button
-                    onClick={() => onOpenChange(false)}
+                    onClick={() => handleOpenChange(false)}
                     variant="outline"
                     className="flex-1 border-zinc-700 text-white hover:bg-zinc-800"
                   >

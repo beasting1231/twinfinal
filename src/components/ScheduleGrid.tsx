@@ -156,7 +156,6 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
       const { addDoc, collection } = await import("firebase/firestore");
       const { db } = await import("../firebase/config");
       const { format } = await import("date-fns");
-      const { currentUser } = await import("../contexts/AuthContext").then(m => ({ currentUser: pilot }));
 
       // Add to availability collection
       await addDoc(collection(db, "availability"), {
@@ -370,19 +369,6 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
 
           {/* Time Slots and Booking Cells */}
           {timeSlots.map((timeSlot, timeIndex) => {
-            // Sort pilots for this specific time slot: available first, then unavailable
-            const sortedPilotsForSlot = [...pilots].sort((a, b) => {
-              const aAvailable = isPilotAvailableForTimeSlot(a.uid, timeSlot);
-              const bAvailable = isPilotAvailableForTimeSlot(b.uid, timeSlot);
-
-              // Available pilots come first (left side)
-              if (aAvailable && !bAvailable) return -1;
-              if (!aAvailable && bAvailable) return 1;
-
-              // If both have same availability, maintain original order
-              return 0;
-            });
-
             return [
               // Time Slot Label
               <div
@@ -393,9 +379,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
               </div>,
 
               // Booking Cells for each pilot
-              ...sortedPilotsForSlot.flatMap((pilot) => {
-                  // Find the original pilot index for booking lookups
-                  const pilotIndex = pilots.findIndex(p => p.uid === pilot.uid);
+              ...pilots.flatMap((pilot, pilotIndex) => {
 
                   // Skip cells that are occupied by a spanning booking
                   if (isCellOccupied(pilotIndex, timeIndex)) {
@@ -441,6 +425,11 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                   // Check if this cell is for the current user
                   const isCurrentUserPilot = currentUserDisplayName === pilot.displayName;
 
+                  // Find the current user's pilot to check their availability at this time slot
+                  const currentUserPilot = pilots.find(p => p.displayName === currentUserDisplayName);
+                  const currentUserPilotIndex = currentUserPilot ? pilots.findIndex(p => p.uid === currentUserPilot.uid) : -1;
+                  const isCurrentUserAvailableAtThisTime = currentUserPilot && isPilotAvailableForTimeSlot(currentUserPilot.uid, timeSlot);
+
                   // Debug logging
                   if (timeIndex === 0) { // Only log for first time slot to avoid spam
                     console.log("Cell for pilot:", {
@@ -448,17 +437,11 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                       currentUserDisplayName,
                       isCurrentUserPilot,
                       cellStatus,
+                      isCurrentUserAvailableAtThisTime,
                       hasNoPilotHandler: !!(cellStatus === "noPilot" && isCurrentUserPilot),
-                      hasAvailableHandler: !!(cellStatus === "available" && isCurrentUserPilot)
+                      hasAvailableHandler: !!(cellStatus === "available" && isCurrentUserAvailableAtThisTime)
                     });
                   }
-
-                  // Check if pilot can sign out (not assigned to any booking at this time)
-                  const isPilotAssignedAtThisTime = bookings.some(booking =>
-                    booking.timeIndex === timeIndex &&
-                    booking.assignedPilots.some(p => p && p !== "" && p === pilot.displayName)
-                  );
-                  const canSignOut = !isPilotAssignedAtThisTime;
 
                   return [(
                     <div
@@ -479,12 +462,12 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                         }
                         onNoPilotContextMenu={
                           cellStatus === "noPilot" && isCurrentUserPilot
-                            ? handleNoPilotContextMenu(pilotIndex, timeIndex)
+                            ? handleNoPilotContextMenu(currentUserPilotIndex, timeIndex)
                             : undefined
                         }
                         onAvailableContextMenu={
-                          cellStatus === "available" && isCurrentUserPilot
-                            ? handleNoPilotContextMenu(pilotIndex, timeIndex)
+                          cellStatus === "available" && isCurrentUserAvailableAtThisTime
+                            ? handleNoPilotContextMenu(currentUserPilotIndex, timeIndex)
                             : undefined
                         }
                       />

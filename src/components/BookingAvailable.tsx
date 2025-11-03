@@ -214,7 +214,7 @@ export function BookingAvailable({
 
   // Handle context menu for available cells
   const handleAvailableContextMenu = (e: React.MouseEvent) => {
-    if (status !== "available" || !onAvailableContextMenu || !isCurrentUserPilot) return;
+    if (status !== "available" || !onAvailableContextMenu) return;
 
     e.preventDefault();
     e.stopPropagation();
@@ -225,7 +225,7 @@ export function BookingAvailable({
 
   // Handle touch start for available cells (mobile long-press)
   const handleAvailableTouchStart = (e: React.TouchEvent) => {
-    if (status !== "available" || !onAvailableContextMenu || !isCurrentUserPilot) return;
+    if (status !== "available" || !onAvailableContextMenu) return;
 
     const touch = e.touches[0];
     touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };

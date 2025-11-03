@@ -129,8 +129,28 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
   };
 
   const handleToggleColumn = async (dayIndex: number) => {
-    // Use the time slots specific to that day
-    await toggleDay(days[dayIndex], dailyTimeSlots[dayIndex]);
+    const day = days[dayIndex];
+    const timeSlots = dailyTimeSlots[dayIndex];
+
+    // Check if all slots are available
+    const allAvailable = timeSlots.every((slot) => isAvailable(day, slot));
+
+    if (allAvailable) {
+      // When signing out, filter out locked slots (where user is assigned to bookings)
+      const unlockedSlots = timeSlots.filter((slot) => !isCellLocked(day, slot));
+
+      // If all slots are locked, don't do anything
+      if (unlockedSlots.length === 0) {
+        console.log("Cannot sign out - all slots are locked (assigned to bookings)");
+        return;
+      }
+
+      // Only toggle unlocked slots
+      await toggleDay(day, unlockedSlots);
+    } else {
+      // When signing in, toggle all slots (no restriction)
+      await toggleDay(day, timeSlots);
+    }
   };
 
   // Get distance between two touch points
