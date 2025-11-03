@@ -1,12 +1,15 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from "firebase/firestore";
 import { db } from "../firebase/config";
 import type { Booking } from "../types/index";
+import { useEditing } from "../contexts/EditingContext";
 
 export function useBookings() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { isEditing, incrementPendingUpdates } = useEditing();
+  const pendingUpdateRef = useRef<Booking[] | null>(null);
 
   useEffect(() => {
     // Subscribe to bookings collection
@@ -17,7 +20,17 @@ export function useBookings() {
           id: doc.id,
           ...doc.data(),
         })) as Booking[];
-        setBookings(bookingsData);
+
+        // If user is editing, queue the update instead of applying it
+        if (isEditing) {
+          console.log("Update queued - user is editing");
+          pendingUpdateRef.current = bookingsData;
+          incrementPendingUpdates();
+        } else {
+          setBookings(bookingsData);
+          pendingUpdateRef.current = null;
+        }
+
         setLoading(false);
       },
       (err) => {
@@ -31,7 +44,16 @@ export function useBookings() {
     return () => {
       unsubscribeBookings();
     };
-  }, []);
+  }, [isEditing, incrementPendingUpdates]);
+
+  // Apply pending updates when editing stops
+  useEffect(() => {
+    if (!isEditing && pendingUpdateRef.current) {
+      console.log("Applying queued updates");
+      setBookings(pendingUpdateRef.current);
+      pendingUpdateRef.current = null;
+    }
+  }, [isEditing]);
 
   // Add a new booking
   const addBooking = async (booking: Omit<Booking, "id">) => {

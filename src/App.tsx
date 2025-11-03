@@ -8,6 +8,7 @@ import { BookingSources } from "./components/BookingSources";
 import { useBookings } from "./hooks/useBookings";
 import { usePilots } from "./hooks/usePilots";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { EditingProvider } from "./contexts/EditingContext";
 import { Login } from "./components/Auth/Login";
 import { getTimeSlotsByDate } from "./utils/timeSlots";
 
@@ -20,7 +21,7 @@ function AppContent() {
   const { currentUser } = useAuth();
 
   // Fetch bookings from Firebase
-  const { bookings, addBooking, updateBooking, deleteBooking } = useBookings();
+  const { bookings, loading: bookingsLoading, addBooking, updateBooking, deleteBooking } = useBookings();
 
   // Filter bookings for the selected date
   const filteredBookings = useMemo(() => {
@@ -28,8 +29,11 @@ function AppContent() {
     return bookings.filter(booking => booking.date === selectedDateStr);
   }, [bookings, selectedDate]);
 
-  // Fetch available pilots for the selected date
-  const { pilots, loading: pilotsLoading, isPilotAvailableForTimeSlot } = usePilots(selectedDate);
+  // Fetch available pilots for the selected date, passing bookings for sorting
+  const { pilots, loading: pilotsLoading, isPilotAvailableForTimeSlot } = usePilots(selectedDate, filteredBookings);
+
+  // Wait for both pilots and bookings to load before showing the schedule
+  const isLoading = pilotsLoading || bookingsLoading;
 
   // Time slots for the schedule - dynamically determined based on the selected date
   const timeSlots = useMemo(() => getTimeSlotsByDate(selectedDate), [selectedDate]);
@@ -56,7 +60,7 @@ function AppContent() {
           timeSlots={timeSlots}
           bookings={filteredBookings}
           isPilotAvailableForTimeSlot={isPilotAvailableForTimeSlot}
-          loading={pilotsLoading}
+          loading={isLoading}
           currentUserDisplayName={currentUser?.displayName || undefined}
           onAddBooking={addBooking}
           onUpdateBooking={updateBooking}
@@ -77,7 +81,9 @@ function AppContent() {
 function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <EditingProvider>
+        <AppContent />
+      </EditingProvider>
     </AuthProvider>
   );
 }

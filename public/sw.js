@@ -1,16 +1,10 @@
-const CACHE_NAME = 'twin-scheduler-v2';
-const urlsToCache = [
-  '/',
-  '/index.html'
-];
+const CACHE_NAME = 'twin-scheduler-v3';
 
 self.addEventListener('install', (event) => {
   // Force the waiting service worker to become the active service worker
   self.skipWaiting();
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(urlsToCache))
-  );
+  // Don't pre-cache anything - let the fetch handler cache on demand
+  event.waitUntil(Promise.resolve());
 });
 
 self.addEventListener('fetch', (event) => {

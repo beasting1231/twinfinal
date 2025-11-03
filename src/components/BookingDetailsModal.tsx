@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Textarea } from "./ui/textarea";
 import type { Booking, Pilot, PilotPayment, ReceiptFile } from "../types/index";
 import { useAuth } from "../contexts/AuthContext";
+import { useEditing } from "../contexts/EditingContext";
 import { Camera, Upload, Eye, Trash2, Calendar, Clock, MapPin, Users, Phone, Mail, FileText, User, PhoneCall, Send } from "lucide-react";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../firebase/config";
@@ -38,8 +39,18 @@ export function BookingDetailsModal({
   onNavigateToDate,
 }: BookingDetailsModalProps) {
   const { currentUser } = useAuth();
+  const { startEditing, stopEditing } = useEditing();
   const [isEditing, setIsEditing] = useState(false);
   const [editedBooking, setEditedBooking] = useState<Booking | null>(null);
+
+  // Pause real-time updates when modal is open
+  useEffect(() => {
+    if (open) {
+      startEditing();
+    } else {
+      stopEditing();
+    }
+  }, [open, startEditing, stopEditing]);
   const [pilotPayments, setPilotPayments] = useState<PilotPayment[]>([]);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [editedDateAvailability, setEditedDateAvailability] = useState<Map<string, Set<string>>>(new Map());

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Dialog, DialogContent } from "./ui/dialog";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
@@ -7,6 +7,7 @@ import { Textarea } from "./ui/textarea";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { format } from "date-fns";
 import type { Pilot, Booking } from "../types/index";
+import { useEditing } from "../contexts/EditingContext";
 
 interface NewBookingModalProps {
   open: boolean;
@@ -58,6 +59,17 @@ export function NewBookingModal({
   const [commission, setCommission] = useState("");
   const [femalePilotsRequired, setFemalePilotsRequired] = useState(0);
   const [showAdditionalOptions, setShowAdditionalOptions] = useState(false);
+
+  const { startEditing, stopEditing } = useEditing();
+
+  // Pause real-time updates when modal is open
+  useEffect(() => {
+    if (open) {
+      startEditing();
+    } else {
+      stopEditing();
+    }
+  }, [open, startEditing, stopEditing]);
 
   // Get pilots already assigned at this time
   const assignedPilotsAtThisTime = useMemo(() => {

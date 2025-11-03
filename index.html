@@ -19,7 +19,34 @@
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js');
+          navigator.serviceWorker.register('/sw.js').then((registration) => {
+            // Check for updates every time the app is opened
+            registration.update();
+
+            // Listen for service worker updates
+            registration.addEventListener('updatefound', () => {
+              const newWorker = registration.installing;
+              newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'activated') {
+                  // New service worker activated, reload the page
+                  if (!navigator.serviceWorker.controller) {
+                    // First install, page will load fresh content
+                    return;
+                  }
+                  // Update detected, reload to get new version
+                  window.location.reload();
+                }
+              });
+            });
+          });
+
+          // Handle controller change (when new SW takes over)
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            // New service worker has taken control, reload if not first load
+            if (navigator.serviceWorker.controller) {
+              window.location.reload();
+            }
+          });
         });
       }
     </script>

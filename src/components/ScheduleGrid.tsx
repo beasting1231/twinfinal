@@ -373,6 +373,52 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
 
           {/* Time Slots and Booking Cells */}
           {timeSlots.map((timeSlot, timeIndex) => {
+            // Collect all cells for this time slot
+            const cellsForRow: Array<{
+              pilot: any;
+              pilotIndex: number;
+              status: "booked" | "available" | "noPilot";
+              booking?: any;
+              sortOrder: number; // 0=booked, 1=available, 2=noPilot
+            }> = [];
+
+            pilots.forEach((pilot, pilotIndex) => {
+              // Skip cells that are occupied by a spanning booking
+              if (isCellOccupied(pilotIndex, timeIndex)) {
+                return;
+              }
+
+              // Get all bookings at this position
+              const allBookings = getAllBookingsAt(pilotIndex, timeIndex);
+
+              if (allBookings.length > 0) {
+                // Add booked cells
+                allBookings.forEach(booking => {
+                  cellsForRow.push({
+                    pilot,
+                    pilotIndex,
+                    status: "booked",
+                    booking,
+                    sortOrder: 0
+                  });
+                });
+              } else {
+                // Check if available
+                const isPilotAvailableThisSlot = isPilotAvailableForTimeSlot(pilot.uid, timeSlot);
+                const cellStatus = isPilotAvailableThisSlot ? "available" : "noPilot";
+
+                cellsForRow.push({
+                  pilot,
+                  pilotIndex,
+                  status: cellStatus,
+                  sortOrder: cellStatus === "available" ? 1 : 2
+                });
+              }
+            });
+
+            // Sort cells: booked first, then available, then noPilot
+            cellsForRow.sort((a, b) => a.sortOrder - b.sortOrder);
+
             return [
               // Time Slot Label
               <div
@@ -382,103 +428,72 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                 {timeSlot}
               </div>,
 
-              // Booking Cells for each pilot
-              ...pilots.flatMap((pilot, pilotIndex) => {
-
-                  // Skip cells that are occupied by a spanning booking
-                  if (isCellOccupied(pilotIndex, timeIndex)) {
-                    return [];
-                  }
-
-                  // Get all bookings at this position
-                  const allBookings = getAllBookingsAt(pilotIndex, timeIndex);
-
-                  // If there are multiple bookings, render each as a separate cell
-                  if (allBookings.length > 0) {
-                    return allBookings.map((booking, idx) => {
-                      const span = booking.numberOfPeople || booking.span || 1;
-                      return (
-                        <div
-                          key={`cell-${timeIndex}-${pilot.uid}-${booking.id || idx}`}
-                          className="h-14"
-                          style={{ gridColumn: `span ${span}` }}
-                        >
-                          <BookingAvailable
-                            pilotId={pilot.displayName}
-                            timeSlot={timeSlot}
-                            status="booked"
-                            customerName={booking.customerName}
-                            pickupLocation={booking.pickupLocation}
-                            bookingSource={booking.bookingSource}
-                            assignedPilots={booking.assignedPilots}
-                            pilotPayments={booking.pilotPayments}
-                            bookingStatus={booking.bookingStatus}
-                            span={span}
-                            femalePilotsRequired={booking.femalePilotsRequired}
-                            bookingSourceColor={getSourceColor(booking.bookingSource)}
-                            onBookedClick={() => handleBookedCellClick(booking)}
-                            onContextMenu={handleBookingContextMenu(booking, timeSlot)}
-                          />
-                        </div>
-                      );
-                    });
-                  }
-
-                  // No booking - check if available
-                  const isPilotAvailableThisSlot = isPilotAvailableForTimeSlot(pilot.uid, timeSlot);
-                  const cellStatus = isPilotAvailableThisSlot ? "available" : "noPilot";
-
-                  // Check if this cell is for the current user
-                  const isCurrentUserPilot = currentUserDisplayName === pilot.displayName;
-
-                  // Find the current user's pilot to check their availability at this time slot
+              // Render sorted cells
+              ...cellsForRow.map((cell, cellIdx) => {
+                if (cell.status === "booked" && cell.booking) {
+                  const span = cell.booking.numberOfPeople || cell.booking.span || 1;
+                  return (
+                    <div
+                      key={`cell-${timeIndex}-${cell.pilot.uid}-${cell.booking.id || cellIdx}`}
+                      className="h-14"
+                      style={{ gridColumn: `span ${span}` }}
+                    >
+                      <BookingAvailable
+                        pilotId={cell.pilot.displayName}
+                        timeSlot={timeSlot}
+                        status="booked"
+                        customerName={cell.booking.customerName}
+                        pickupLocation={cell.booking.pickupLocation}
+                        bookingSource={cell.booking.bookingSource}
+                        assignedPilots={cell.booking.assignedPilots}
+                        pilotPayments={cell.booking.pilotPayments}
+                        bookingStatus={cell.booking.bookingStatus}
+                        span={span}
+                        femalePilotsRequired={cell.booking.femalePilotsRequired}
+                        bookingSourceColor={getSourceColor(cell.booking.bookingSource)}
+                        onBookedClick={() => handleBookedCellClick(cell.booking)}
+                        onContextMenu={handleBookingContextMenu(cell.booking, timeSlot)}
+                      />
+                    </div>
+                  );
+                } else {
+                  // Available or noPilot cell
+                  const isCurrentUserPilot = currentUserDisplayName === cell.pilot.displayName;
                   const currentUserPilot = pilots.find(p => p.displayName === currentUserDisplayName);
                   const currentUserPilotIndex = currentUserPilot ? pilots.findIndex(p => p.uid === currentUserPilot.uid) : -1;
                   const isCurrentUserAvailableAtThisTime = currentUserPilot && isPilotAvailableForTimeSlot(currentUserPilot.uid, timeSlot);
 
-                  // Debug logging
-                  if (timeIndex === 0) { // Only log for first time slot to avoid spam
-                    console.log("Cell for pilot:", {
-                      pilotName: pilot.displayName,
-                      currentUserDisplayName,
-                      isCurrentUserPilot,
-                      cellStatus,
-                      isCurrentUserAvailableAtThisTime,
-                      hasNoPilotHandler: !!(cellStatus === "noPilot" && isCurrentUserPilot),
-                      hasAvailableHandler: !!(cellStatus === "available" && isCurrentUserAvailableAtThisTime)
-                    });
-                  }
-
-                  return [(
+                  return (
                     <div
-                      key={`cell-${timeIndex}-${pilot.uid}`}
+                      key={`cell-${timeIndex}-${cell.pilot.uid}`}
                       className="h-14"
                       style={{ gridColumn: `span 1` }}
                     >
                       <BookingAvailable
-                        pilotId={pilot.displayName}
+                        pilotId={cell.pilot.displayName}
                         timeSlot={timeSlot}
-                        status={cellStatus}
+                        status={cell.status}
                         span={1}
                         isCurrentUserPilot={isCurrentUserPilot}
                         onAvailableClick={
-                          cellStatus === "available"
-                            ? () => handleAvailableCellClick(pilotIndex, timeIndex, timeSlot)
+                          cell.status === "available"
+                            ? () => handleAvailableCellClick(cell.pilotIndex, timeIndex, timeSlot)
                             : undefined
                         }
                         onNoPilotContextMenu={
-                          cellStatus === "noPilot" && isCurrentUserPilot
+                          cell.status === "noPilot" && isCurrentUserPilot
                             ? handleNoPilotContextMenu(currentUserPilotIndex, timeIndex)
                             : undefined
                         }
                         onAvailableContextMenu={
-                          cellStatus === "available" && isCurrentUserAvailableAtThisTime
+                          cell.status === "available" && isCurrentUserAvailableAtThisTime
                             ? handleNoPilotContextMenu(currentUserPilotIndex, timeIndex)
                             : undefined
                         }
                       />
                     </div>
-                  )];
+                  );
+                }
               })
             ];
           })}
