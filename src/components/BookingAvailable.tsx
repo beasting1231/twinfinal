@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, memo } from "react";
 import type { PilotPayment } from "../types/index";
 
 interface BookingAvailableProps {
@@ -22,7 +22,7 @@ interface BookingAvailableProps {
   isCurrentUserPilot?: boolean; // Whether this cell is for the current user
 }
 
-export function BookingAvailable({
+export const BookingAvailable = memo(function BookingAvailable({
   pilotId,
   status = "available",
   customerName,
@@ -291,4 +291,4 @@ export function BookingAvailable({
       {/* Empty booking cell - available for booking */}
     </div>
   );
-}
+});

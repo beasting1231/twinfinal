@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { collection, query, where, getDocs, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { format } from "date-fns";
@@ -10,10 +10,11 @@ export interface PilotAvailability {
 }
 
 export function usePilots(selectedDate: Date, bookings: any[] = []) {
-  const [pilots, setPilots] = useState<Pilot[]>([]);
+  const [rawPilots, setRawPilots] = useState<Pilot[]>([]);
   const [pilotAvailability, setPilotAvailability] = useState<Map<string, Set<string>>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const prevPilotsRef = useRef<Pilot[]>([]);
 
   useEffect(() => {
     setLoading(true);
@@ -48,7 +49,7 @@ export function usePilots(selectedDate: Date, bookings: any[] = []) {
 
           // If no pilots are available, return empty array
           if (pilotIds.size === 0) {
-            setPilots([]);
+            setRawPilots([]);
             setPilotAvailability(new Map());
             setLoading(false);
             return;
@@ -81,49 +82,53 @@ export function usePilots(selectedDate: Date, bookings: any[] = []) {
 
           const pilotsData = await Promise.all(pilotPromises);
 
-          // Count how many bookings each pilot has for this date
-          const bookingCounts = new Map<string, number>();
-          pilotsData.forEach(pilot => {
-            const count = bookings.filter(booking =>
-              booking.assignedPilots?.includes(pilot.displayName)
-            ).length;
-            bookingCounts.set(pilot.displayName, count);
-          });
-
-          // Sort pilots by:
-          // 1. Number of bookings (descending - most bookings first)
-          // 2. Availability count (descending - most available first)
-          // 3. Alphabetically
-          pilotsData.sort((a, b) => {
-            const aBookings = bookingCounts.get(a.displayName) || 0;
-            const bBookings = bookingCounts.get(b.displayName) || 0;
-            const aAvailability = availabilityMap.get(a.uid)?.size || 0;
-            const bAvailability = availabilityMap.get(b.uid)?.size || 0;
-
-            console.log(`Comparing ${a.displayName} (${aBookings} bookings, ${aAvailability} avail) vs ${b.displayName} (${bBookings} bookings, ${bAvailability} avail)`);
-
-            // First, sort by booking count (most bookings first on left)
-            if (bBookings !== aBookings) {
-              console.log(`  → Sorted by bookings: ${bBookings > aBookings ? b.displayName : a.displayName} comes first`);
-              return bBookings - aBookings;
+          // Differential update: only update if pilots actually changed
+          setRawPilots(prevPilots => {
+            // If this is the first load, just set all pilots
+            if (prevPilots.length === 0) {
+              console.log("First pilot load - setting all pilots");
+              return pilotsData;
             }
 
-            // Second, sort by availability count (most available first)
-            if (bAvailability !== aAvailability) {
-              console.log(`  → Sorted by availability: ${bAvailability > aAvailability ? b.displayName : a.displayName} comes first`);
-              return bAvailability - aAvailability;
+            // Create a map of previous pilots by UID for quick lookup
+            const prevPilotsMap = new Map(prevPilots.map(p => [p.uid, p]));
+
+            // Check if anything actually changed
+            let hasChanges = false;
+
+            // Check for added or modified pilots
+            for (const newPilot of pilotsData) {
+              const prevPilot = prevPilotsMap.get(newPilot.uid);
+              if (!prevPilot || JSON.stringify(prevPilot) !== JSON.stringify(newPilot)) {
+                hasChanges = true;
+                break;
+              }
             }
 
-            // Finally, sort alphabetically
-            console.log(`  → Same bookings and availability, sorting alphabetically`);
-            return a.displayName.localeCompare(b.displayName);
+            // Check for deleted pilots
+            if (!hasChanges && prevPilots.length !== pilotsData.length) {
+              hasChanges = true;
+            }
+
+            // If nothing changed, return the same reference to prevent re-renders
+            if (!hasChanges) {
+              console.log("No pilot data changes detected - skipping update");
+              return prevPilots;
+            }
+
+            console.log("Pilot data changes detected - updating");
+
+            // Build new array, reusing unchanged pilot objects
+            return pilotsData.map(newPilot => {
+              const prevPilot = prevPilotsMap.get(newPilot.uid);
+              // If pilot exists and hasn't changed, reuse the old reference
+              if (prevPilot && JSON.stringify(prevPilot) === JSON.stringify(newPilot)) {
+                return prevPilot;
+              }
+              return newPilot;
+            });
           });
 
-          console.log("Final sorted pilots:", pilotsData.map(p =>
-            `${p.displayName} (${bookingCounts.get(p.displayName) || 0} bookings, ${availabilityMap.get(p.uid)?.size || 0} avail)`
-          ));
-
-          setPilots(pilotsData);
           setPilotAvailability(availabilityMap);
           setLoading(false);
         } catch (err: any) {
@@ -141,7 +146,69 @@ export function usePilots(selectedDate: Date, bookings: any[] = []) {
 
     // Cleanup subscription on unmount or date change
     return () => unsubscribe();
-  }, [selectedDate, bookings]);
+  }, [selectedDate]);
+
+  // Memoized sorted pilots - recalculates only when rawPilots or bookings change
+  const pilots = useMemo(() => {
+    console.log("Recalculating pilot sort order");
+
+    // Count how many bookings each pilot has for this date
+    const bookingCounts = new Map<string, number>();
+    rawPilots.forEach(pilot => {
+      const count = bookings.filter(booking =>
+        booking.assignedPilots?.includes(pilot.displayName)
+      ).length;
+      bookingCounts.set(pilot.displayName, count);
+    });
+
+    // Create a copy for sorting (don't mutate rawPilots)
+    const sortedPilots = [...rawPilots];
+
+    // Sort pilots by:
+    // 1. Number of bookings (descending - most bookings first)
+    // 2. Availability count (descending - most available first)
+    // 3. Alphabetically
+    sortedPilots.sort((a, b) => {
+      const aBookings = bookingCounts.get(a.displayName) || 0;
+      const bBookings = bookingCounts.get(b.displayName) || 0;
+      const aAvailability = pilotAvailability.get(a.uid)?.size || 0;
+      const bAvailability = pilotAvailability.get(b.uid)?.size || 0;
+
+      // First, sort by booking count (most bookings first on left)
+      if (bBookings !== aBookings) {
+        return bBookings - aBookings;
+      }
+
+      // Second, sort by availability count (most available first)
+      if (bAvailability !== aAvailability) {
+        return bAvailability - aAvailability;
+      }
+
+      // Finally, sort alphabetically
+      return a.displayName.localeCompare(b.displayName);
+    });
+
+    // Differential update: reuse previous array if order hasn't changed
+    const prevPilots = prevPilotsRef.current;
+    if (prevPilots.length === sortedPilots.length) {
+      let orderChanged = false;
+      for (let i = 0; i < sortedPilots.length; i++) {
+        if (sortedPilots[i].uid !== prevPilots[i]?.uid) {
+          orderChanged = true;
+          break;
+        }
+      }
+
+      if (!orderChanged) {
+        console.log("Pilot sort order unchanged - reusing previous array");
+        return prevPilots;
+      }
+    }
+
+    console.log("Pilot sort order changed - returning new array");
+    prevPilotsRef.current = sortedPilots;
+    return sortedPilots;
+  }, [rawPilots, bookings, pilotAvailability]);
 
   const isPilotAvailableForTimeSlot = (pilotUid: string, timeSlot: string): boolean => {
     const slots = pilotAvailability.get(pilotUid);

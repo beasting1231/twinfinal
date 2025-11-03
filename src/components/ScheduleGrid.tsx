@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { BookingAvailable } from "./BookingAvailable";
 import { NewBookingModal } from "./NewBookingModal";
 import { BookingDetailsModal } from "./BookingDetailsModal";
@@ -56,21 +56,21 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
   const initialScaleRef = useRef<number>(1);
   const rafRef = useRef<number | null>(null);
 
-  const handleAvailableCellClick = (pilotIndex: number, timeIndex: number, timeSlot: string) => {
+  const handleAvailableCellClick = useCallback((pilotIndex: number, timeIndex: number, timeSlot: string) => {
     setSelectedCell({ pilotIndex, timeIndex, timeSlot });
     setIsModalOpen(true);
-  };
+  }, []);
 
-  const handleBookedCellClick = (booking: Booking) => {
+  const handleBookedCellClick = useCallback((booking: Booking) => {
     setSelectedBooking(booking);
     setIsDetailsModalOpen(true);
-  };
+  }, []);
 
-  const handleBookingSubmit = (booking: Omit<Booking, "id">) => {
+  const handleBookingSubmit = useCallback((booking: Omit<Booking, "id">) => {
     if (onAddBooking) {
       onAddBooking(booking);
     }
-  };
+  }, [onAddBooking]);
 
   // Handle context menu on booking cell
   const handleBookingContextMenu = (booking: Booking, timeSlot: string) => (
@@ -324,25 +324,6 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
     );
   }
 
-  // Get all bookings at a specific position (for rendering multiple bookings)
-  const getAllBookingsAt = (pilotIndex: number, timeIndex: number) => {
-    return bookings.filter(
-      booking => booking.pilotIndex === pilotIndex && booking.timeIndex === timeIndex
-    );
-  };
-
-  // Helper function to check if a cell is occupied by a spanning booking
-  const isCellOccupied = (pilotIndex: number, timeIndex: number) => {
-    return bookings.some(booking => {
-      const bookingStart = booking.pilotIndex;
-      // Use numberOfPeople to determine span for proper cell occupation
-      const bookingSpan = booking.numberOfPeople || booking.span || 1;
-      const bookingEnd = booking.pilotIndex + bookingSpan - 1;
-      return booking.timeIndex === timeIndex && pilotIndex > bookingStart && pilotIndex <= bookingEnd;
-    });
-  };
-
-
   return (
     <div
       ref={containerRef}
@@ -356,11 +337,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
         style={{ transform: `scale(${scale})` }}
       >
         <div className="grid gap-2" style={{ gridTemplateColumns: `80px repeat(${pilots.length}, 220px)` }}>
-          {/* Header Row */}
-          {/* Empty cell for top-left corner */}
+          {/* Header Row - Shows pilots present today */}
           <div className="h-7" />
-
-          {/* Pilot Headers */}
           {pilots.map((p, index) => (
             <div
               key={p.uid}
@@ -373,48 +351,70 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
 
           {/* Time Slots and Booking Cells */}
           {timeSlots.map((timeSlot, timeIndex) => {
+            // Get all bookings for this time slot
+            const bookingsAtThisTime = bookings.filter(b => b.timeIndex === timeIndex);
+
+            // Calculate how many pilot slots are occupied by bookings
+            const slotsOccupiedByBookings = bookingsAtThisTime.reduce((total, booking) => {
+              return total + (booking.numberOfPeople || booking.span || 1);
+            }, 0);
+
             // Collect all cells for this time slot
             const cellsForRow: Array<{
-              pilot: any;
-              pilotIndex: number;
+              pilot?: any;
+              pilotIndex?: number;
               status: "booked" | "available" | "noPilot";
               booking?: any;
               sortOrder: number; // 0=booked, 1=available, 2=noPilot
             }> = [];
 
+            // Add booking cells first (they go on the left)
+            bookingsAtThisTime.forEach(booking => {
+              cellsForRow.push({
+                status: "booked",
+                booking,
+                sortOrder: 0
+              });
+            });
+
+            // Add ALL unavailable pilots first (they MUST be shown)
+            const unavailablePilots: Array<{pilot: any, pilotIndex: number}> = [];
+            const availablePilots: Array<{pilot: any, pilotIndex: number}> = [];
+
             pilots.forEach((pilot, pilotIndex) => {
-              // Skip cells that are occupied by a spanning booking
-              if (isCellOccupied(pilotIndex, timeIndex)) {
-                return;
-              }
-
-              // Get all bookings at this position
-              const allBookings = getAllBookingsAt(pilotIndex, timeIndex);
-
-              if (allBookings.length > 0) {
-                // Add booked cells
-                allBookings.forEach(booking => {
-                  cellsForRow.push({
-                    pilot,
-                    pilotIndex,
-                    status: "booked",
-                    booking,
-                    sortOrder: 0
-                  });
-                });
+              const isPilotAvailableThisSlot = isPilotAvailableForTimeSlot(pilot.uid, timeSlot);
+              if (isPilotAvailableThisSlot) {
+                availablePilots.push({pilot, pilotIndex});
               } else {
-                // Check if available
-                const isPilotAvailableThisSlot = isPilotAvailableForTimeSlot(pilot.uid, timeSlot);
-                const cellStatus = isPilotAvailableThisSlot ? "available" : "noPilot";
-
-                cellsForRow.push({
-                  pilot,
-                  pilotIndex,
-                  status: cellStatus,
-                  sortOrder: cellStatus === "available" ? 1 : 2
-                });
+                unavailablePilots.push({pilot, pilotIndex});
               }
             });
+
+            // Add all unavailable pilot cells
+            unavailablePilots.forEach(({pilot, pilotIndex}) => {
+              cellsForRow.push({
+                pilot,
+                pilotIndex,
+                status: "noPilot",
+                sortOrder: 2
+              });
+            });
+
+            // Calculate how many available pilot cells we can show
+            const totalCellsNeeded = pilots.length; // Total capacity
+            const cellsUsed = slotsOccupiedByBookings + unavailablePilots.length;
+            const availableSlotsToShow = totalCellsNeeded - cellsUsed;
+
+            // Add available pilot cells (only up to the available slots)
+            for (let i = 0; i < Math.min(availableSlotsToShow, availablePilots.length); i++) {
+              const {pilot, pilotIndex} = availablePilots[i];
+              cellsForRow.push({
+                pilot,
+                pilotIndex,
+                status: "available",
+                sortOrder: 1
+              });
+            }
 
             // Sort cells: booked first, then available, then noPilot
             cellsForRow.sort((a, b) => a.sortOrder - b.sortOrder);
@@ -434,12 +434,12 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                   const span = cell.booking.numberOfPeople || cell.booking.span || 1;
                   return (
                     <div
-                      key={`cell-${timeIndex}-${cell.pilot.uid}-${cell.booking.id || cellIdx}`}
+                      key={`booking-${timeIndex}-${cell.booking.id || cellIdx}`}
                       className="h-14"
                       style={{ gridColumn: `span ${span}` }}
                     >
                       <BookingAvailable
-                        pilotId={cell.pilot.displayName}
+                        pilotId="" // Not tied to a specific pilot column anymore
                         timeSlot={timeSlot}
                         status="booked"
                         customerName={cell.booking.customerName}
@@ -456,7 +456,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                       />
                     </div>
                   );
-                } else {
+                } else if (cell.pilot) {
                   // Available or noPilot cell
                   const isCurrentUserPilot = currentUserDisplayName === cell.pilot.displayName;
                   const currentUserPilot = pilots.find(p => p.displayName === currentUserDisplayName);
@@ -465,7 +465,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
 
                   return (
                     <div
-                      key={`cell-${timeIndex}-${cell.pilot.uid}`}
+                      key={`pilot-${timeIndex}-${cell.pilot.uid}`}
                       className="h-14"
                       style={{ gridColumn: `span 1` }}
                     >
@@ -477,7 +477,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                         isCurrentUserPilot={isCurrentUserPilot}
                         onAvailableClick={
                           cell.status === "available"
-                            ? () => handleAvailableCellClick(cell.pilotIndex, timeIndex, timeSlot)
+                            ? () => handleAvailableCellClick(cell.pilotIndex!, timeIndex, timeSlot)
                             : undefined
                         }
                         onNoPilotContextMenu={
@@ -494,6 +494,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                     </div>
                   );
                 }
+                return null;
               })
             ];
           })}

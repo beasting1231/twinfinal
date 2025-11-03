@@ -27,7 +27,51 @@ export function useBookings() {
           pendingUpdateRef.current = bookingsData;
           incrementPendingUpdates();
         } else {
-          setBookings(bookingsData);
+          // Differential update: only update bookings that actually changed
+          setBookings(prevBookings => {
+            // If this is the first load, just set all bookings
+            if (prevBookings.length === 0) {
+              return bookingsData;
+            }
+
+            // Create a map of previous bookings by ID for quick lookup
+            const prevBookingsMap = new Map(prevBookings.map(b => [b.id, b]));
+
+            // Check if anything actually changed
+            let hasChanges = false;
+
+            // Check for added or modified bookings
+            for (const newBooking of bookingsData) {
+              const prevBooking = prevBookingsMap.get(newBooking.id!);
+              if (!prevBooking || JSON.stringify(prevBooking) !== JSON.stringify(newBooking)) {
+                hasChanges = true;
+                break;
+              }
+            }
+
+            // Check for deleted bookings
+            if (!hasChanges && prevBookings.length !== bookingsData.length) {
+              hasChanges = true;
+            }
+
+            // If nothing changed, return the same reference to prevent re-renders
+            if (!hasChanges) {
+              console.log("No booking changes detected - skipping update");
+              return prevBookings;
+            }
+
+            console.log("Booking changes detected - updating");
+
+            // Build new array, reusing unchanged booking objects
+            return bookingsData.map(newBooking => {
+              const prevBooking = prevBookingsMap.get(newBooking.id!);
+              // If booking exists and hasn't changed, reuse the old reference
+              if (prevBooking && JSON.stringify(prevBooking) === JSON.stringify(newBooking)) {
+                return prevBooking;
+              }
+              return newBooking;
+            });
+          });
           pendingUpdateRef.current = null;
         }
 
