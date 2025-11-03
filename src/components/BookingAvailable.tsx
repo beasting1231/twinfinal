@@ -12,6 +12,7 @@ interface BookingAvailableProps {
   bookingStatus?: "unconfirmed" | "confirmed" | "pending" | "cancelled";
   span?: number;
   femalePilotsRequired?: number;
+  bookingSourceColor?: string;
   onAvailableClick?: () => void;
   onBookedClick?: () => void;
   onContextMenu?: (slotIndex: number, position: { x: number; y: number }) => void;
@@ -30,6 +31,7 @@ export function BookingAvailable({
   bookingStatus = "confirmed",
   span = 1,
   femalePilotsRequired = 0,
+  bookingSourceColor = "#1e3a8a",
   onAvailableClick,
   onBookedClick,
   onContextMenu,
@@ -57,7 +59,7 @@ export function BookingAvailable({
 
   // Handle right-click (desktop)
   const handleContextMenu = (e: React.MouseEvent) => {
-    if (status !== "booked" || !onContextMenu) return;
+    if (status !== "booked" || !onContextMenu || bookingStatus === "cancelled") return;
 
     e.preventDefault();
     e.stopPropagation();
@@ -68,7 +70,7 @@ export function BookingAvailable({
 
   // Handle touch start (mobile long-press)
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (status !== "booked" || !onContextMenu) return;
+    if (status !== "booked" || !onContextMenu || bookingStatus === "cancelled") return;
 
     const touch = e.touches[0];
     touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
@@ -116,10 +118,34 @@ export function BookingAvailable({
       cancelled: "bg-red-500"
     };
 
+    // Helper function to convert hex to rgba
+    const hexToRgba = (hex: string, alpha: number) => {
+      const r = parseInt(hex.slice(1, 3), 16);
+      const g = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    };
+
+    const backgroundColor = hexToRgba(bookingSourceColor, 0.4);
+    const borderColor = hexToRgba(bookingSourceColor, 0.5);
+    const hoverColor = hexToRgba(bookingSourceColor, 0.5);
+
     return (
       <div
         ref={containerRef}
-        className="w-full h-full bg-blue-900/40 border border-blue-700/50 rounded-lg pt-2 px-2 flex flex-col justify-between cursor-pointer hover:bg-blue-900/50 transition-colors overflow-hidden relative"
+        className="w-full h-full rounded-lg pt-2 px-2 flex flex-col justify-between cursor-pointer transition-colors overflow-hidden relative"
+        style={{
+          backgroundColor,
+          borderWidth: '1px',
+          borderStyle: 'solid',
+          borderColor
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = hoverColor;
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = backgroundColor;
+        }}
         onClick={onBookedClick}
         onContextMenu={handleContextMenu}
         onTouchStart={handleTouchStart}
@@ -154,7 +180,7 @@ export function BookingAvailable({
               if (requiresFemalePilot) {
                 return (
                   <div key={index} className="flex justify-center">
-                    <div className="text-xs text-white bg-red-600/80 rounded-t-lg px-2 py-0.5 w-[80%] text-center">
+                    <div className="text-xs text-white bg-red-600/90 rounded-t-lg px-2 py-0.5 w-[80%] text-center">
                       lady pilot
                     </div>
                   </div>
@@ -166,15 +192,12 @@ export function BookingAvailable({
             return (
               <div key={index} className="flex justify-center">
                 <div className={requiresFemalePilot
-                  ? "text-xs text-white bg-red-600/80 rounded-t-lg px-2 py-0.5 w-[80%] relative"
-                  : "text-xs text-zinc-300 bg-zinc-700/50 rounded-t-lg px-2 py-0.5 w-[80%] relative"
+                  ? "text-xs text-white bg-red-600/90 rounded-t-lg px-2 py-0.5 w-[80%] relative"
+                  : "text-xs text-white bg-zinc-800/90 rounded-t-lg px-2 py-0.5 w-[80%] relative"
                 }>
                   <div className="text-center truncate">{pilot}</div>
                   {numAmount !== undefined && numAmount !== 0 && !isNaN(numAmount) && (
-                    <span className={requiresFemalePilot
-                      ? "absolute right-2 top-0.5 font-medium text-white"
-                      : "absolute right-2 top-0.5 font-medium text-zinc-400"
-                    }>{numAmount}</span>
+                    <span className="absolute right-2 top-0.5 font-medium text-white">{numAmount}</span>
                   )}
                 </div>
               </div>

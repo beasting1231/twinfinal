@@ -55,7 +55,7 @@ VITE_FIREBASE_APP_ID=your_app_id
 
 ## Step 5: Firestore Collections Structure
 
-The app uses two collections:
+The app uses four collections:
 
 ### `bookings` collection
 Each document should have:
@@ -74,6 +74,24 @@ Each document represents a time slot when a user is available:
 - `timeSlot` (string): Time slot (e.g., "09:00", "14:30")
 
 **Note:** Documents are only created when a user marks themselves as available (green). When unavailable (red), the document is deleted.
+
+### `bookingSources` collection
+Each document represents a booking source and its display color:
+- Document ID: The booking source name (e.g., "Website", "Phone Call", "Walk-in")
+- `color` (string): Hex color code for displaying the source (e.g., "#1e3a8a")
+
+**Note:** This collection is automatically populated when users edit booking source colors in the "Booking Sources" screen. The app aggregates booking counts in real-time from the `bookings` collection.
+
+### `userProfiles` collection
+Each document represents a user's profile information:
+- `uid` (string): User ID matching Firebase Authentication
+- `displayName` (string): User's display name
+- `email` (string): User's email address
+- `femalePilot` (boolean): Whether the user is a female pilot
+- `createdAt` (timestamp): When the profile was created
+- `updatedAt` (timestamp): When the profile was last updated
+
+**Note:** User profiles are created automatically when users sign up. This collection is used to display pilot information in the schedule grid.
 
 ## Step 6: Update Firestore Security Rules (IMPORTANT)
 
@@ -96,6 +114,17 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
       allow update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
+    match /bookingSources/{sourceId} {
+      // All authenticated users can read and write booking sources
+      allow read, write: if request.auth != null;
+    }
+    match /userProfiles/{profileId} {
+      // All authenticated users can read user profiles
+      allow read: if request.auth != null;
+      // Users can only create or update their own profile
+      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow update: if request.auth != null && resource.data.uid == request.auth.uid;
     }
   }
 }

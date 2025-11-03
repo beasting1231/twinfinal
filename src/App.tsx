@@ -4,13 +4,14 @@ import { Header } from "./components/Header";
 import { ScheduleGrid } from "./components/ScheduleGrid";
 import { AvailabilityGrid } from "./components/AvailabilityGrid";
 import { Account } from "./components/Account/Account";
+import { BookingSources } from "./components/BookingSources";
 import { useBookings } from "./hooks/useBookings";
 import { usePilots } from "./hooks/usePilots";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { Login } from "./components/Auth/Login";
 import { getTimeSlotsByDate } from "./utils/timeSlots";
 
-type View = "daily-plan" | "availability" | "account";
+type View = "daily-plan" | "availability" | "account" | "booking-sources";
 
 function AppContent() {
   const [currentView, setCurrentView] = useState<View>("daily-plan");
@@ -66,6 +67,8 @@ function AppContent() {
         <AvailabilityGrid weekStartDate={weekStartDate} />
       ) : currentView === "account" ? (
         <Account />
+      ) : currentView === "booking-sources" ? (
+        <BookingSources />
       ) : null}
     </div>
   );

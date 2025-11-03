@@ -12,7 +12,7 @@ import { DatePicker } from "./DatePicker";
 import { WeekPicker } from "./WeekPicker";
 import { useAuth } from "../contexts/AuthContext";
 
-type View = "daily-plan" | "availability" | "account";
+type View = "daily-plan" | "availability" | "account" | "booking-sources";
 
 interface HeaderProps {
   date?: Date;
@@ -78,6 +78,14 @@ export function Header({
                 }`}
               >
                 Availability
+              </button>
+              <button
+                onClick={() => handleViewChange("booking-sources")}
+                className={`w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white ${
+                  currentView === "booking-sources" ? "bg-zinc-800" : ""
+                }`}
+              >
+                Booking Sources
               </button>
               <button
                 onClick={() => handleViewChange("account")}

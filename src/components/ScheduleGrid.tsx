@@ -4,6 +4,7 @@ import { NewBookingModal } from "./NewBookingModal";
 import { BookingDetailsModal } from "./BookingDetailsModal";
 import { PilotContextMenu } from "./PilotContextMenu";
 import { AvailabilityContextMenu } from "./AvailabilityContextMenu";
+import { useBookingSourceColors } from "../hooks/useBookingSourceColors";
 import type { Booking, Pilot } from "../types/index";
 
 interface ScheduleGridProps {
@@ -25,6 +26,9 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
   const [selectedCell, setSelectedCell] = useState<{ pilotIndex: number; timeIndex: number; timeSlot: string } | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+
+  // Fetch booking source colors
+  const { getSourceColor } = useBookingSourceColors();
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
@@ -410,6 +414,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                             bookingStatus={booking.bookingStatus}
                             span={span}
                             femalePilotsRequired={booking.femalePilotsRequired}
+                            bookingSourceColor={getSourceColor(booking.bookingSource)}
                             onBookedClick={() => handleBookedCellClick(booking)}
                             onContextMenu={handleBookingContextMenu(booking, timeSlot)}
                           />
