@@ -1,73 +1,133 @@
-import { useState } from "react";
-import { Button } from "./ui/button";
+import { useState, useMemo } from "react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import { useBookingRequests } from "../hooks/useBookingRequests";
+import { BookingRequestItem } from "./BookingRequestItem";
+import { FormsContextMenu } from "./FormsContextMenu";
+import type { BookingRequest } from "../types/index";
 
 export function Forms() {
-  const [copied, setCopied] = useState(false);
+  const { bookingRequests, loading, updateBookingRequest, deleteBookingRequest } = useBookingRequests();
+  const [contextMenu, setContextMenu] = useState<{
+    isOpen: boolean;
+    position: { x: number; y: number };
+    request: BookingRequest;
+  } | null>(null);
 
-  // The form URL - this will point to the public booking request form
-  const formUrl = `${window.location.origin}/booking-request`;
+  // Filter booking requests by status
+  const pendingRequests = useMemo(() => {
+    return bookingRequests.filter(req => req.status === "pending");
+  }, [bookingRequests]);
 
-  // Embed code for iframe
-  const embedCode = `<iframe src="${formUrl}" width="100%" height="800" frameborder="0"></iframe>`;
+  const waitlistRequests = useMemo(() => {
+    return bookingRequests.filter(req => req.status === "waitlist");
+  }, [bookingRequests]);
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(embedCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleContextMenu = (request: BookingRequest, position: { x: number; y: number }) => {
+    setContextMenu({
+      isOpen: true,
+      position,
+      request,
+    });
   };
 
-  const handleOpenInNewTab = () => {
-    window.open(formUrl, "_blank");
+  const handleAddToWaitlist = async () => {
+    if (!contextMenu) return;
+    await updateBookingRequest(contextMenu.request.id!, { status: "waitlist" });
+    setContextMenu(null);
+  };
+
+  const handleRemoveFromWaitlist = async () => {
+    if (!contextMenu) return;
+    await updateBookingRequest(contextMenu.request.id!, { status: "pending" });
+    setContextMenu(null);
+  };
+
+  const handleDelete = async () => {
+    if (!contextMenu) return;
+    await deleteBookingRequest(contextMenu.request.id!);
+    setContextMenu(null);
+  };
+
+  const handleDateClick = (date: string) => {
+    // This will be used to jump to a specific date in the daily plan
+    console.log("Navigate to date:", date);
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
-      <div className="bg-zinc-900 rounded-lg border border-zinc-800 p-8">
-        <h1 className="text-3xl font-bold text-white mb-8">Booking Request Form</h1>
+    <div className="flex-1 flex flex-col bg-zinc-950 p-6 overflow-hidden">
+      <h1 className="text-2xl font-bold text-white mb-6">Forms & Requests</h1>
 
-        <div className="space-y-6">
-          {/* Form Link Section */}
-          <div className="space-y-3">
-            <h2 className="text-xl font-semibold text-white">Form Link</h2>
-            <p className="text-sm text-zinc-400">
-              Share this link with customers to submit booking requests.
-            </p>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={formUrl}
-                readOnly
-                className="flex-1 px-4 py-2 bg-zinc-950 border border-zinc-800 rounded text-zinc-300 text-sm"
-              />
-              <Button
-                onClick={handleOpenInNewTab}
-                className="bg-white text-black hover:bg-zinc-200"
-              >
-                Open Form
-              </Button>
-            </div>
-          </div>
+      {/* Container card with tabs */}
+      <div className="flex-1 bg-zinc-900 rounded-lg border border-zinc-800 overflow-hidden flex flex-col">
+        <Tabs defaultValue="requests" className="flex-1 flex flex-col">
+          <TabsList className="grid w-full grid-cols-2 bg-zinc-800 border-b border-zinc-700 rounded-none">
+            <TabsTrigger value="requests" className="data-[state=active]:bg-zinc-900">
+              Booking Requests ({pendingRequests.length})
+            </TabsTrigger>
+            <TabsTrigger value="waitlist" className="data-[state=active]:bg-zinc-900">
+              Waiting List ({waitlistRequests.length})
+            </TabsTrigger>
+          </TabsList>
 
-          {/* Embed Code Section */}
-          <div className="space-y-3">
-            <h2 className="text-xl font-semibold text-white">Embed Code</h2>
-            <p className="text-sm text-zinc-400">
-              Copy this code to embed the booking form on your website.
-            </p>
-            <div className="relative">
-              <pre className="p-4 bg-zinc-950 border border-zinc-800 rounded text-zinc-300 text-sm overflow-x-auto">
-                <code>{embedCode}</code>
-              </pre>
-              <Button
-                onClick={handleCopy}
-                className="absolute top-2 right-2 bg-white text-black hover:bg-zinc-200"
-              >
-                {copied ? "Copied!" : "Copy Code"}
-              </Button>
-            </div>
-          </div>
-        </div>
+          <TabsContent value="requests" className="flex-1 overflow-auto p-6 mt-0">
+            {loading ? (
+              <div className="flex items-center justify-center h-32">
+                <div className="w-8 h-8 border-4 border-zinc-700 border-t-white rounded-full animate-spin"></div>
+              </div>
+            ) : pendingRequests.length === 0 ? (
+              <div className="flex items-center justify-center h-32">
+                <p className="text-zinc-500">No booking requests</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {pendingRequests.map((request) => (
+                  <BookingRequestItem
+                    key={request.id}
+                    request={request}
+                    onContextMenu={handleContextMenu}
+                    onDateClick={handleDateClick}
+                  />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="waitlist" className="flex-1 overflow-auto p-6 mt-0">
+            {loading ? (
+              <div className="flex items-center justify-center h-32">
+                <div className="w-8 h-8 border-4 border-zinc-700 border-t-white rounded-full animate-spin"></div>
+              </div>
+            ) : waitlistRequests.length === 0 ? (
+              <div className="flex items-center justify-center h-32">
+                <p className="text-zinc-500">No items in waiting list</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {waitlistRequests.map((request) => (
+                  <BookingRequestItem
+                    key={request.id}
+                    request={request}
+                    onContextMenu={handleContextMenu}
+                    onDateClick={handleDateClick}
+                  />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <FormsContextMenu
+          isOpen={contextMenu.isOpen}
+          position={contextMenu.position}
+          onAddToWaitlist={contextMenu.request.status === "pending" ? handleAddToWaitlist : undefined}
+          onRemoveFromWaitlist={contextMenu.request.status === "waitlist" ? handleRemoveFromWaitlist : undefined}
+          onDelete={handleDelete}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </div>
   );
 }

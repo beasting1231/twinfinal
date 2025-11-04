@@ -1,25 +1,23 @@
 import { useEffect, useRef, useState } from "react";
 import { ListPlus, ListMinus, Trash2 } from "lucide-react";
-import type { BookingRequest } from "../types/index";
 
-interface BookingRequestContextMenuProps {
+interface FormsContextMenuProps {
   isOpen: boolean;
   position: { x: number; y: number };
-  request: BookingRequest;
   onAddToWaitlist?: () => void;
   onRemoveFromWaitlist?: () => void;
   onDelete: () => void;
   onClose: () => void;
 }
 
-export function BookingRequestContextMenu({
+export function FormsContextMenu({
   isOpen,
   position,
   onAddToWaitlist,
   onRemoveFromWaitlist,
   onDelete,
   onClose,
-}: BookingRequestContextMenuProps) {
+}: FormsContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [isPositioned, setIsPositioned] = useState(false);
 

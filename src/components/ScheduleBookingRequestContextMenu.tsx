@@ -1,25 +1,27 @@
 import { useEffect, useRef, useState } from "react";
-import { ListPlus, ListMinus, Trash2 } from "lucide-react";
-import type { BookingRequest } from "../types/index";
+import { Calendar, CalendarClock, ListPlus, ListMinus, Trash2 } from "lucide-react";
 
-interface BookingRequestContextMenuProps {
+interface ScheduleBookingRequestContextMenuProps {
   isOpen: boolean;
   position: { x: number; y: number };
-  request: BookingRequest;
-  onAddToWaitlist?: () => void;
-  onRemoveFromWaitlist?: () => void;
+  onBook: () => void;
+  onBookForAnotherTime: () => void;
+  onAddToWaitingList?: () => void;
+  onRemoveFromWaitingList?: () => void;
   onDelete: () => void;
   onClose: () => void;
 }
 
-export function BookingRequestContextMenu({
+export function ScheduleBookingRequestContextMenu({
   isOpen,
   position,
-  onAddToWaitlist,
-  onRemoveFromWaitlist,
+  onBook,
+  onBookForAnotherTime,
+  onAddToWaitingList,
+  onRemoveFromWaitingList,
   onDelete,
   onClose,
-}: BookingRequestContextMenuProps) {
+}: ScheduleBookingRequestContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [isPositioned, setIsPositioned] = useState(false);
 
@@ -115,10 +117,32 @@ export function BookingRequestContextMenu({
 
         {/* Options */}
         <div className="py-1">
-          {onAddToWaitlist && (
+          <button
+            onClick={() => {
+              onBook();
+              onClose();
+            }}
+            className="w-full px-3 py-2 text-left text-sm text-white hover:bg-zinc-700 transition-colors flex items-center gap-2"
+          >
+            <Calendar className="w-4 h-4" />
+            <span>Book This Slot</span>
+          </button>
+
+          <button
+            onClick={() => {
+              onBookForAnotherTime();
+              onClose();
+            }}
+            className="w-full px-3 py-2 text-left text-sm text-white hover:bg-zinc-700 transition-colors flex items-center gap-2"
+          >
+            <CalendarClock className="w-4 h-4" />
+            <span>Book for Another Time</span>
+          </button>
+
+          {onAddToWaitingList && (
             <button
               onClick={() => {
-                onAddToWaitlist();
+                onAddToWaitingList();
                 onClose();
               }}
               className="w-full px-3 py-2 text-left text-sm text-white hover:bg-zinc-700 transition-colors flex items-center gap-2"
@@ -128,10 +152,10 @@ export function BookingRequestContextMenu({
             </button>
           )}
 
-          {onRemoveFromWaitlist && (
+          {onRemoveFromWaitingList && (
             <button
               onClick={() => {
-                onRemoveFromWaitlist();
+                onRemoveFromWaitingList();
                 onClose();
               }}
               className="w-full px-3 py-2 text-left text-sm text-white hover:bg-zinc-700 transition-colors flex items-center gap-2"
@@ -141,9 +165,7 @@ export function BookingRequestContextMenu({
             </button>
           )}
 
-          {(onAddToWaitlist || onRemoveFromWaitlist) && (
-            <div className="border-t border-zinc-700 my-1" />
-          )}
+          <div className="border-t border-zinc-700 my-1" />
 
           <button
             onClick={() => {

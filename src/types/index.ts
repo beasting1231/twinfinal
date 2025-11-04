@@ -80,6 +80,6 @@ export interface BookingRequest {
   timeIndex: number; // Index of the time slot
   numberOfPeople: number;
   notes?: string;
-  status: "pending" | "approved" | "rejected";
+  status: "pending" | "approved" | "rejected" | "waitlist";
   createdAt: Date;
 }

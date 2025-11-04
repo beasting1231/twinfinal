@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { BookingAvailable } from "./BookingAvailable";
 import { NewBookingModal } from "./NewBookingModal";
 import { BookingDetailsModal } from "./BookingDetailsModal";
@@ -7,7 +8,7 @@ import { AvailabilityContextMenu } from "./AvailabilityContextMenu";
 import { DriverVehicleCell } from "./DriverVehicleCell";
 import { DriverVehicleModal } from "./DriverVehicleModal";
 import { DriverVehicleContextMenu } from "./DriverVehicleContextMenu";
-import { BookingRequestContextMenu } from "./BookingRequestContextMenu";
+import { ScheduleBookingRequestContextMenu } from "./ScheduleBookingRequestContextMenu";
 import { BookingRequestItem } from "./BookingRequestItem";
 import { useBookingSourceColors } from "../hooks/useBookingSourceColors";
 import { useDriverAssignments } from "../hooks/useDriverAssignments";
@@ -16,7 +17,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useRole } from "../hooks/useRole";
 import type { Booking, Pilot, BookingRequest } from "../types/index";
 import { format } from "date-fns";
-import { doc, updateDoc, deleteDoc } from "firebase/firestore";
+import { doc, updateDoc } from "firebase/firestore";
 import { db } from "../firebase/config";
 
 interface ScheduleGridProps {
@@ -56,7 +57,17 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
   } = useDriverAssignments(dateString);
 
   // Fetch booking requests
-  const { bookingRequests } = useBookingRequests();
+  const { bookingRequests, updateBookingRequest, deleteBookingRequest } = useBookingRequests();
+
+  // Filter booking requests by status
+  const pendingRequests = useMemo(() => {
+    return bookingRequests.filter(req => req.status === "pending");
+  }, [bookingRequests]);
+
+  const waitlistRequests = useMemo(() => {
+    // Only show waitlist requests for the currently selected date
+    return bookingRequests.filter(req => req.status === "waitlist" && req.date === dateString);
+  }, [bookingRequests, dateString]);
 
   // Booking request context menu state
   const [bookingRequestContextMenu, setBookingRequestContextMenu] = useState<{
@@ -643,32 +654,80 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
         </div>
 
         {/* Booking Requests Inbox - Always show even when no pilots */}
-        {bookingRequests.length > 0 && (
-          <div className="max-w-lg mx-auto mt-8">
-            <h2 className="text-xl font-semibold text-white mb-3">New Booking Requests</h2>
-            <div className="space-y-2">
-              {bookingRequests.map((request) => (
-                <BookingRequestItem
-                  key={request.id}
-                  request={request}
-                  onContextMenu={(req, position) => {
-                    setBookingRequestContextMenu({
-                      isOpen: true,
-                      position,
-                      request: req,
-                    });
-                  }}
-                  onDateClick={(dateString) => {
-                    if (onNavigateToDate) {
-                      // Parse the date string (YYYY-MM-DD) to a Date object
-                      const [year, month, day] = dateString.split('-').map(Number);
-                      const date = new Date(year, month - 1, day);
-                      onNavigateToDate(date);
-                    }
-                  }}
-                />
-              ))}
-            </div>
+        {(pendingRequests.length > 0 || waitlistRequests.length > 0) && (
+          <div className="max-w-lg mx-auto mt-8 bg-zinc-900 rounded-lg border border-zinc-800">
+            <Tabs defaultValue="requests" className="flex-1 flex flex-col">
+              <TabsList className="grid w-full grid-cols-2 bg-zinc-800 border-b border-zinc-700 rounded-t-lg">
+                <TabsTrigger value="requests" className="data-[state=active]:bg-zinc-900">
+                  Booking Requests ({pendingRequests.length})
+                </TabsTrigger>
+                <TabsTrigger value="waitlist" className="data-[state=active]:bg-zinc-900">
+                  Waiting List ({waitlistRequests.length})
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="requests" className="p-4 mt-0">
+                {pendingRequests.length === 0 ? (
+                  <div className="flex items-center justify-center h-32">
+                    <p className="text-zinc-500">No booking requests</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {pendingRequests.map((request) => (
+                      <BookingRequestItem
+                        key={request.id}
+                        request={request}
+                        onContextMenu={(req, position) => {
+                          setBookingRequestContextMenu({
+                            isOpen: true,
+                            position,
+                            request: req,
+                          });
+                        }}
+                        onDateClick={(dateString) => {
+                          if (onNavigateToDate) {
+                            const [year, month, day] = dateString.split('-').map(Number);
+                            const date = new Date(year, month - 1, day);
+                            onNavigateToDate(date);
+                          }
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="waitlist" className="p-4 mt-0">
+                {waitlistRequests.length === 0 ? (
+                  <div className="flex items-center justify-center h-32">
+                    <p className="text-zinc-500">No items in waiting list</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {waitlistRequests.map((request) => (
+                      <BookingRequestItem
+                        key={request.id}
+                        request={request}
+                        onContextMenu={(req, position) => {
+                          setBookingRequestContextMenu({
+                            isOpen: true,
+                            position,
+                            request: req,
+                          });
+                        }}
+                        onDateClick={(dateString) => {
+                          if (onNavigateToDate) {
+                            const [year, month, day] = dateString.split('-').map(Number);
+                            const date = new Date(year, month - 1, day);
+                            onNavigateToDate(date);
+                          }
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
           </div>
         )}
 
@@ -702,7 +761,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
 
         {/* Booking Request Context Menu */}
         {bookingRequestContextMenu && (
-          <BookingRequestContextMenu
+          <ScheduleBookingRequestContextMenu
             isOpen={bookingRequestContextMenu.isOpen}
             position={bookingRequestContextMenu.position}
             onBook={async () => {
@@ -749,23 +808,32 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
               setSelectedCell({ pilotIndex: 0, timeIndex: 0, timeSlot: timeSlots[0] });
               setIsModalOpen(true);
             }}
-            onAddToWaitingList={async () => {
+            onAddToWaitingList={bookingRequestContextMenu.request.status === "pending" ? async () => {
               const request = bookingRequestContextMenu.request;
-              alert(`Added ${request.customerName} to the waiting list for ${request.date} at ${request.time}`);
-
               if (request.id) {
-                await updateDoc(doc(db, "bookingRequests", request.id), {
-                  status: "rejected",
+                await updateBookingRequest(request.id, {
+                  status: "waitlist",
                 });
               }
-            }}
+              setBookingRequestContextMenu(null);
+            } : undefined}
+            onRemoveFromWaitingList={bookingRequestContextMenu.request.status === "waitlist" ? async () => {
+              const request = bookingRequestContextMenu.request;
+              if (request.id) {
+                await updateBookingRequest(request.id, {
+                  status: "pending",
+                });
+              }
+              setBookingRequestContextMenu(null);
+            } : undefined}
             onDelete={async () => {
               const request = bookingRequestContextMenu.request;
               if (!request.id) return;
 
               if (confirm(`Delete booking request from ${request.customerName}?`)) {
                 try {
-                  await deleteDoc(doc(db, "bookingRequests", request.id));
+                  await deleteBookingRequest(request.id);
+                  setBookingRequestContextMenu(null);
                 } catch (error) {
                   console.error("Error deleting booking request:", error);
                   alert("Failed to delete booking request. Please try again.");
@@ -1029,37 +1097,85 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
       </div>
 
       {/* Booking Requests Inbox */}
-      {bookingRequests.length > 0 && (
+      {(pendingRequests.length > 0 || waitlistRequests.length > 0) && (
         <div
-          className="max-w-lg"
+          className="max-w-lg bg-zinc-900 rounded-lg border border-zinc-800"
           style={{
             marginTop: `${24 + (gridHeight * (scale - 1))}px`
           }}
         >
-          <h2 className="text-xl font-semibold text-white mb-3">New Booking Requests</h2>
-          <div className="space-y-2">
-            {bookingRequests.map((request) => (
-              <BookingRequestItem
-                key={request.id}
-                request={request}
-                onContextMenu={(req, position) => {
-                  setBookingRequestContextMenu({
-                    isOpen: true,
-                    position,
-                    request: req,
-                  });
-                }}
-                onDateClick={(dateString) => {
-                  if (onNavigateToDate) {
-                    // Parse the date string (YYYY-MM-DD) to a Date object
-                    const [year, month, day] = dateString.split('-').map(Number);
-                    const date = new Date(year, month - 1, day);
-                    onNavigateToDate(date);
-                  }
-                }}
-              />
-            ))}
-          </div>
+          <Tabs defaultValue="requests" className="flex-1 flex flex-col">
+            <TabsList className="grid w-full grid-cols-2 bg-zinc-800 border-b border-zinc-700 rounded-t-lg">
+              <TabsTrigger value="requests" className="data-[state=active]:bg-zinc-900">
+                Booking Requests ({pendingRequests.length})
+              </TabsTrigger>
+              <TabsTrigger value="waitlist" className="data-[state=active]:bg-zinc-900">
+                Waiting List ({waitlistRequests.length})
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="requests" className="p-4 mt-0">
+              {pendingRequests.length === 0 ? (
+                <div className="flex items-center justify-center h-32">
+                  <p className="text-zinc-500">No booking requests</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {pendingRequests.map((request) => (
+                    <BookingRequestItem
+                      key={request.id}
+                      request={request}
+                      onContextMenu={(req, position) => {
+                        setBookingRequestContextMenu({
+                          isOpen: true,
+                          position,
+                          request: req,
+                        });
+                      }}
+                      onDateClick={(dateString) => {
+                        if (onNavigateToDate) {
+                          const [year, month, day] = dateString.split('-').map(Number);
+                          const date = new Date(year, month - 1, day);
+                          onNavigateToDate(date);
+                        }
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="waitlist" className="p-4 mt-0">
+              {waitlistRequests.length === 0 ? (
+                <div className="flex items-center justify-center h-32">
+                  <p className="text-zinc-500">No items in waiting list</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {waitlistRequests.map((request) => (
+                    <BookingRequestItem
+                      key={request.id}
+                      request={request}
+                      onContextMenu={(req, position) => {
+                        setBookingRequestContextMenu({
+                          isOpen: true,
+                          position,
+                          request: req,
+                        });
+                      }}
+                      onDateClick={(dateString) => {
+                        if (onNavigateToDate) {
+                          const [year, month, day] = dateString.split('-').map(Number);
+                          const date = new Date(year, month - 1, day);
+                          onNavigateToDate(date);
+                        }
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
         </div>
       )}
 
@@ -1245,7 +1361,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
 
       {/* Booking Request Context Menu */}
       {bookingRequestContextMenu && (
-        <BookingRequestContextMenu
+        <ScheduleBookingRequestContextMenu
           isOpen={bookingRequestContextMenu.isOpen}
           position={bookingRequestContextMenu.position}
           onBook={async () => {
@@ -1293,25 +1409,32 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
             setSelectedCell({ pilotIndex: 0, timeIndex: 0, timeSlot: timeSlots[0] });
             setIsModalOpen(true);
           }}
-          onAddToWaitingList={async () => {
+          onAddToWaitingList={bookingRequestContextMenu.request.status === "pending" ? async () => {
             const request = bookingRequestContextMenu.request;
-            // For now, just show an alert. You can implement a waiting list feature later.
-            alert(`Added ${request.customerName} to the waiting list for ${request.date} at ${request.time}`);
-
-            // Optionally mark the request with a different status or add to a waiting list collection
             if (request.id) {
-              await updateDoc(doc(db, "bookingRequests", request.id), {
-                status: "rejected", // or create a "waiting_list" status
+              await updateBookingRequest(request.id, {
+                status: "waitlist",
               });
             }
-          }}
+            setBookingRequestContextMenu(null);
+          } : undefined}
+          onRemoveFromWaitingList={bookingRequestContextMenu.request.status === "waitlist" ? async () => {
+            const request = bookingRequestContextMenu.request;
+            if (request.id) {
+              await updateBookingRequest(request.id, {
+                status: "pending",
+              });
+            }
+            setBookingRequestContextMenu(null);
+          } : undefined}
           onDelete={async () => {
             const request = bookingRequestContextMenu.request;
             if (!request.id) return;
 
             if (confirm(`Delete booking request from ${request.customerName}?`)) {
               try {
-                await deleteDoc(doc(db, "bookingRequests", request.id));
+                await deleteBookingRequest(request.id);
+                setBookingRequestContextMenu(null);
               } catch (error) {
                 console.error("Error deleting booking request:", error);
                 alert("Failed to delete booking request. Please try again.");
