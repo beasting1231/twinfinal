@@ -51,22 +51,13 @@ export function Accounting() {
       return a.timeIndex - b.timeIndex;
     });
 
-    // Calculate turn numbers, total pax, and collect drivers/vehicles for each turn
-    const turnNumbers = new Map<string, number>();
-    const turnCountsByDate = new Map<string, number>();
+    // Calculate total pax and collect drivers/vehicles for each turn
     const totalPaxByTurn = new Map<string, number>();
     const driversByTurn = new Map<string, Set<string>>();
     const vehiclesByTurn = new Map<string, Set<string>>();
 
     sortedBookings.forEach((booking) => {
       const turnKey = `${booking.date}@${booking.timeIndex}`;
-
-      // Set turn number
-      if (!turnNumbers.has(turnKey)) {
-        const currentCount = (turnCountsByDate.get(booking.date) || 0) + 1;
-        turnNumbers.set(turnKey, currentCount);
-        turnCountsByDate.set(booking.date, currentCount);
-      }
 
       // Accumulate total pax for this turn
       const currentPax = totalPaxByTurn.get(turnKey) || 0;
@@ -99,7 +90,7 @@ export function Accounting() {
       const timeSlotsForDate = getTimeSlotsByDate(dateObj);
       const timeSlot = timeSlotsForDate[booking.timeIndex] || `${booking.timeIndex}:00`;
       const turnKey = `${booking.date}@${booking.timeIndex}`;
-      const turnNumber = turnNumbers.get(turnKey) || 1;
+      const turnNumber = booking.timeIndex + 1; // Turn number is based on time slot position
       const totalPax = totalPaxByTurn.get(turnKey) || 0;
 
       // Get all drivers and vehicles for this turn
