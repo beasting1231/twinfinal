@@ -451,18 +451,23 @@ export function NewBookingModal({
                     Flight Type
                   </Label>
                   <div className="flex gap-2">
-                    {(["sensational", "classic", "early bird"] as const).map((type) => (
+                    {([
+                      { type: "sensational", price: "CHF 180" },
+                      { type: "classic", price: "CHF 170" },
+                      { type: "early bird", price: "CHF 180" }
+                    ] as const).map(({ type, price }) => (
                       <button
                         key={type}
                         type="button"
                         onClick={() => setFlightType(type)}
-                        className={`flex-1 px-4 py-3 rounded-lg font-medium transition-colors capitalize ${
+                        className={`flex-1 px-3 py-3 rounded-lg font-medium transition-colors ${
                           flightType === type
                             ? "bg-white text-black"
                             : "bg-zinc-800 text-white hover:bg-zinc-700"
                         }`}
                       >
-                        {type}
+                        <div className="capitalize text-sm">{type}</div>
+                        <div className="text-xs mt-1 opacity-80">{price}</div>
                       </button>
                     ))}
                   </div>

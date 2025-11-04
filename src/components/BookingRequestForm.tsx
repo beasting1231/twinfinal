@@ -16,6 +16,7 @@ export function BookingRequestForm() {
     date: format(new Date(), "yyyy-MM-dd"),
     timeIndex: "",
     numberOfPeople: 1,
+    flightType: "sensational" as "sensational" | "classic" | "early bird",
     notes: "",
   });
   const [submitting, setSubmitting] = useState(false);
@@ -181,6 +182,7 @@ export function BookingRequestForm() {
         time: selectedTimeSlot,
         timeIndex: parseInt(formData.timeIndex),
         numberOfPeople: Number(formData.numberOfPeople),
+        flightType: formData.flightType,
         notes: formData.notes,
         status: "pending",
         createdAt: new Date(),
@@ -199,6 +201,7 @@ export function BookingRequestForm() {
         date: format(new Date(), "yyyy-MM-dd"),
         timeIndex: "",
         numberOfPeople: 1,
+        flightType: "sensational",
         notes: "",
       });
     } catch (error) {
@@ -353,6 +356,34 @@ export function BookingRequestForm() {
               required
               className="text-white"
             />
+          </div>
+
+          {/* Flight Type */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-zinc-200">
+              Flight Type *
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {([
+                { type: "sensational", price: "CHF 180" },
+                { type: "classic", price: "CHF 170" },
+                { type: "early bird", price: "CHF 180" }
+              ] as const).map(({ type, price }) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setFormData((prev) => ({ ...prev, flightType: type }))}
+                  className={`px-3 py-3 rounded-lg font-medium transition-colors ${
+                    formData.flightType === type
+                      ? "bg-white text-black"
+                      : "bg-zinc-800 text-white hover:bg-zinc-700"
+                  }`}
+                >
+                  <div className="capitalize text-sm">{type}</div>
+                  <div className="text-xs mt-1 opacity-80">{price}</div>
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Notes */}
