@@ -144,7 +144,7 @@ export const BookingAvailable = memo(function BookingAvailable({
     return (
       <div
         ref={containerRef}
-        className="w-full h-full rounded-lg pt-2 px-2 flex flex-col justify-between cursor-pointer transition-colors overflow-hidden relative"
+        className={`w-full h-full rounded-lg pt-2 px-2 flex flex-col justify-between transition-colors overflow-hidden relative ${onBookedClick ? 'cursor-pointer' : 'cursor-default'}`}
         style={{
           backgroundColor,
           borderWidth: '1px',
@@ -152,7 +152,9 @@ export const BookingAvailable = memo(function BookingAvailable({
           borderColor
         }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.backgroundColor = hoverColor;
+          if (onBookedClick) {
+            e.currentTarget.style.backgroundColor = hoverColor;
+          }
         }}
         onMouseLeave={(e) => {
           e.currentTarget.style.backgroundColor = backgroundColor;

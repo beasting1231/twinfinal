@@ -3,12 +3,14 @@ import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, deleteField 
 import { db } from "../firebase/config";
 import type { Booking } from "../types/index";
 import { useEditing } from "../contexts/EditingContext";
+import { useAuth } from "../contexts/AuthContext";
 
 export function useBookings() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { isEditing, incrementPendingUpdates } = useEditing();
+  const { currentUser } = useAuth();
   const pendingUpdateRef = useRef<Booking[] | null>(null);
 
   useEffect(() => {
@@ -102,7 +104,12 @@ export function useBookings() {
   // Add a new booking
   const addBooking = async (booking: Omit<Booking, "id">) => {
     try {
-      await addDoc(collection(db, "bookings"), booking);
+      // Add createdBy field with current user's UID
+      const bookingWithCreator = {
+        ...booking,
+        createdBy: currentUser?.uid || "",
+      };
+      await addDoc(collection(db, "bookings"), bookingWithCreator);
     } catch (err: any) {
       console.error("Error adding booking:", err);
       setError(err.message);

@@ -9,6 +9,7 @@ import { Textarea } from "./ui/textarea";
 import type { Booking, Pilot, PilotPayment, ReceiptFile } from "../types/index";
 import { useAuth } from "../contexts/AuthContext";
 import { useEditing } from "../contexts/EditingContext";
+import { useRole } from "../hooks/useRole";
 import { Camera, Upload, Eye, Trash2, Calendar, Clock, MapPin, Users, Phone, Mail, FileText, User, PhoneCall, Send, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../firebase/config";
@@ -41,6 +42,7 @@ export function BookingDetailsModal({
 }: BookingDetailsModalProps) {
   const { currentUser } = useAuth();
   const { startEditing, stopEditing } = useEditing();
+  const { canEditBooking, canDeleteBooking } = useRole();
   const [isEditing, setIsEditing] = useState(false);
   const [editedBooking, setEditedBooking] = useState<Booking | null>(null);
 
@@ -1046,19 +1048,23 @@ export function BookingDetailsModal({
             <div className="flex gap-3 pt-4">
               {!isEditing ? (
                 <>
-                  <Button
-                    onClick={handleEdit}
-                    className="flex-1 bg-white text-black hover:bg-zinc-200"
-                  >
-                    Edit
-                  </Button>
-                  <Button
-                    onClick={handleDelete}
-                    variant="outline"
-                    className="flex-1 border-red-700 text-red-500 hover:bg-red-950 hover:text-red-400"
-                  >
-                    Delete
-                  </Button>
+                  {canEditBooking(booking?.createdBy) && (
+                    <Button
+                      onClick={handleEdit}
+                      className="flex-1 bg-white text-black hover:bg-zinc-200"
+                    >
+                      Edit
+                    </Button>
+                  )}
+                  {canDeleteBooking(booking?.createdBy) && (
+                    <Button
+                      onClick={handleDelete}
+                      variant="outline"
+                      className="flex-1 border-red-700 text-red-500 hover:bg-red-950 hover:text-red-400"
+                    >
+                      Delete
+                    </Button>
+                  )}
                   <Button
                     onClick={() => handleOpenChange(false)}
                     variant="outline"

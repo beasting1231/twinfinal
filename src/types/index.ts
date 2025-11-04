@@ -34,7 +34,10 @@ export interface Booking {
   vehicle?: string;
   driver2?: string;
   vehicle2?: string;
+  createdBy?: string; // UID of user who created the booking
 }
+
+export type UserRole = "pilot" | "agency" | "office" | "admin" | null;
 
 export interface UserProfile {
   uid: string;
@@ -42,6 +45,7 @@ export interface UserProfile {
   email: string;
   femalePilot: boolean;
   priority?: number;
+  role?: UserRole; // User's role for access control
   createdAt?: Date;
   updatedAt?: Date;
 }

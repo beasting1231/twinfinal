@@ -11,8 +11,9 @@ import {
 import { DatePicker } from "./DatePicker";
 import { WeekPicker } from "./WeekPicker";
 import { useAuth } from "../contexts/AuthContext";
+import { useRole } from "../hooks/useRole";
 
-type View = "daily-plan" | "availability" | "account" | "booking-sources" | "accounting" | "priority" | "forms";
+type View = "daily-plan" | "availability" | "account" | "booking-sources" | "accounting" | "priority" | "forms" | "user-management";
 
 interface HeaderProps {
   date?: Date;
@@ -33,6 +34,7 @@ export function Header({
 }: HeaderProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const { currentUser, logout } = useAuth();
+  const { permissions } = useRole();
 
   const handleLogout = async () => {
     try {
@@ -63,54 +65,66 @@ export function Header({
               <SheetTitle className="text-white text-xl">Menu</SheetTitle>
             </SheetHeader>
             <div className="flex flex-col gap-2 mt-6">
-              <button
-                onClick={() => handleViewChange("daily-plan")}
-                className={`w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white ${
-                  currentView === "daily-plan" ? "bg-zinc-800" : ""
-                }`}
-              >
-                Daily Plan
-              </button>
-              <button
-                onClick={() => handleViewChange("availability")}
-                className={`w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white ${
-                  currentView === "availability" ? "bg-zinc-800" : ""
-                }`}
-              >
-                Availability
-              </button>
-              <button
-                onClick={() => handleViewChange("booking-sources")}
-                className={`w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white ${
-                  currentView === "booking-sources" ? "bg-zinc-800" : ""
-                }`}
-              >
-                Booking Sources
-              </button>
-              <button
-                onClick={() => handleViewChange("accounting")}
-                className={`w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white ${
-                  currentView === "accounting" ? "bg-zinc-800" : ""
-                }`}
-              >
-                Accounting
-              </button>
-              <button
-                onClick={() => handleViewChange("priority")}
-                className={`w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white ${
-                  currentView === "priority" ? "bg-zinc-800" : ""
-                }`}
-              >
-                Priority
-              </button>
-              <button
-                onClick={() => handleViewChange("forms")}
-                className={`w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white ${
-                  currentView === "forms" ? "bg-zinc-800" : ""
-                }`}
-              >
-                Forms
-              </button>
+              {permissions.canViewAllBookings && (
+                <button
+                  onClick={() => handleViewChange("daily-plan")}
+                  className={`w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white ${
+                    currentView === "daily-plan" ? "bg-zinc-800" : ""
+                  }`}
+                >
+                  Daily Plan
+                </button>
+              )}
+              {permissions.canManageOwnAvailability && (
+                <button
+                  onClick={() => handleViewChange("availability")}
+                  className={`w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white ${
+                    currentView === "availability" ? "bg-zinc-800" : ""
+                  }`}
+                >
+                  Availability
+                </button>
+              )}
+              {permissions.canManageDriversAndSources && (
+                <button
+                  onClick={() => handleViewChange("booking-sources")}
+                  className={`w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white ${
+                    currentView === "booking-sources" ? "bg-zinc-800" : ""
+                  }`}
+                >
+                  Booking Sources
+                </button>
+              )}
+              {permissions.canViewAllBookings && (
+                <button
+                  onClick={() => handleViewChange("accounting")}
+                  className={`w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white ${
+                    currentView === "accounting" ? "bg-zinc-800" : ""
+                  }`}
+                >
+                  Accounting
+                </button>
+              )}
+              {permissions.canManageDriversAndSources && (
+                <button
+                  onClick={() => handleViewChange("priority")}
+                  className={`w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white ${
+                    currentView === "priority" ? "bg-zinc-800" : ""
+                  }`}
+                >
+                  Priority
+                </button>
+              )}
+              {permissions.canManageBookingRequests && (
+                <button
+                  onClick={() => handleViewChange("forms")}
+                  className={`w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white ${
+                    currentView === "forms" ? "bg-zinc-800" : ""
+                  }`}
+                >
+                  Forms
+                </button>
+              )}
               <button
                 onClick={() => handleViewChange("account")}
                 className={`w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white ${
@@ -119,6 +133,16 @@ export function Header({
               >
                 Account
               </button>
+              {permissions.canManageRoles && (
+                <button
+                  onClick={() => handleViewChange("user-management")}
+                  className={`w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white ${
+                    currentView === "user-management" ? "bg-zinc-800" : ""
+                  }`}
+                >
+                  User Management
+                </button>
+              )}
               <div className="my-2 border-t border-zinc-700" />
               <button
                 onClick={handleLogout}

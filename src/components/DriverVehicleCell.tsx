@@ -3,8 +3,8 @@ import type { Booking } from "../types";
 
 interface DriverVehicleCellProps {
   booking: Booking | null;
-  onClick: () => void;
-  onContextMenu: (position: { x: number; y: number }) => void;
+  onClick?: () => void;
+  onContextMenu?: (position: { x: number; y: number }) => void;
 }
 
 export const DriverVehicleCell = memo(function DriverVehicleCell({
@@ -21,17 +21,19 @@ export const DriverVehicleCell = memo(function DriverVehicleCell({
   const hasNoAssignment = !hasDriver && !hasVehicle;
 
   const handleContextMenu = (e: React.MouseEvent) => {
+    if (!onContextMenu) return;
     e.preventDefault();
     e.stopPropagation();
     onContextMenu({ x: e.clientX, y: e.clientY });
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
+    if (!onContextMenu) return;
     const touch = e.touches[0];
     touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
 
     longPressTimerRef.current = setTimeout(() => {
-      if (touchStartPosRef.current) {
+      if (touchStartPosRef.current && onContextMenu) {
         onContextMenu({
           x: touchStartPosRef.current.x,
           y: touchStartPosRef.current.y,
@@ -67,10 +69,12 @@ export const DriverVehicleCell = memo(function DriverVehicleCell({
 
   return (
     <div
-      className={`w-full h-full rounded-lg p-2 flex flex-col items-center justify-center cursor-pointer transition-colors ${
+      className={`w-full h-full rounded-lg p-2 flex flex-col items-center justify-center transition-colors ${
+        onClick ? 'cursor-pointer' : 'cursor-default'
+      } ${
         hasNoAssignment
-          ? "bg-orange-600/70 hover:bg-orange-500/80"
-          : "bg-yellow-400/80 hover:bg-yellow-300/85"
+          ? `bg-orange-600/70 ${onClick ? 'hover:bg-orange-500/80' : ''}`
+          : `bg-yellow-400/80 ${onClick ? 'hover:bg-yellow-300/85' : ''}`
       }`}
       onClick={onClick}
       onContextMenu={handleContextMenu}

@@ -1,44 +1,104 @@
 rules_version = '2';
-// Updated: 2025-11-04 - Added driverAssignments and bookingRequests collections
+// Updated: 2025-11-05 - Added role-based access control
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Require authentication for all operations
+    // Helper function to get user's role
+    function getUserRole() {
+      return get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data.role;
+    }
+
+    // Helper function to check if user has a role
+    function hasRole(role) {
+      return request.auth != null && getUserRole() == role;
+    }
+
+    // Helper function to check if user has any of the roles
+    function hasAnyRole(roles) {
+      return request.auth != null && getUserRole() in roles;
+    }
+
+    // Bookings collection
     match /bookings/{bookingId} {
       // Allow public read for booking form availability check
       allow read: if true;
-      allow write: if request.auth != null;
+
+      // Pilot: can create bookings
+      // Agency: can create bookings
+      // Office: can create bookings
+      // Admin: can create bookings
+      allow create: if request.auth != null && hasAnyRole(['pilot', 'agency', 'office', 'admin']);
+
+      // Pilot: can update only their own bookings (check createdBy)
+      // Agency: can update only their own bookings (check createdBy)
+      // Office: can update all bookings
+      // Admin: can update all bookings
+      // Note: Allow updates to bookings without createdBy field (legacy bookings)
+      allow update: if request.auth != null && (
+        hasAnyRole(['office', 'admin']) ||
+        (hasAnyRole(['pilot', 'agency']) && (
+          !('createdBy' in resource.data) ||
+          resource.data.createdBy == request.auth.uid
+        ))
+      );
+      allow delete: if request.auth != null && (
+        (hasAnyRole(['pilot', 'agency']) && resource.data.createdBy == request.auth.uid) ||
+        hasAnyRole(['office', 'admin'])
+      );
     }
+
+    // Booking requests collection
     match /bookingRequests/{requestId} {
       // Anyone can create a booking request (public form)
       allow create: if true;
-      // Only authenticated users can read and update
-      allow read, update: if request.auth != null;
-      // Only authenticated users can delete
-      allow delete: if request.auth != null;
+      // Office and admin can read/update/delete
+      allow read, update, delete: if request.auth != null && hasAnyRole(['office', 'admin']);
     }
+
+    // Availability collection
     match /availability/{availabilityId} {
       // Allow public read for booking form availability check
       allow read: if true;
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+
+      // Pilot: can create/update/delete only their own availability
+      // Office: can create/update/delete anyone's availability
+      // Admin: can create/update/delete anyone's availability
+      allow create: if request.auth != null && (
+        (hasRole('pilot') && request.resource.data.userId == request.auth.uid) ||
+        hasAnyRole(['office', 'admin'])
+      );
+      allow update, delete: if request.auth != null && (
+        (hasRole('pilot') && resource.data.userId == request.auth.uid) ||
+        hasAnyRole(['office', 'admin'])
+      );
     }
+
+    // Booking sources collection
     match /bookingSources/{sourceId} {
-      // All authenticated users can read and write booking sources
-      allow read, write: if request.auth != null;
+      // All authenticated users can read (needed to display booking source colors)
+      allow read: if request.auth != null;
+      // Only office and admin can write
+      allow write: if request.auth != null && hasAnyRole(['office', 'admin']);
     }
+
+    // Driver assignments collection
     match /driverAssignments/{assignmentId} {
-      // All authenticated users can read and write driver assignments
-      allow read, write: if request.auth != null;
+      // Office and admin can read/write
+      allow read, write: if request.auth != null && hasAnyRole(['office', 'admin']);
     }
+
+    // User profiles collection
     match /userProfiles/{profileId} {
       // Allow public read for booking form availability check
       allow read: if true;
-      // Users can only create their own profile
+
+      // Users can create their own profile (default role will be null)
       allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
-      // Users can update their own profile, or any user can update priority field
+
+      // Users can update their own profile (except role field)
+      // Admins can update anyone's profile including role
       allow update: if request.auth != null && (
-        resource.data.uid == request.auth.uid ||
-        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['priority']))
+        (resource.data.uid == request.auth.uid && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role'])) ||
+        hasRole('admin')
       );
     }
   }

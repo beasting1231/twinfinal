@@ -10,10 +10,13 @@ import {
   GoogleAuthProvider,
   signInWithPopup
 } from "firebase/auth";
-import { auth } from "../firebase/config";
+import { doc, getDoc } from "firebase/firestore";
+import { auth, db } from "../firebase/config";
+import type { UserRole } from "../types";
 
 interface AuthContextType {
   currentUser: User | null;
+  userRole: UserRole;
   loading: boolean;
   signup: (email: string, password: string, displayName: string) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
@@ -37,6 +40,7 @@ interface AuthProviderProps {
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [userRole, setUserRole] = useState<UserRole>(null);
   const [loading, setLoading] = useState(true);
 
   async function signup(email: string, password: string, displayName: string) {
@@ -61,8 +65,28 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
+
+      // Fetch user role from Firestore
+      if (user) {
+        try {
+          const userDocRef = doc(db, "userProfiles", user.uid);
+          const userDoc = await getDoc(userDocRef);
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            setUserRole(userData.role || null);
+          } else {
+            setUserRole(null);
+          }
+        } catch (error) {
+          console.error("Error fetching user role:", error);
+          setUserRole(null);
+        }
+      } else {
+        setUserRole(null);
+      }
+
       setLoading(false);
     });
 
@@ -71,6 +95,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const value = {
     currentUser,
+    userRole,
     loading,
     signup,
     login,

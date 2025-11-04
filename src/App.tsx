@@ -8,15 +8,17 @@ import { BookingSources } from "./components/BookingSources";
 import { Accounting } from "./components/Accounting";
 import { Priority } from "./components/Priority";
 import { Forms } from "./components/Forms";
+import { UserManagement } from "./components/UserManagement";
 import { BookingRequestForm } from "./components/BookingRequestForm";
 import { useBookings } from "./hooks/useBookings";
 import { usePilots } from "./hooks/usePilots";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { EditingProvider } from "./contexts/EditingContext";
 import { Login } from "./components/Auth/Login";
+import { NoAccess } from "./components/Auth/NoAccess";
 import { getTimeSlotsByDate } from "./utils/timeSlots";
 
-type View = "daily-plan" | "availability" | "account" | "booking-sources" | "accounting" | "priority" | "forms";
+type View = "daily-plan" | "availability" | "account" | "booking-sources" | "accounting" | "priority" | "forms" | "user-management";
 
 function AppContent() {
   // Check if we're on the booking request form route
@@ -41,7 +43,7 @@ function AppContent() {
   const [currentView, setCurrentView] = useState<View>("daily-plan");
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [weekStartDate, setWeekStartDate] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
-  const { currentUser } = useAuth();
+  const { currentUser, userRole } = useAuth();
 
   // Fetch bookings from Firebase
   const { bookings, loading: bookingsLoading, addBooking, updateBooking, deleteBooking } = useBookings();
@@ -64,6 +66,11 @@ function AppContent() {
   // Show login if user is not authenticated
   if (!currentUser) {
     return <Login />;
+  }
+
+  // Show no access screen if user doesn't have a role
+  if (!userRole) {
+    return <NoAccess />;
   }
 
   return (
@@ -102,6 +109,8 @@ function AppContent() {
         <Priority />
       ) : currentView === "forms" ? (
         <Forms />
+      ) : currentView === "user-management" ? (
+        <UserManagement />
       ) : null}
     </div>
   );

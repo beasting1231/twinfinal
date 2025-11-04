@@ -12,6 +12,8 @@ import { BookingRequestItem } from "./BookingRequestItem";
 import { useBookingSourceColors } from "../hooks/useBookingSourceColors";
 import { useDriverAssignments } from "../hooks/useDriverAssignments";
 import { useBookingRequests } from "../hooks/useBookingRequests";
+import { useAuth } from "../contexts/AuthContext";
+import { useRole } from "../hooks/useRole";
 import type { Booking, Pilot, BookingRequest } from "../types/index";
 import { format } from "date-fns";
 import { doc, updateDoc, deleteDoc } from "firebase/firestore";
@@ -36,6 +38,10 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
   const [selectedCell, setSelectedCell] = useState<{ pilotIndex: number; timeIndex: number; timeSlot: string } | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+
+  // Get current user and role for permission checks
+  const { currentUser } = useAuth();
+  const { role } = useRole();
 
   // Fetch booking source colors
   const { getSourceColor } = useBookingSourceColors();
@@ -140,10 +146,35 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
     setIsModalOpen(true);
   }, []);
 
+  // Check if a booking can be clicked by the current user
+  const canViewBooking = useCallback((booking: Booking) => {
+    // Agency users can only view bookings they created
+    if (role === "agency" && booking.createdBy !== currentUser?.uid) {
+      return false;
+    }
+    return true;
+  }, [role, currentUser]);
+
+  // Check if user can manage pilot assignments (context menu)
+  const canManagePilots = useCallback(() => {
+    // Agency users cannot assign/unassign pilots
+    return role !== "agency";
+  }, [role]);
+
+  // Check if user can manage drivers
+  const canManageDrivers = useCallback(() => {
+    // Only office and admin can manage drivers
+    return role === "office" || role === "admin";
+  }, [role]);
+
   const handleBookedCellClick = useCallback((booking: Booking) => {
+    if (!canViewBooking(booking)) {
+      return; // Don't open modal for bookings user cannot view
+    }
+
     setSelectedBooking(booking);
     setIsDetailsModalOpen(true);
-  }, []);
+  }, [canViewBooking]);
 
   const handleBookingSubmit = useCallback(async (booking: Omit<Booking, "id">) => {
     if (onAddBooking) {
@@ -165,12 +196,16 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
   }, [onAddBooking, bookingRequestToBook]);
 
   const handleDriverVehicleCellClick = useCallback((booking: Booking | null, driverColumn: 1 | 2 = 1, timeIndex: number) => {
+    // Only office and admin can manage drivers
+    if (!canManageDrivers()) {
+      return;
+    }
     setSelectedBookingForDriverVehicle(booking);
     setSelectedDriverColumn(driverColumn);
     setSelectedTimeIndex(timeIndex);
     setSelectedDriverDate(selectedDate);
     setIsDriverVehicleModalOpen(true);
-  }, [selectedDate]);
+  }, [selectedDate, canManageDrivers]);
 
   // Handle driver/vehicle context menu
   const handleDriverVehicleContextMenu = (_booking: Booking | null, driverColumn: 1 | 2 = 1, timeIndex: number) => (
@@ -854,8 +889,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                         flightType={cell.booking.flightType}
                         notes={cell.booking.notes}
                         bookingSourceColor={getSourceColor(cell.booking.bookingSource)}
-                        onBookedClick={() => handleBookedCellClick(cell.booking)}
-                        onContextMenu={handleBookingContextMenu(cell.booking, timeSlot)}
+                        onBookedClick={canViewBooking(cell.booking) ? () => handleBookedCellClick(cell.booking) : undefined}
+                        onContextMenu={canViewBooking(cell.booking) && canManagePilots() ? handleBookingContextMenu(cell.booking, timeSlot) : undefined}
                       />
                     </div>
                   );
@@ -923,8 +958,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                   return (
                     <DriverVehicleCell
                       booking={cellBooking}
-                      onClick={() => handleDriverVehicleCellClick(null, 1, timeIndex)}
-                      onContextMenu={handleDriverVehicleContextMenu(null, 1, timeIndex)}
+                      onClick={canManageDrivers() ? () => handleDriverVehicleCellClick(null, 1, timeIndex) : undefined}
+                      onContextMenu={canManageDrivers() ? handleDriverVehicleContextMenu(null, 1, timeIndex) : undefined}
                     />
                   );
                 })()}
@@ -947,8 +982,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                     return (
                       <DriverVehicleCell
                         booking={cellBooking}
-                        onClick={() => handleDriverVehicleCellClick(null, 2, timeIndex)}
-                        onContextMenu={handleDriverVehicleContextMenu(null, 2, timeIndex)}
+                        onClick={canManageDrivers() ? () => handleDriverVehicleCellClick(null, 2, timeIndex) : undefined}
+                        onContextMenu={canManageDrivers() ? handleDriverVehicleContextMenu(null, 2, timeIndex) : undefined}
                       />
                     );
                   })()}
