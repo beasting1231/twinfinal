@@ -1,4 +1,5 @@
-import { useRef, memo } from "react";
+import { useRef, memo, useState } from "react";
+import { Info } from "lucide-react";
 import type { PilotPayment } from "../types/index";
 
 interface BookingAvailableProps {
@@ -13,6 +14,8 @@ interface BookingAvailableProps {
   bookingStatus?: "unconfirmed" | "confirmed" | "pending" | "cancelled";
   span?: number;
   femalePilotsRequired?: number;
+  flightType?: "sensational" | "classic" | "early bird";
+  notes?: string;
   bookingSourceColor?: string;
   onAvailableClick?: () => void;
   onBookedClick?: () => void;
@@ -33,6 +36,8 @@ export const BookingAvailable = memo(function BookingAvailable({
   bookingStatus = "confirmed",
   span = 1,
   femalePilotsRequired = 0,
+  flightType,
+  notes,
   bookingSourceColor = "#1e3a8a",
   onAvailableClick,
   onBookedClick,
@@ -44,6 +49,8 @@ export const BookingAvailable = memo(function BookingAvailable({
   const containerRef = useRef<HTMLDivElement>(null);
   const longPressTimerRef = useRef<number | null>(null);
   const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
+  const infoIconRef = useRef<HTMLDivElement>(null);
+  const [showNotesTooltip, setShowNotesTooltip] = useState(false);
 
   console.log("BookingAvailable render:", { pilotId, status, isCurrentUserPilot, hasNoPilotHandler: !!onNoPilotContextMenu, hasAvailableHandler: !!onAvailableContextMenu });
 
@@ -157,9 +164,48 @@ export const BookingAvailable = memo(function BookingAvailable({
         {/* Status indicator bar */}
         <div className={`absolute top-0 right-0 w-[5px] h-full ${statusColors[bookingStatus]}`} />
 
+        {/* Notes indicator icon */}
+        {notes && notes.trim() && (
+          <div
+            ref={infoIconRef}
+            className="absolute bottom-1 right-2 z-[9999]"
+            onMouseEnter={() => setShowNotesTooltip(true)}
+            onMouseLeave={() => setShowNotesTooltip(false)}
+          >
+            <Info className="w-4 h-4 text-white cursor-help" />
+          </div>
+        )}
+
+        {/* Notes tooltip - render outside with fixed positioning */}
+        {notes && notes.trim() && showNotesTooltip && infoIconRef.current && (() => {
+          const rect = infoIconRef.current.getBoundingClientRect();
+          return (
+            <div
+              className="fixed w-64 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl p-3 text-sm text-white whitespace-pre-wrap break-words"
+              style={{
+                left: `${rect.right - 256}px`,
+                bottom: `${window.innerHeight - rect.top + 2}px`,
+                zIndex: 9999
+              }}
+              onMouseEnter={() => setShowNotesTooltip(true)}
+              onMouseLeave={() => setShowNotesTooltip(false)}
+            >
+              <div className="text-xs text-zinc-400 mb-1">Notes:</div>
+              {notes}
+            </div>
+          );
+        })()}
+
         <div className="flex-1 min-h-0 overflow-hidden">
-          <div className="font-semibold text-sm text-white truncate">
-            {bookingSource} - {pickupLocation} - {customerName}
+          <div className="flex items-center gap-2">
+            {flightType === "classic" && (
+              <span className="text-xs font-semibold text-orange-400 bg-orange-500/20 px-2 py-0.5 rounded-full border border-orange-400/40">
+                classic
+              </span>
+            )}
+            <div className="font-semibold text-sm text-white truncate">
+              {[bookingSource, pickupLocation, customerName].filter(Boolean).join(" - ")}
+            </div>
           </div>
         </div>
 

@@ -9,7 +9,7 @@ import { Textarea } from "./ui/textarea";
 import type { Booking, Pilot, PilotPayment, ReceiptFile } from "../types/index";
 import { useAuth } from "../contexts/AuthContext";
 import { useEditing } from "../contexts/EditingContext";
-import { Camera, Upload, Eye, Trash2, Calendar, Clock, MapPin, Users, Phone, Mail, FileText, User, PhoneCall, Send } from "lucide-react";
+import { Camera, Upload, Eye, Trash2, Calendar, Clock, MapPin, Users, Phone, Mail, FileText, User, PhoneCall, Send, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { BookingSourceAutocomplete } from "./BookingSourceAutocomplete";
@@ -58,6 +58,8 @@ export function BookingDetailsModal({
   const [editedDatePilots, setEditedDatePilots] = useState<Pilot[]>([]);
   const [editedDateBookings, setEditedDateBookings] = useState<Booking[]>([]);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [showAdditionalOptions, setShowAdditionalOptions] = useState(false);
+  const [isSavingPayments, setIsSavingPayments] = useState(false);
 
 
   // Create an availability check function that uses edited date data when in edit mode
@@ -116,6 +118,42 @@ export function BookingDetailsModal({
     return availableSlotsPerTime[targetTimeIndex] ?? 0;
   }, [booking, editedBooking, availableSlotsPerTime]);
 
+  // Calculate available female pilots at this time
+  const availableFemalePilots = useMemo(() => {
+    if (!booking || !editedBooking) return 0;
+
+    const targetDate = editedBooking.date;
+    const targetTimeIndex = editedBooking.timeIndex;
+    const targetTimeSlot = timeSlots[targetTimeIndex];
+
+    // Use editedDatePilots and editedDateBookings when in edit mode, otherwise use from props
+    const pilotsToUse = isEditing ? editedDatePilots : pilots;
+    const bookingsToUse = isEditing ? editedDateBookings : bookings;
+
+    // Get available female pilots at this time
+    const availableFemalePilotsList = pilotsToUse.filter((pilot) =>
+      pilot.femalePilot &&
+      checkPilotAvailability(pilot.uid, targetTimeSlot)
+    );
+
+    // Get bookings at this specific time (excluding current booking)
+    const bookingsAtThisTime = bookingsToUse.filter(
+      b => b.timeIndex === targetTimeIndex && b.date === targetDate && b.id !== booking.id
+    );
+
+    // Count how many female pilots are already assigned
+    const assignedFemalePilots = new Set<string>();
+    bookingsAtThisTime.forEach(b => {
+      b.assignedPilots.forEach(pilotName => {
+        const pilot = pilotsToUse.find(p => p.displayName === pilotName);
+        if (pilot?.femalePilot) {
+          assignedFemalePilots.add(pilotName);
+        }
+      });
+    });
+
+    return availableFemalePilotsList.length - assignedFemalePilots.size;
+  }, [booking, editedBooking, pilots, editedDatePilots, bookings, editedDateBookings, timeSlots, isEditing, editedDateAvailability]);
 
   useEffect(() => {
     if (booking) {
@@ -341,6 +379,15 @@ export function BookingDetailsModal({
       if (editedBooking.span !== booking.span) {
         updates.span = editedBooking.span;
       }
+      if (editedBooking.commission !== booking.commission) {
+        updates.commission = editedBooking.commission;
+      }
+      if (editedBooking.femalePilotsRequired !== booking.femalePilotsRequired) {
+        updates.femalePilotsRequired = editedBooking.femalePilotsRequired;
+      }
+      if (editedBooking.flightType !== booking.flightType) {
+        updates.flightType = editedBooking.flightType;
+      }
 
       // If date or time changed, clear assigned pilots and payment info
       if (dateOrTimeChanged) {
@@ -420,6 +467,7 @@ export function BookingDetailsModal({
 
   const handleSavePayments = async () => {
     if (booking.id && onUpdate) {
+      setIsSavingPayments(true);
       try {
         console.log("Saving payment details:", pilotPayments);
 
@@ -439,6 +487,8 @@ export function BookingDetailsModal({
       } catch (error) {
         console.error("Error saving payment details:", error);
         alert("Failed to save payment details. Please try again.");
+      } finally {
+        setIsSavingPayments(false);
       }
     } else {
       console.error("Cannot save: booking.id or onUpdate is missing", { bookingId: booking?.id, hasOnUpdate: !!onUpdate });
@@ -569,7 +619,7 @@ export function BookingDetailsModal({
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-xs text-zinc-500 mb-1">Customer</div>
-                      <div className="text-lg font-semibold text-white break-words">{editedBooking.customerName}</div>
+                      <div className="text-lg font-semibold text-white break-words">{editedBooking.customerName || <span className="text-zinc-500">Not provided</span>}</div>
                     </div>
                   </div>
                 </div>
@@ -605,7 +655,7 @@ export function BookingDetailsModal({
                       <MapPin className="w-4 h-4" />
                       <span className="text-xs">Location</span>
                     </div>
-                    <div className="text-white font-medium break-words">{editedBooking.pickupLocation}</div>
+                    <div className="text-white font-medium break-words">{editedBooking.pickupLocation || <span className="text-zinc-500">Not provided</span>}</div>
                   </div>
                   <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
                     <div className="flex items-center gap-2 text-zinc-500 mb-2">
@@ -720,16 +770,20 @@ export function BookingDetailsModal({
                 {/* Date */}
                 <div className="space-y-2">
                   <Label className="text-white">Date</Label>
-                  <Input
-                    type="date"
-                    value={editedBooking.date}
-                    onChange={(e) => {
-                      setEditedBooking({
-                        ...editedBooking,
-                        date: e.target.value
-                      });
-                    }}
-                  />
+                  <div className="relative">
+                    <Input
+                      type="date"
+                      value={editedBooking.date}
+                      onChange={(e) => {
+                        setEditedBooking({
+                          ...editedBooking,
+                          date: e.target.value
+                        });
+                      }}
+                      className="pr-10"
+                    />
+                    <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white pointer-events-none" />
+                  </div>
                 </div>
 
                 {/* Time Slot */}
@@ -787,15 +841,6 @@ export function BookingDetailsModal({
                     </p>
                     <p className="text-xs mt-1">
                       This booking requires {editedBooking.numberOfPeople} {editedBooking.numberOfPeople === 1 ? 'pilot' : 'pilots'}, but only {availableSlots} {availableSlots === 1 ? 'is' : 'are'} available. Please select a different date or time slot.
-                    </p>
-                  </div>
-                )}
-
-                {/* Available Slots Info */}
-                {availableSlots >= editedBooking.numberOfPeople && (
-                  <div className="bg-blue-950 border border-blue-700 text-blue-200 px-4 py-3 rounded-lg">
-                    <p className="text-sm">
-                      {availableSlots} {availableSlots === 1 ? 'pilot is' : 'pilots are'} available at this time ({editedBooking.numberOfPeople} required)
                     </p>
                   </div>
                 )}
@@ -873,36 +918,103 @@ export function BookingDetailsModal({
                   />
                 </div>
 
-
-                {/* Booking Status */}
+                {/* Additional Options - Collapsible */}
                 <div className="space-y-2">
-                  <Label className="text-white">Booking Status</Label>
-                  <Select
-                    value={editedBooking.bookingStatus}
-                    onValueChange={(value: "unconfirmed" | "confirmed" | "pending" | "cancelled") =>
-                      setEditedBooking({ ...editedBooking, bookingStatus: value })
-                    }
+                  <button
+                    type="button"
+                    onClick={() => setShowAdditionalOptions(!showAdditionalOptions)}
+                    className="flex items-center justify-between w-full text-white hover:text-zinc-300 transition-colors"
                   >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="unconfirmed">Unconfirmed</SelectItem>
-                      <SelectItem value="confirmed">Confirmed</SelectItem>
-                      <SelectItem value="pending">Pending</SelectItem>
-                      <SelectItem value="cancelled">Cancelled</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                    <span className="text-sm font-medium">Additional Options</span>
+                    {showAdditionalOptions ? (
+                      <ChevronUp className="w-4 h-4" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4" />
+                    )}
+                  </button>
 
-                {/* Additional Notes */}
-                <div className="space-y-2">
-                  <Label className="text-white">Additional Notes</Label>
-                  <Textarea
-                    value={editedBooking.notes || ""}
-                    onChange={(e) => setEditedBooking({ ...editedBooking, notes: e.target.value })}
-                    rows={3}
-                  />
+                  {showAdditionalOptions && (
+                    <div className="space-y-4 pt-2 border-t border-zinc-800">
+                      {/* Commission (Optional) */}
+                      <div className="space-y-2">
+                        <Label className="text-white">
+                          Commission (per person)
+                        </Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={editedBooking.commission ?? ""}
+                          onChange={(e) => setEditedBooking({ ...editedBooking, commission: e.target.value ? parseFloat(e.target.value) : null })}
+                          placeholder="0.00"
+                        />
+                      </div>
+
+                      {/* Lady Pilots Required */}
+                      <div className="space-y-2">
+                        <Label className="text-white">
+                          Lady Pilots Required
+                          {availableFemalePilots > 0 && (
+                            <span className="text-xs text-zinc-400 ml-2">
+                              ({availableFemalePilots} available)
+                            </span>
+                          )}
+                        </Label>
+                        <div className="overflow-x-auto">
+                          <div className="flex gap-2 pb-2">
+                            {Array.from({ length: Math.min(editedBooking.numberOfPeople || 0, availableFemalePilots) + 1 }, (_, i) => i).map((num) => (
+                              <button
+                                key={num}
+                                type="button"
+                                onClick={() => setEditedBooking({ ...editedBooking, femalePilotsRequired: num })}
+                                className={`flex-shrink-0 w-12 h-12 rounded-lg font-medium transition-colors ${
+                                  (editedBooking.femalePilotsRequired ?? 0) === num
+                                    ? "bg-white text-black"
+                                    : "bg-zinc-800 text-white hover:bg-zinc-700"
+                                }`}
+                              >
+                                {num}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Flight Type */}
+                      <div className="space-y-2">
+                        <Label className="text-white">
+                          Flight Type
+                        </Label>
+                        <div className="flex gap-2">
+                          {(["sensational", "classic", "early bird"] as const).map((type) => (
+                            <button
+                              key={type}
+                              type="button"
+                              onClick={() => setEditedBooking({ ...editedBooking, flightType: type })}
+                              className={`flex-1 px-4 py-3 rounded-lg font-medium transition-colors capitalize ${
+                                (editedBooking.flightType || "sensational") === type
+                                  ? "bg-white text-black"
+                                  : "bg-zinc-800 text-white hover:bg-zinc-700"
+                              }`}
+                            >
+                              {type}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Additional Notes (Optional) */}
+                      <div className="space-y-2">
+                        <Label className="text-white">
+                          Additional Notes
+                        </Label>
+                        <Textarea
+                          value={editedBooking.notes || ""}
+                          onChange={(e) => setEditedBooking({ ...editedBooking, notes: e.target.value })}
+                          rows={3}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -1130,9 +1242,17 @@ export function BookingDetailsModal({
                 <div className="pt-4 sticky bottom-0 bg-zinc-950 pb-2">
                   <Button
                     onClick={handleSavePayments}
-                    className="w-full bg-white text-black hover:bg-zinc-200"
+                    disabled={isSavingPayments}
+                    className="w-full bg-white text-black hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Save Payment Details
+                    {isSavingPayments ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      "Save Payment Details"
+                    )}
                   </Button>
                 </div>
               </>

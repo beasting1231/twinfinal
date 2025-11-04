@@ -450,6 +450,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                         bookingStatus={cell.booking.bookingStatus}
                         span={span}
                         femalePilotsRequired={cell.booking.femalePilotsRequired}
+                        flightType={cell.booking.flightType}
+                        notes={cell.booking.notes}
                         bookingSourceColor={getSourceColor(cell.booking.bookingSource)}
                         onBookedClick={() => handleBookedCellClick(cell.booking)}
                         onContextMenu={handleBookingContextMenu(cell.booking, timeSlot)}

@@ -59,6 +59,7 @@ export function NewBookingModal({
   const [notes, setNotes] = useState("");
   const [commission, setCommission] = useState("");
   const [femalePilotsRequired, setFemalePilotsRequired] = useState(0);
+  const [flightType, setFlightType] = useState<"sensational" | "classic" | "early bird">("sensational");
   const [showAdditionalOptions, setShowAdditionalOptions] = useState(false);
 
   const { startEditing, stopEditing } = useEditing();
@@ -104,31 +105,29 @@ export function NewBookingModal({
   // Calculate available slots at this time based on actually available pilots
   const availableSlots = useMemo(() => {
     // Count pilots who are actually available at this time slot
-    const actuallyAvailablePilots = pilots.filter((pilot, index) =>
+    const actuallyAvailablePilots = pilots.filter((pilot) =>
       !assignedPilotsAtThisTime.has(pilot.displayName) &&
-      isPilotAvailableForTimeSlot(pilot.uid, timeSlot) &&
-      !occupiedPilotIndices.has(index)
+      isPilotAvailableForTimeSlot(pilot.uid, timeSlot)
     ).length;
 
     return actuallyAvailablePilots;
-  }, [pilots, assignedPilotsAtThisTime, isPilotAvailableForTimeSlot, timeSlot, occupiedPilotIndices]);
+  }, [pilots, assignedPilotsAtThisTime, isPilotAvailableForTimeSlot, timeSlot]);
 
   // Calculate available female pilots at this time
   const availableFemalePilots = useMemo(() => {
-    const availableFemalePilotsList = pilots.filter((pilot, index) =>
+    const availableFemalePilotsList = pilots.filter((pilot) =>
       pilot.femalePilot &&
       !assignedPilotsAtThisTime.has(pilot.displayName) &&
-      isPilotAvailableForTimeSlot(pilot.uid, timeSlot) &&
-      !occupiedPilotIndices.has(index)
+      isPilotAvailableForTimeSlot(pilot.uid, timeSlot)
     );
     return availableFemalePilotsList.length;
-  }, [pilots, assignedPilotsAtThisTime, isPilotAvailableForTimeSlot, timeSlot, occupiedPilotIndices]);
+  }, [pilots, assignedPilotsAtThisTime, isPilotAvailableForTimeSlot, timeSlot]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
     // Validation
-    if (!customerName.trim() || !numberOfPeople || !pickupLocation.trim() || !bookingSource.trim()) {
+    if (!numberOfPeople || !bookingSource.trim()) {
       alert("Please fill in all required fields");
       return;
     }
@@ -165,9 +164,7 @@ export function NewBookingModal({
       date: format(selectedDate, "yyyy-MM-dd"),
       pilotIndex: startingPilotIndex,
       timeIndex,
-      customerName: customerName.trim(),
       numberOfPeople: numPeople,
-      pickupLocation: pickupLocation.trim(),
       bookingSource: bookingSource.trim(),
       assignedPilots: [], // Pilots will be assigned via the schedule grid
       bookingStatus: "unconfirmed",
@@ -175,6 +172,12 @@ export function NewBookingModal({
     };
 
     // Only add optional fields if they have values
+    if (customerName.trim()) {
+      bookingData.customerName = customerName.trim();
+    }
+    if (pickupLocation.trim()) {
+      bookingData.pickupLocation = pickupLocation.trim();
+    }
     if (phoneNumber.trim()) {
       bookingData.phoneNumber = phoneNumber.trim();
     }
@@ -193,6 +196,9 @@ export function NewBookingModal({
     if (femalePilotsRequired > 0) {
       bookingData.femalePilotsRequired = femalePilotsRequired;
     }
+    if (flightType !== "sensational") {
+      bookingData.flightType = flightType;
+    }
 
     onSubmit(bookingData);
 
@@ -206,6 +212,7 @@ export function NewBookingModal({
     setNotes("");
     setCommission("");
     setFemalePilotsRequired(0);
+    setFlightType("sensational");
     setShowAdditionalOptions(false);
     onOpenChange(false);
   };
@@ -221,6 +228,7 @@ export function NewBookingModal({
     setNotes("");
     setCommission("");
     setFemalePilotsRequired(0);
+    setFlightType("sensational");
     setShowAdditionalOptions(false);
     onOpenChange(false);
   };
@@ -232,13 +240,12 @@ export function NewBookingModal({
           {/* Customer Name */}
           <div className="space-y-2">
             <Label htmlFor="customerName" className="text-white">
-              Customer Name <span className="text-red-500">*</span>
+              Customer Name
             </Label>
             <Input
               id="customerName"
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
-              required
             />
           </div>
 
@@ -276,13 +283,12 @@ export function NewBookingModal({
           {/* Pickup Location */}
           <div className="space-y-2">
             <Label htmlFor="pickupLocation" className="text-white">
-              Pickup Location <span className="text-red-500">*</span>
+              Pickup Location
             </Label>
             <Input
               id="pickupLocation"
               value={pickupLocation}
               onChange={(e) => setPickupLocation(e.target.value)}
-              required
             />
           </div>
 
@@ -378,6 +384,29 @@ export function NewBookingModal({
                         </button>
                       ))}
                     </div>
+                  </div>
+                </div>
+
+                {/* Flight Type */}
+                <div className="space-y-2">
+                  <Label className="text-white">
+                    Flight Type
+                  </Label>
+                  <div className="flex gap-2">
+                    {(["sensational", "classic", "early bird"] as const).map((type) => (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => setFlightType(type)}
+                        className={`flex-1 px-4 py-3 rounded-lg font-medium transition-colors capitalize ${
+                          flightType === type
+                            ? "bg-white text-black"
+                            : "bg-zinc-800 text-white hover:bg-zinc-700"
+                        }`}
+                      >
+                        {type}
+                      </button>
+                    ))}
                   </div>
                 </div>
 

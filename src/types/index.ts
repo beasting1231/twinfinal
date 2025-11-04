@@ -15,19 +15,22 @@ export interface Booking {
   date: string; // ISO date string (YYYY-MM-DD)
   pilotIndex: number;
   timeIndex: number;
-  customerName: string;
+  customerName?: string;
   numberOfPeople: number;
-  pickupLocation: string;
+  pickupLocation?: string;
   bookingSource: string;
   phoneNumber?: string;
   email?: string;
   notes?: string;
   commission?: number | null;
   femalePilotsRequired?: number;
+  flightType?: "sensational" | "classic" | "early bird";
   assignedPilots: string[];
   bookingStatus: "unconfirmed" | "confirmed" | "pending" | "cancelled";
   span: number;
   pilotPayments?: PilotPayment[];
+  driver?: string;
+  vehicle?: string;
 }
 
 export interface UserProfile {
