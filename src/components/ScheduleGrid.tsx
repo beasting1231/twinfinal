@@ -526,7 +526,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
     return (
       <div className="flex-1 overflow-auto p-4 bg-zinc-950">
         <div className="inline-block">
-          <div className="grid gap-2" style={{ gridTemplateColumns: `80px repeat(5, 220px)` }}>
+          <div className="grid gap-2" style={{ gridTemplateColumns: `80px repeat(5, 220px) 48px 98px 98px` }}>
             {/* Header Row Skeleton */}
             <div className="h-7" />
             <div className="h-7 bg-zinc-900 rounded-lg animate-pulse" />
@@ -534,6 +534,11 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
             <div className="h-7 bg-zinc-900 rounded-lg animate-pulse" />
             <div className="h-7 bg-zinc-900 rounded-lg animate-pulse" />
             <div className="h-7 bg-zinc-900 rounded-lg animate-pulse" />
+            {/* Spacer between bookings and drivers */}
+            <div className="h-7 w-full" />
+            {/* Driver headers */}
+            <div className="h-7 bg-yellow-400/80 rounded-lg animate-pulse" />
+            <div className="h-7 bg-yellow-400/80 rounded-lg animate-pulse" />
 
             {/* Time Slot Rows Skeleton */}
             {timeSlots.map((_timeSlot, index) => (
@@ -544,6 +549,11 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                 <div className="h-14 bg-zinc-800 rounded-lg animate-pulse" />
                 <div className="h-14 bg-zinc-800 rounded-lg animate-pulse" />
                 <div className="h-14 bg-zinc-800 rounded-lg animate-pulse" />
+                <div className="h-14 bg-zinc-800 rounded-lg animate-pulse" />
+                <div className="h-14 bg-zinc-800 rounded-lg animate-pulse" />
+                {/* Spacer */}
+                <div className="h-14 w-full" />
+                {/* Driver cells */}
                 <div className="h-14 bg-zinc-800 rounded-lg animate-pulse" />
                 <div className="h-14 bg-zinc-800 rounded-lg animate-pulse" />
               </div>
@@ -557,11 +567,147 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
   // Show empty state if no pilots are available
   if (pilots.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-zinc-950">
-        <div className="text-center">
-          <p className="text-zinc-400 text-lg mb-2">No pilots available for this date</p>
-          <p className="text-zinc-500 text-sm">Pilots can mark their availability in the Availability screen</p>
+      <div className="flex-1 overflow-auto p-4 bg-zinc-950">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <p className="text-zinc-400 text-lg mb-2">No pilots available for this date</p>
+            <p className="text-zinc-500 text-sm">Pilots can mark their availability in the Availability screen</p>
+          </div>
         </div>
+
+        {/* Booking Requests Inbox - Always show even when no pilots */}
+        {bookingRequests.length > 0 && (
+          <div className="max-w-lg mx-auto mt-8">
+            <h2 className="text-xl font-semibold text-white mb-3">New Booking Requests</h2>
+            <div className="space-y-2">
+              {bookingRequests.map((request) => (
+                <BookingRequestItem
+                  key={request.id}
+                  request={request}
+                  onContextMenu={(req, position) => {
+                    setBookingRequestContextMenu({
+                      isOpen: true,
+                      position,
+                      request: req,
+                    });
+                  }}
+                  onDateClick={(dateString) => {
+                    if (onNavigateToDate) {
+                      // Parse the date string (YYYY-MM-DD) to a Date object
+                      const [year, month, day] = dateString.split('-').map(Number);
+                      const date = new Date(year, month - 1, day);
+                      onNavigateToDate(date);
+                    }
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* New Booking Modal - for "book for another time" */}
+        {selectedCell && (
+          <NewBookingModal
+            open={isModalOpen}
+            onOpenChange={(open) => {
+              setIsModalOpen(open);
+              if (!open) {
+                setBookingRequestToBook(null);
+              }
+            }}
+            selectedDate={selectedDate}
+            pilotIndex={selectedCell.pilotIndex}
+            timeIndex={selectedCell.timeIndex}
+            timeSlot={selectedCell.timeSlot}
+            pilots={pilots}
+            bookings={bookings}
+            isPilotAvailableForTimeSlot={isPilotAvailableForTimeSlot}
+            onSubmit={handleBookingSubmit}
+            initialData={bookingRequestToBook ? {
+              customerName: bookingRequestToBook.customerName,
+              numberOfPeople: bookingRequestToBook.numberOfPeople,
+              phoneNumber: bookingRequestToBook.phone,
+              email: bookingRequestToBook.email,
+              notes: bookingRequestToBook.notes,
+            } : undefined}
+          />
+        )}
+
+        {/* Booking Request Context Menu */}
+        {bookingRequestContextMenu && (
+          <BookingRequestContextMenu
+            isOpen={bookingRequestContextMenu.isOpen}
+            position={bookingRequestContextMenu.position}
+            onBook={async () => {
+              const request = bookingRequestContextMenu.request;
+              if (!request.id || !onAddBooking) return;
+
+              try {
+                // Find the time index
+                const timeSlotIndex = timeSlots.findIndex(slot => slot === request.time);
+
+                if (timeSlotIndex === -1) {
+                  alert("The requested time slot is not available in the schedule.");
+                  return;
+                }
+
+                // Create the booking
+                await onAddBooking({
+                  date: request.date,
+                  pilotIndex: 0,
+                  timeIndex: timeSlotIndex,
+                  customerName: request.customerName,
+                  numberOfPeople: request.numberOfPeople,
+                  pickupLocation: "",
+                  bookingSource: "twin",
+                  phoneNumber: request.phone || "",
+                  email: request.email,
+                  notes: request.notes || "",
+                  assignedPilots: [],
+                  bookingStatus: "pending",
+                  span: request.numberOfPeople,
+                });
+
+                // Mark request as approved
+                await updateDoc(doc(db, "bookingRequests", request.id), {
+                  status: "approved",
+                });
+              } catch (error) {
+                console.error("Error creating booking from request:", error);
+                alert("Failed to create booking. Please try again.");
+              }
+            }}
+            onBookForAnotherTime={() => {
+              setBookingRequestToBook(bookingRequestContextMenu.request);
+              setSelectedCell({ pilotIndex: 0, timeIndex: 0, timeSlot: timeSlots[0] });
+              setIsModalOpen(true);
+            }}
+            onAddToWaitingList={async () => {
+              const request = bookingRequestContextMenu.request;
+              alert(`Added ${request.customerName} to the waiting list for ${request.date} at ${request.time}`);
+
+              if (request.id) {
+                await updateDoc(doc(db, "bookingRequests", request.id), {
+                  status: "rejected",
+                });
+              }
+            }}
+            onDelete={async () => {
+              const request = bookingRequestContextMenu.request;
+              if (!request.id) return;
+
+              if (confirm(`Delete booking request from ${request.customerName}?`)) {
+                try {
+                  await deleteDoc(doc(db, "bookingRequests", request.id));
+                } catch (error) {
+                  console.error("Error deleting booking request:", error);
+                  alert("Failed to delete booking request. Please try again.");
+                }
+              }
+            }}
+            onClose={() => setBookingRequestContextMenu(null)}
+          />
+        )}
       </div>
     );
   }
@@ -579,7 +725,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
         className={`inline-block origin-top-left ${!isPinching ? 'transition-transform duration-100' : ''}`}
         style={{ transform: `scale(${scale})` }}
       >
-        <div className="grid gap-2" style={{ gridTemplateColumns: `80px repeat(${pilots.length}, 220px) 98px${showSecondDriverColumn ? ' 98px' : ''}` }}>
+        <div className="grid gap-2" style={{ gridTemplateColumns: `80px repeat(${pilots.length}, 220px) 48px 98px${showSecondDriverColumn ? ' 98px' : ''}` }}>
           {/* Header Row - Shows pilots present today */}
           <div className="h-7" />
           {pilots.map((p, index) => (
@@ -591,6 +737,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
               <span>{p.displayName}</span>
             </div>
           ))}
+          {/* Spacer between bookings and drivers */}
+          <div className="h-7 w-full" />
           {/* Driver Header */}
           <div className="h-7 flex items-center justify-center bg-yellow-400/80 rounded-lg font-medium text-sm text-zinc-900">
             Driver
@@ -752,6 +900,12 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                 }
                 return null;
               }),
+
+              // Spacer between bookings and drivers
+              <div
+                key={`spacer-${timeIndex}`}
+                className="h-14 w-full"
+              />,
 
               // Driver/Vehicle Cell - Always show, reads from driverAssignments (independent of bookings)
               <div

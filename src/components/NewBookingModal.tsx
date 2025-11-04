@@ -93,18 +93,6 @@ export function NewBookingModal({
     }
   }, [open, startEditing, stopEditing]);
 
-  // Get pilots already assigned at this time
-  const assignedPilotsAtThisTime = useMemo(() => {
-    const bookingsAtThisTime = bookings.filter(b => b.timeIndex === timeIndex);
-    const assigned = new Set<string>();
-    bookingsAtThisTime.forEach(booking => {
-      booking.assignedPilots.forEach(pilot => {
-        if (pilot && pilot !== "") assigned.add(pilot);
-      });
-    });
-    return assigned;
-  }, [bookings, timeIndex]);
-
   // Calculate occupied pilot positions at this time
   const occupiedPilotIndices = useMemo(() => {
     const bookingsAtThisTime = bookings.filter(b =>
@@ -123,25 +111,59 @@ export function NewBookingModal({
   }, [bookings, timeIndex, selectedDate]);
 
   // Calculate available slots at this time based on actually available pilots
+  // Use the same logic as BookingDetailsModal: total available pilots - total passengers booked
   const availableSlots = useMemo(() => {
-    // Count pilots who are actually available at this time slot
-    const actuallyAvailablePilots = pilots.filter((pilot) =>
-      !assignedPilotsAtThisTime.has(pilot.displayName) &&
+    const dateString = format(selectedDate, "yyyy-MM-dd");
+
+    // Count total pilots available at this time slot
+    const totalAvailablePilots = pilots.filter((pilot) =>
       isPilotAvailableForTimeSlot(pilot.uid, timeSlot)
     ).length;
 
-    return actuallyAvailablePilots;
-  }, [pilots, assignedPilotsAtThisTime, isPilotAvailableForTimeSlot, timeSlot]);
+    // Get bookings at this specific time and date
+    const bookingsAtThisTime = bookings.filter(
+      b => b.timeIndex === timeIndex && b.date === dateString
+    );
+
+    // Count total passengers booked at this time (sum of numberOfPeople)
+    const totalPassengersBooked = bookingsAtThisTime.reduce((sum, b) => {
+      return sum + (b.numberOfPeople || 0);
+    }, 0);
+
+    // Available slots = total available pilots - total passengers already booked
+    const available = totalAvailablePilots - totalPassengersBooked;
+
+    return Math.max(0, available);
+  }, [pilots, bookings, timeIndex, selectedDate, isPilotAvailableForTimeSlot, timeSlot]);
 
   // Calculate available female pilots at this time
   const availableFemalePilots = useMemo(() => {
+    const dateString = format(selectedDate, "yyyy-MM-dd");
+
+    // Get available female pilots at this time
     const availableFemalePilotsList = pilots.filter((pilot) =>
       pilot.femalePilot &&
-      !assignedPilotsAtThisTime.has(pilot.displayName) &&
       isPilotAvailableForTimeSlot(pilot.uid, timeSlot)
     );
-    return availableFemalePilotsList.length;
-  }, [pilots, assignedPilotsAtThisTime, isPilotAvailableForTimeSlot, timeSlot]);
+
+    // Get bookings at this specific time and date
+    const bookingsAtThisTime = bookings.filter(
+      b => b.timeIndex === timeIndex && b.date === dateString
+    );
+
+    // Count how many female pilots are already assigned
+    const assignedFemalePilots = new Set<string>();
+    bookingsAtThisTime.forEach(b => {
+      b.assignedPilots.forEach(pilotName => {
+        const pilot = pilots.find(p => p.displayName === pilotName);
+        if (pilot?.femalePilot) {
+          assignedFemalePilots.add(pilotName);
+        }
+      });
+    });
+
+    return Math.max(0, availableFemalePilotsList.length - assignedFemalePilots.size);
+  }, [pilots, bookings, timeIndex, selectedDate, isPilotAvailableForTimeSlot, timeSlot]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -167,8 +189,7 @@ export function NewBookingModal({
       .map((pilot, index) => ({
         index,
         pilot,
-        isAvailable: !assignedPilotsAtThisTime.has(pilot.displayName) &&
-                     isPilotAvailableForTimeSlot(pilot.uid, timeSlot) &&
+        isAvailable: isPilotAvailableForTimeSlot(pilot.uid, timeSlot) &&
                      !occupiedPilotIndices.has(index)
       }))
       .filter(p => p.isAvailable)

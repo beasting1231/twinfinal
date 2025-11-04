@@ -28,16 +28,40 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
   const { bookings } = useBookings();
   const { currentUser } = useAuth();
 
-  // State to track other pilots' availability for each date/time
-  const [otherPilotsAvailability, setOtherPilotsAvailability] = useState<Map<string, number>>(new Map());
+  // State to track all pilots' availability data
+  const [pilotsAvailabilityData, setPilotsAvailabilityData] = useState<{
+    pilotsSignedInPerDay: Map<string, Set<string>>; // date -> Set of pilot IDs
+    pilotsAvailablePerTimeSlot: Map<string, Set<string>>; // date-timeSlot -> Set of pilot IDs
+  }>({
+    pilotsSignedInPerDay: new Map(),
+    pilotsAvailablePerTimeSlot: new Map(),
+  });
+
+  const [pilotsAvailabilityLoading, setPilotsAvailabilityLoading] = useState(true);
+
+  // Track if initial load is complete - stays true until everything is loaded
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+
+  // Update initial loading state - only set to false when BOTH are loaded
+  useEffect(() => {
+    if (!loading && !pilotsAvailabilityLoading) {
+      setIsInitialLoading(false);
+    }
+  }, [loading, pilotsAvailabilityLoading]);
 
   // Fetch availability data for all pilots to determine if cells should be locked
   useEffect(() => {
     async function fetchAllPilotsAvailability() {
-      if (!currentUser) return;
+      if (!currentUser) {
+        setPilotsAvailabilityLoading(false);
+        return;
+      }
+
+      setPilotsAvailabilityLoading(true);
 
       try {
-        const availabilityMap = new Map<string, number>();
+        const pilotsSignedInPerDay = new Map<string, Set<string>>();
+        const pilotsAvailablePerTimeSlot = new Map<string, Set<string>>();
 
         // For each day in the week
         for (const day of days) {
@@ -51,19 +75,35 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
 
           const availabilitySnapshot = await getDocs(availabilityQuery);
 
-          // Count availability per time slot (excluding current user)
+          // Track which pilots are signed in for this day and which times they're available
           availabilitySnapshot.docs.forEach((doc) => {
             const data = doc.data();
-            if (data.userId !== currentUser.uid) {
-              const key = `${dateStr}-${data.timeSlot}`;
-              availabilityMap.set(key, (availabilityMap.get(key) || 0) + 1);
+            const pilotId = data.userId;
+            const timeSlot = data.timeSlot;
+
+            // Add pilot to the day's signed-in set
+            if (!pilotsSignedInPerDay.has(dateStr)) {
+              pilotsSignedInPerDay.set(dateStr, new Set());
             }
+            pilotsSignedInPerDay.get(dateStr)!.add(pilotId);
+
+            // Add pilot to this time slot's available set
+            const key = `${dateStr}-${timeSlot}`;
+            if (!pilotsAvailablePerTimeSlot.has(key)) {
+              pilotsAvailablePerTimeSlot.set(key, new Set());
+            }
+            pilotsAvailablePerTimeSlot.get(key)!.add(pilotId);
           });
         }
 
-        setOtherPilotsAvailability(availabilityMap);
+        setPilotsAvailabilityData({
+          pilotsSignedInPerDay,
+          pilotsAvailablePerTimeSlot,
+        });
+        setPilotsAvailabilityLoading(false);
       } catch (error) {
         console.error("Error fetching pilots availability:", error);
+        setPilotsAvailabilityLoading(false);
       }
     }
 
@@ -90,30 +130,33 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
       return false;
     }
 
-    // Check if there are any bookings at this time
+    // Step 1: Count how many pilots are signed in for this day
+    const pilotsSignedInToday = pilotsAvailabilityData.pilotsSignedInPerDay.get(dateStr);
+    if (!pilotsSignedInToday || pilotsSignedInToday.size === 0) {
+      return false;
+    }
+    const totalPilotsSignedIn = pilotsSignedInToday.size;
+
+    // Step 2: Count how many of those pilots are signed OUT for this specific time slot
+    // (signed in for day but NOT available for this time)
+    const pilotsAvailableAtThisTime = pilotsAvailabilityData.pilotsAvailablePerTimeSlot.get(key);
+    const pilotsSignedOutForThisTime = totalPilotsSignedIn - (pilotsAvailableAtThisTime?.size || 0);
+
+    // Step 3: Count total pax booked at this time
     const bookingsAtThisTime = bookings.filter(booking => {
       return booking.date === dateStr && booking.timeIndex === timeSlotIndex;
     });
 
-    if (bookingsAtThisTime.length === 0) {
-      return false;
-    }
+    const totalPaxBooked = bookingsAtThisTime.reduce((sum, booking) => {
+      return sum + (booking.numberOfPeople || 0);
+    }, 0);
 
-    // Count how many other pilots are available (excluding current user)
-    const otherAvailablePilots = otherPilotsAvailability.get(key) || 0;
+    // Step 4: Calculate available spots
+    // Available spots = (pilots signed in) - (pilots signed out for this time) - (pax booked)
+    const availableSpots = totalPilotsSignedIn - pilotsSignedOutForThisTime - totalPaxBooked;
 
-    // Check if any booking would be under-staffed if this pilot signs out
-    for (const booking of bookingsAtThisTime) {
-      const requiredPilots = booking.numberOfPeople;
-
-      // If removing this pilot would leave fewer pilots than required, lock the cell
-      // otherAvailablePilots doesn't include current user, so we compare directly
-      if (otherAvailablePilots < requiredPilots) {
-        return true;
-      }
-    }
-
-    return false;
+    // Step 5: If available spots = 0, lock all pilots that are currently signed in for this time
+    return availableSpots <= 0;
   };
 
   // Zoom state
@@ -267,14 +310,14 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
                 <button
                   onClick={() => handleToggleColumn(dayIndex)}
                   className="h-14 flex flex-col items-center justify-center bg-zinc-900 rounded-lg font-medium text-sm hover:bg-zinc-800 transition-colors cursor-pointer"
-                  disabled={loading}
+                  disabled={isInitialLoading || saving}
                 >
                   <div className="text-xs text-zinc-400">{dayName}</div>
                   <div>{monthDay}</div>
                 </button>
 
                 {/* Time Slots for this day */}
-                {loading ? (
+                {isInitialLoading ? (
                   // Loading skeleton
                   timeSlots.map((_, slotIndex) => (
                     <div key={`skeleton-${dayIndex}-${slotIndex}`} className="h-14">
