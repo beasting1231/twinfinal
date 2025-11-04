@@ -6,6 +6,7 @@ import { AvailabilityGrid } from "./components/AvailabilityGrid";
 import { Account } from "./components/Account/Account";
 import { BookingSources } from "./components/BookingSources";
 import { Accounting } from "./components/Accounting";
+import { Priority } from "./components/Priority";
 import { useBookings } from "./hooks/useBookings";
 import { usePilots } from "./hooks/usePilots";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
@@ -13,7 +14,7 @@ import { EditingProvider } from "./contexts/EditingContext";
 import { Login } from "./components/Auth/Login";
 import { getTimeSlotsByDate } from "./utils/timeSlots";
 
-type View = "daily-plan" | "availability" | "account" | "booking-sources" | "accounting";
+type View = "daily-plan" | "availability" | "account" | "booking-sources" | "accounting" | "priority";
 
 function AppContent() {
   const [currentView, setCurrentView] = useState<View>("daily-plan");
@@ -31,7 +32,7 @@ function AppContent() {
   }, [bookings, selectedDate]);
 
   // Fetch available pilots for the selected date, passing bookings for sorting
-  const { pilots, loading: pilotsLoading, isPilotAvailableForTimeSlot } = usePilots(selectedDate, filteredBookings);
+  const { pilots, loading: pilotsLoading, isPilotAvailableForTimeSlot } = usePilots(selectedDate);
 
   // Wait for both pilots and bookings to load before showing the schedule
   const isLoading = pilotsLoading || bookingsLoading;
@@ -76,6 +77,8 @@ function AppContent() {
         <BookingSources />
       ) : currentView === "accounting" ? (
         <Accounting />
+      ) : currentView === "priority" ? (
+        <Priority />
       ) : null}
     </div>
   );

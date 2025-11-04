@@ -9,7 +9,7 @@ export interface PilotAvailability {
   availableTimeSlots: Set<string>;
 }
 
-export function usePilots(selectedDate: Date, bookings: any[] = []) {
+export function usePilots(selectedDate: Date) {
   const [rawPilots, setRawPilots] = useState<Pilot[]>([]);
   const [pilotAvailability, setPilotAvailability] = useState<Map<string, Set<string>>>(new Map());
   const [loading, setLoading] = useState(true);
@@ -76,7 +76,9 @@ export function usePilots(selectedDate: Date, bookings: any[] = []) {
             return {
               uid: profileData.uid,
               displayName: profileData.displayName || "Unknown Pilot",
+              email: profileData.email || "",
               femalePilot: profileData.femalePilot || false,
+              priority: profileData.priority || undefined,
             };
           });
 
@@ -148,43 +150,24 @@ export function usePilots(selectedDate: Date, bookings: any[] = []) {
     return () => unsubscribe();
   }, [selectedDate]);
 
-  // Memoized sorted pilots - recalculates only when rawPilots or bookings change
+  // Memoized sorted pilots - recalculates only when rawPilots change
   const pilots = useMemo(() => {
     console.log("Recalculating pilot sort order");
-
-    // Count how many bookings each pilot has for this date
-    const bookingCounts = new Map<string, number>();
-    rawPilots.forEach(pilot => {
-      const count = bookings.filter(booking =>
-        booking.assignedPilots?.includes(pilot.displayName)
-      ).length;
-      bookingCounts.set(pilot.displayName, count);
-    });
 
     // Create a copy for sorting (don't mutate rawPilots)
     const sortedPilots = [...rawPilots];
 
-    // Sort pilots by:
-    // 1. Number of bookings (descending - most bookings first)
-    // 2. Availability count (descending - most available first)
-    // 3. Alphabetically
+    // Sort pilots by priority (lower number = higher priority = leftmost)
     sortedPilots.sort((a, b) => {
-      const aBookings = bookingCounts.get(a.displayName) || 0;
-      const bBookings = bookingCounts.get(b.displayName) || 0;
-      const aAvailability = pilotAvailability.get(a.uid)?.size || 0;
-      const bAvailability = pilotAvailability.get(b.uid)?.size || 0;
+      const aPriority = a.priority ?? 999999;
+      const bPriority = b.priority ?? 999999;
 
-      // First, sort by booking count (most bookings first on left)
-      if (bBookings !== aBookings) {
-        return bBookings - aBookings;
+      // Sort by priority (lower number first)
+      if (aPriority !== bPriority) {
+        return aPriority - bPriority;
       }
 
-      // Second, sort by availability count (most available first)
-      if (bAvailability !== aAvailability) {
-        return bAvailability - aAvailability;
-      }
-
-      // Finally, sort alphabetically
+      // If same priority (or both undefined), sort alphabetically
       return a.displayName.localeCompare(b.displayName);
     });
 
@@ -208,7 +191,7 @@ export function usePilots(selectedDate: Date, bookings: any[] = []) {
     console.log("Pilot sort order changed - returning new array");
     prevPilotsRef.current = sortedPilots;
     return sortedPilots;
-  }, [rawPilots, bookings, pilotAvailability]);
+  }, [rawPilots]);
 
   const isPilotAvailableForTimeSlot = (pilotUid: string, timeSlot: string): boolean => {
     const slots = pilotAvailability.get(pilotUid);

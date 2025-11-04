@@ -15,12 +15,9 @@ export const DriverVehicleCell = memo(function DriverVehicleCell({
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
 
-  if (!booking) {
-    return null;
-  }
-
-  const hasDriver = booking.driver && booking.driver.trim();
-  const hasVehicle = booking.vehicle && booking.vehicle.trim();
+  // Extract driver/vehicle info from booking if it exists
+  const hasDriver = booking?.driver && booking.driver.trim();
+  const hasVehicle = booking?.vehicle && booking.vehicle.trim();
   const hasNoAssignment = !hasDriver && !hasVehicle;
 
   const handleContextMenu = (e: React.MouseEvent) => {
@@ -88,12 +85,12 @@ export const DriverVehicleCell = memo(function DriverVehicleCell({
         <div className="flex flex-col items-center gap-0.5 w-full">
           {hasDriver && (
             <div className="text-xs text-zinc-900 font-medium truncate w-full text-center">
-              {booking.driver}
+              {booking?.driver}
             </div>
           )}
           {hasVehicle && (
             <div className="text-xs text-zinc-900 truncate w-full text-center">
-              {booking.vehicle}
+              {booking?.vehicle}
             </div>
           )}
         </div>

@@ -41,6 +41,7 @@ export interface UserProfile {
   displayName: string;
   email: string;
   femalePilot: boolean;
+  priority?: number;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -48,7 +49,19 @@ export interface UserProfile {
 export interface Pilot {
   uid: string;
   displayName: string;
+  email?: string;
   femalePilot: boolean;
+  priority?: number;
 }
 
 export type BookingStatus = "available" | "booked" | "noPilot";
+
+export interface DriverAssignment {
+  id?: string;
+  date: string; // ISO date string (YYYY-MM-DD)
+  timeIndex: number;
+  driver?: string;
+  vehicle?: string;
+  driver2?: string;
+  vehicle2?: string;
+}

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
-import { format, parseISO, subDays, startOfDay } from "date-fns";
+import { format, parseISO, startOfDay } from "date-fns";
 import { useBookings } from "../hooks/useBookings";
-import { Search, Filter, Download } from "lucide-react";
+import { Download, Filter } from "lucide-react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { getTimeSlotsByDate } from "../utils/timeSlots";
@@ -28,14 +28,12 @@ interface AccountingRow {
 
 export function Accounting() {
   const { bookings, loading } = useBookings();
-  const [searchTerm, setSearchTerm] = useState("");
 
   // Filter states
   const [dateRange, setDateRange] = useState<{ from: string; to: string }>(() => {
     const today = startOfDay(new Date());
-    const sevenDaysAgo = subDays(today, 7);
     return {
-      from: format(sevenDaysAgo, "yyyy-MM-dd"),
+      from: format(today, "yyyy-MM-dd"),
       to: format(today, "yyyy-MM-dd"),
     };
   });
@@ -198,21 +196,8 @@ export function Accounting() {
       filtered = filtered.filter((row) => selectedSources.includes(row.bookingSource));
     }
 
-    // Apply search term
-    if (searchTerm) {
-      const search = searchTerm.toLowerCase();
-      filtered = filtered.filter((row) =>
-        row.pilot.toLowerCase().includes(search) ||
-        row.date.includes(search) ||
-        row.time.includes(search) ||
-        row.drivers.some(d => d.toLowerCase().includes(search)) ||
-        row.vehicles.some(v => v.toLowerCase().includes(search)) ||
-        row.bookingSource.toLowerCase().includes(search)
-      );
-    }
-
     return filtered;
-  }, [accountingData, dateRange, selectedPilots, selectedMethods, selectedDrivers, selectedVehicles, selectedSources, searchTerm]);
+  }, [accountingData, dateRange, selectedPilots, selectedMethods, selectedDrivers, selectedVehicles, selectedSources]);
 
   // Format date for display
   const formatDate = (dateStr: string) => {
@@ -323,18 +308,9 @@ export function Accounting() {
             onChange={(e) => setDateRange({ ...dateRange, to: e.target.value })}
             className="bg-zinc-900 border-zinc-800 text-white w-40"
           />
-        </div>
-
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-zinc-500" />
-          <Input
-            type="text"
-            placeholder="Search by pilot, date, driver, or vehicle..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 bg-zinc-900 border-zinc-800 text-white placeholder-zinc-500"
-          />
+          <span className="text-sm text-zinc-400 ml-6">
+            Total flights: <span className="text-white font-medium">{filteredData.length}</span>
+          </span>
         </div>
       </div>
 

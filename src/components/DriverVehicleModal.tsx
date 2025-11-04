@@ -11,15 +11,19 @@ import { Input } from "./ui/input";
 import { ChevronDown } from "lucide-react";
 import { useDrivers } from "../hooks/useDrivers";
 import { useVehicles } from "../hooks/useVehicles";
+import { useDriverAssignments } from "../hooks/useDriverAssignments";
 import type { Booking } from "../types";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "../firebase/config";
+import { format } from "date-fns";
 
 interface DriverVehicleModalProps {
   isOpen: boolean;
   onClose: () => void;
   booking: Booking | null;
   driverColumn?: 1 | 2;
+  timeIndex?: number;
+  date?: Date;
 }
 
 interface AutocompleteFieldProps {
@@ -148,16 +152,28 @@ export function DriverVehicleModal({
   onClose,
   booking,
   driverColumn = 1,
+  timeIndex = 0,
+  date = new Date(),
 }: DriverVehicleModalProps) {
   const { drivers } = useDrivers();
   const { vehicles } = useVehicles();
+  const dateString = format(date, "yyyy-MM-dd");
+  const {
+    addDriverAssignment,
+    updateDriverAssignment,
+    findAssignment
+  } = useDriverAssignments(dateString);
+
   const [driver, setDriver] = useState("");
   const [vehicle, setVehicle] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
-  // Initialize fields when booking changes
+  // Initialize fields when modal opens
   useEffect(() => {
+    if (!isOpen) return;
+
     if (booking) {
+      // Load from booking
       if (driverColumn === 2) {
         setDriver(booking.driver2 || "");
         setVehicle(booking.vehicle2 || "");
@@ -165,25 +181,73 @@ export function DriverVehicleModal({
         setDriver(booking.driver || "");
         setVehicle(booking.vehicle || "");
       }
+    } else {
+      // Load from standalone driver assignment if exists
+      const existingAssignment = findAssignment(dateString, timeIndex);
+      if (existingAssignment) {
+        if (driverColumn === 2) {
+          setDriver(existingAssignment.driver2 || "");
+          setVehicle(existingAssignment.vehicle2 || "");
+        } else {
+          setDriver(existingAssignment.driver || "");
+          setVehicle(existingAssignment.vehicle || "");
+        }
+      } else {
+        // No assignment exists, clear fields
+        setDriver("");
+        setVehicle("");
+      }
     }
-  }, [booking, driverColumn]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, booking?.id, driverColumn, dateString, timeIndex]);
 
   const handleSave = async () => {
-    if (!booking?.id) return;
-
     setIsSaving(true);
     try {
-      const bookingRef = doc(db, "bookings", booking.id);
-      if (driverColumn === 2) {
-        await updateDoc(bookingRef, {
-          driver2: driver.trim() || null,
-          vehicle2: vehicle.trim() || null,
-        });
+      if (booking?.id) {
+        // Update booking with driver/vehicle
+        const bookingRef = doc(db, "bookings", booking.id);
+        if (driverColumn === 2) {
+          await updateDoc(bookingRef, {
+            driver2: driver.trim() || null,
+            vehicle2: vehicle.trim() || null,
+          });
+        } else {
+          await updateDoc(bookingRef, {
+            driver: driver.trim() || null,
+            vehicle: vehicle.trim() || null,
+          });
+        }
       } else {
-        await updateDoc(bookingRef, {
-          driver: driver.trim() || null,
-          vehicle: vehicle.trim() || null,
-        });
+        // Handle standalone driver assignment
+        const existingAssignment = findAssignment(dateString, timeIndex);
+
+        if (existingAssignment) {
+          // Update existing assignment
+          const updates: any = {};
+          if (driverColumn === 2) {
+            updates.driver2 = driver.trim() || null;
+            updates.vehicle2 = vehicle.trim() || null;
+          } else {
+            updates.driver = driver.trim() || null;
+            updates.vehicle = vehicle.trim() || null;
+          }
+          await updateDriverAssignment(existingAssignment.id!, updates);
+        } else {
+          // Create new assignment
+          const newAssignment: any = {
+            date: dateString,
+            timeIndex: timeIndex,
+          };
+          if (driverColumn === 2) {
+            newAssignment.driver2 = driver.trim() || null;
+            newAssignment.vehicle2 = vehicle.trim() || null;
+          } else {
+            newAssignment.driver = driver.trim() || null;
+            newAssignment.vehicle = vehicle.trim() || null;
+          }
+          await addDriverAssignment(newAssignment);
+        }
       }
       onClose();
     } catch (error) {
@@ -195,12 +259,30 @@ export function DriverVehicleModal({
   };
 
   const handleCancel = () => {
-    if (driverColumn === 2) {
-      setDriver(booking?.driver2 || "");
-      setVehicle(booking?.vehicle2 || "");
+    if (booking) {
+      // Reset from booking
+      if (driverColumn === 2) {
+        setDriver(booking.driver2 || "");
+        setVehicle(booking.vehicle2 || "");
+      } else {
+        setDriver(booking.driver || "");
+        setVehicle(booking.vehicle || "");
+      }
     } else {
-      setDriver(booking?.driver || "");
-      setVehicle(booking?.vehicle || "");
+      // Reset from standalone driver assignment
+      const existingAssignment = findAssignment(dateString, timeIndex);
+      if (existingAssignment) {
+        if (driverColumn === 2) {
+          setDriver(existingAssignment.driver2 || "");
+          setVehicle(existingAssignment.vehicle2 || "");
+        } else {
+          setDriver(existingAssignment.driver || "");
+          setVehicle(existingAssignment.vehicle || "");
+        }
+      } else {
+        setDriver("");
+        setVehicle("");
+      }
     }
     onClose();
   };
