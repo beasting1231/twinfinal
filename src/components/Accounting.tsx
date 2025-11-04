@@ -63,9 +63,10 @@ export function Accounting() {
     sortedBookings.forEach((booking) => {
       const turnKey = `${booking.date}@${booking.timeIndex}`;
 
-      // Accumulate total pax for this turn
+      // Count only pax that have pilots assigned (number of unique assigned pilots)
+      const uniqueAssignedPilots = new Set(booking.assignedPilots?.filter(p => p && p.trim()) || []);
       const currentPax = totalPaxByTurn.get(turnKey) || 0;
-      totalPaxByTurn.set(turnKey, currentPax + (booking.numberOfPeople || 0));
+      totalPaxByTurn.set(turnKey, currentPax + uniqueAssignedPilots.size);
 
       // Collect drivers for this turn
       if (!driversByTurn.has(turnKey)) {
