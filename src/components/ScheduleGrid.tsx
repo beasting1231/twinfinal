@@ -163,8 +163,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
 
   // Check if user can manage drivers
   const canManageDrivers = useCallback(() => {
-    // Only office and admin can manage drivers
-    return role === "office" || role === "admin";
+    // Only driver and admin can manage drivers
+    return role === "driver" || role === "admin";
   }, [role]);
 
   const handleBookedCellClick = useCallback((booking: Booking) => {
@@ -196,7 +196,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
   }, [onAddBooking, bookingRequestToBook]);
 
   const handleDriverVehicleCellClick = useCallback((booking: Booking | null, driverColumn: 1 | 2 = 1, timeIndex: number) => {
-    // Only office and admin can manage drivers
+    // Only driver and admin can manage drivers
     if (!canManageDrivers()) {
       return;
     }

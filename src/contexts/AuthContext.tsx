@@ -66,6 +66,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      // Keep loading true while we fetch the role
+      setLoading(true);
       setCurrentUser(user);
 
       // Fetch user role from Firestore

@@ -95,7 +95,7 @@ export function Header({
                   Booking Sources
                 </button>
               )}
-              {permissions.canViewAllBookings && (
+              {permissions.canAccessAccounting && (
                 <button
                   onClick={() => handleViewChange("accounting")}
                   className={`w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white ${

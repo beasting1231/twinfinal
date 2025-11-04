@@ -19,6 +19,9 @@ export interface Permissions {
   // Drivers and sources
   canManageDriversAndSources: boolean;
 
+  // Accounting
+  canAccessAccounting: boolean;
+
   // User management
   canManageRoles: boolean;
   canEditAllUsers: boolean;
@@ -41,6 +44,7 @@ export function getPermissions(role: UserRole): Permissions {
       canDeleteAllBookings: false,
       canManageBookingRequests: false,
       canManageDriversAndSources: false,
+      canAccessAccounting: false,
       canManageRoles: false,
       canEditAllUsers: false,
     };
@@ -59,6 +63,7 @@ export function getPermissions(role: UserRole): Permissions {
         canDeleteAllBookings: false,
         canManageBookingRequests: false,
         canManageDriversAndSources: false,
+        canAccessAccounting: true,
         canManageRoles: false,
         canEditAllUsers: false,
       };
@@ -75,22 +80,24 @@ export function getPermissions(role: UserRole): Permissions {
         canDeleteAllBookings: false,
         canManageBookingRequests: false,
         canManageDriversAndSources: false,
+        canAccessAccounting: false,
         canManageRoles: false,
         canEditAllUsers: false,
       };
 
-    case "office":
+    case "driver":
       return {
-        canManageOwnAvailability: true,
-        canManageAllAvailability: true,
+        canManageOwnAvailability: false,
+        canManageAllAvailability: false,
         canViewAllBookings: true,
         canCreateBookings: true,
         canEditOwnBookings: true,
         canEditAllBookings: true,
         canDeleteOwnBookings: true,
-        canDeleteAllBookings: true,
-        canManageBookingRequests: true,
-        canManageDriversAndSources: true,
+        canDeleteAllBookings: false,
+        canManageBookingRequests: false,
+        canManageDriversAndSources: false,
+        canAccessAccounting: false,
         canManageRoles: false,
         canEditAllUsers: false,
       };
@@ -107,6 +114,7 @@ export function getPermissions(role: UserRole): Permissions {
         canDeleteAllBookings: true,
         canManageBookingRequests: true,
         canManageDriversAndSources: true,
+        canAccessAccounting: true,
         canManageRoles: true,
         canEditAllUsers: true,
       };

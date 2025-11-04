@@ -42,7 +42,7 @@ export function BookingDetailsModal({
 }: BookingDetailsModalProps) {
   const { currentUser } = useAuth();
   const { startEditing, stopEditing } = useEditing();
-  const { canEditBooking, canDeleteBooking } = useRole();
+  const { canEditBooking, canDeleteBooking, role } = useRole();
   const [isEditing, setIsEditing] = useState(false);
   const [editedBooking, setEditedBooking] = useState<Booking | null>(null);
 
@@ -530,9 +530,11 @@ export function BookingDetailsModal({
           <DialogTitle>Booking Details</DialogTitle>
         </div>
         <Tabs defaultValue="details" className="w-full overflow-x-hidden">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className={`grid w-full ${role !== 'agency' && role !== 'driver' ? 'grid-cols-2' : 'grid-cols-1'}`}>
             <TabsTrigger value="details">Booking Details</TabsTrigger>
-            <TabsTrigger value="payment">Payment</TabsTrigger>
+            {role !== 'agency' && role !== 'driver' && (
+              <TabsTrigger value="payment">Payment</TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="details" className="space-y-4 overflow-x-hidden px-1">
@@ -1094,7 +1096,8 @@ export function BookingDetailsModal({
             </div>
           </TabsContent>
 
-          <TabsContent value="payment" className="space-y-4 max-h-[60vh] overflow-y-auto">
+          {role !== 'agency' && role !== 'driver' && (
+            <TabsContent value="payment" className="space-y-4 max-h-[60vh] overflow-y-auto">
             {sortedPilotPayments.length === 0 ? (
               <div className="text-center py-12 text-zinc-500">
                 <p>No pilots assigned to this booking</p>
@@ -1287,6 +1290,7 @@ export function BookingDetailsModal({
               </>
             )}
           </TabsContent>
+          )}
         </Tabs>
       </DialogContent>
 

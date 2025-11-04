@@ -25,7 +25,7 @@ export function UserManagement() {
       usersData.sort((a, b) => {
         const getRoleOrder = (role: UserRole): number => {
           if (role === "admin") return 0;
-          if (role === "office") return 1;
+          if (role === "driver") return 1;
           if (role === "agency") return 2;
           if (role === "pilot") return 3;
           return 4; // null
@@ -94,7 +94,7 @@ export function UserManagement() {
     switch (role) {
       case "admin":
         return "bg-red-900 text-red-200";
-      case "office":
+      case "driver":
         return "bg-blue-900 text-blue-200";
       case "agency":
         return "bg-purple-900 text-purple-200";
@@ -121,7 +121,7 @@ export function UserManagement() {
     { value: null, label: "No Access" },
     { value: "pilot", label: "Pilot" },
     { value: "agency", label: "Agency" },
-    { value: "office", label: "Office" },
+    { value: "driver", label: "Driver" },
     { value: "admin", label: "Admin" },
   ];
 

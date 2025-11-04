@@ -37,7 +37,7 @@ export interface Booking {
   createdBy?: string; // UID of user who created the booking
 }
 
-export type UserRole = "pilot" | "agency" | "office" | "admin" | null;
+export type UserRole = "pilot" | "agency" | "driver" | "admin" | null;
 
 export interface UserProfile {
   uid: string;

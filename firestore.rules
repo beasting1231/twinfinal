@@ -24,25 +24,25 @@ service cloud.firestore {
 
       // Pilot: can create bookings
       // Agency: can create bookings
-      // Office: can create bookings
+      // Driver: can create bookings
       // Admin: can create bookings
-      allow create: if request.auth != null && hasAnyRole(['pilot', 'agency', 'office', 'admin']);
+      allow create: if request.auth != null && hasAnyRole(['pilot', 'agency', 'driver', 'admin']);
 
       // Pilot: can update only their own bookings (check createdBy)
       // Agency: can update only their own bookings (check createdBy)
-      // Office: can update all bookings
+      // Driver: can update all bookings
       // Admin: can update all bookings
       // Note: Allow updates to bookings without createdBy field (legacy bookings)
       allow update: if request.auth != null && (
-        hasAnyRole(['office', 'admin']) ||
+        hasAnyRole(['driver', 'admin']) ||
         (hasAnyRole(['pilot', 'agency']) && (
           !('createdBy' in resource.data) ||
           resource.data.createdBy == request.auth.uid
         ))
       );
       allow delete: if request.auth != null && (
-        (hasAnyRole(['pilot', 'agency']) && resource.data.createdBy == request.auth.uid) ||
-        hasAnyRole(['office', 'admin'])
+        (hasAnyRole(['pilot', 'agency', 'driver']) && resource.data.createdBy == request.auth.uid) ||
+        hasRole('admin')
       );
     }
 
@@ -50,8 +50,8 @@ service cloud.firestore {
     match /bookingRequests/{requestId} {
       // Anyone can create a booking request (public form)
       allow create: if true;
-      // Office and admin can read/update/delete
-      allow read, update, delete: if request.auth != null && hasAnyRole(['office', 'admin']);
+      // Driver and admin can read/update/delete
+      allow read, update, delete: if request.auth != null && hasAnyRole(['driver', 'admin']);
     }
 
     // Availability collection
@@ -60,15 +60,15 @@ service cloud.firestore {
       allow read: if true;
 
       // Pilot: can create/update/delete only their own availability
-      // Office: can create/update/delete anyone's availability
+      // Driver: can create/update/delete anyone's availability
       // Admin: can create/update/delete anyone's availability
       allow create: if request.auth != null && (
         (hasRole('pilot') && request.resource.data.userId == request.auth.uid) ||
-        hasAnyRole(['office', 'admin'])
+        hasAnyRole(['driver', 'admin'])
       );
       allow update, delete: if request.auth != null && (
         (hasRole('pilot') && resource.data.userId == request.auth.uid) ||
-        hasAnyRole(['office', 'admin'])
+        hasAnyRole(['driver', 'admin'])
       );
     }
 
@@ -76,14 +76,14 @@ service cloud.firestore {
     match /bookingSources/{sourceId} {
       // All authenticated users can read (needed to display booking source colors)
       allow read: if request.auth != null;
-      // Only office and admin can write
-      allow write: if request.auth != null && hasAnyRole(['office', 'admin']);
+      // Only driver and admin can write
+      allow write: if request.auth != null && hasAnyRole(['driver', 'admin']);
     }
 
     // Driver assignments collection
     match /driverAssignments/{assignmentId} {
-      // Office and admin can read/write
-      allow read, write: if request.auth != null && hasAnyRole(['office', 'admin']);
+      // Driver and admin can read/write
+      allow read, write: if request.auth != null && hasAnyRole(['driver', 'admin']);
     }
 
     // User profiles collection

@@ -3,6 +3,7 @@ import { doc, getDoc, setDoc, collection, getDocs, updateDoc } from "firebase/fi
 import { updateProfile } from "firebase/auth";
 import { db } from "../../firebase/config";
 import { useAuth } from "../../contexts/AuthContext";
+import { useRole } from "../../hooks/useRole";
 import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
 import { Button } from "../ui/button";
@@ -10,6 +11,7 @@ import type { UserProfile } from "../../types/index";
 
 export function Account() {
   const { currentUser } = useAuth();
+  const { role } = useRole();
   const [displayName, setDisplayName] = useState("");
   const [femalePilot, setFemalePilot] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -133,10 +135,36 @@ export function Account() {
     );
   }
 
+  const getRoleBadgeColor = () => {
+    switch (role) {
+      case "admin":
+        return "bg-red-900 text-red-200";
+      case "driver":
+        return "bg-blue-900 text-blue-200";
+      case "agency":
+        return "bg-purple-900 text-purple-200";
+      case "pilot":
+        return "bg-green-900 text-green-200";
+      default:
+        return "bg-zinc-700 text-zinc-300";
+    }
+  };
+
+  const getRoleDisplayName = () => {
+    return role || "No Access";
+  };
+
   return (
     <div className="max-w-2xl mx-auto p-6">
       <div className="bg-zinc-900 rounded-lg border border-zinc-800 p-8">
-        <h1 className="text-3xl font-bold text-white mb-8">Account Settings</h1>
+        <h1 className="text-3xl font-bold text-white mb-2">Account Settings</h1>
+
+        {/* Role Badge */}
+        <div className="mb-6">
+          <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${getRoleBadgeColor()}`}>
+            {getRoleDisplayName()}
+          </span>
+        </div>
 
         <div className="space-y-6">
           {/* Username Section */}
@@ -155,24 +183,26 @@ export function Account() {
             <p className="text-xs text-zinc-500">This is the name that will be displayed throughout the app.</p>
           </div>
 
-          {/* Female Pilot Toggle Section */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between p-4 bg-zinc-950 rounded-lg border border-zinc-800">
-              <div className="space-y-1">
-                <label htmlFor="female-pilot" className="text-sm font-medium text-zinc-200 cursor-pointer">
-                  Female Pilot
-                </label>
-                <p className="text-xs text-zinc-500">
-                  Enable this if you identify as a female pilot
-                </p>
+          {/* Female Pilot Toggle Section - Only show for pilots and admin */}
+          {role !== "agency" && role !== "driver" && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between p-4 bg-zinc-950 rounded-lg border border-zinc-800">
+                <div className="space-y-1">
+                  <label htmlFor="female-pilot" className="text-sm font-medium text-zinc-200 cursor-pointer">
+                    Female Pilot
+                  </label>
+                  <p className="text-xs text-zinc-500">
+                    Enable this if you identify as a female pilot
+                  </p>
+                </div>
+                <Switch
+                  id="female-pilot"
+                  checked={femalePilot}
+                  onCheckedChange={setFemalePilot}
+                />
               </div>
-              <Switch
-                id="female-pilot"
-                checked={femalePilot}
-                onCheckedChange={setFemalePilot}
-              />
             </div>
-          </div>
+          )}
 
           {/* Email (Read-only) */}
           <div className="space-y-2">
