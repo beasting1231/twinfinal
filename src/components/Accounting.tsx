@@ -101,8 +101,13 @@ export function Accounting() {
       const drivers = Array.from(driversByTurn.get(turnKey) || []);
       const vehicles = Array.from(vehiclesByTurn.get(turnKey) || []);
 
-      // Create one row for each assigned pilot
-      booking.assignedPilots.forEach((pilotName) => {
+      // Create one row for each unique assigned pilot, filtering out empty values
+      const uniquePilots = [...new Set(booking.assignedPilots.filter(p => p && p.trim()))];
+
+      // Skip if no valid pilots after filtering
+      if (uniquePilots.length === 0) return;
+
+      uniquePilots.forEach((pilotName) => {
         // Try to find payment info for this pilot
         const pilotPayment = booking.pilotPayments?.find(p => p.pilotName === pilotName);
 
