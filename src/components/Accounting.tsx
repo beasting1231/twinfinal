@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 import { format, parseISO, subDays, startOfDay } from "date-fns";
 import { useBookings } from "../hooks/useBookings";
-import { Search, Filter } from "lucide-react";
+import { Search, Filter, Download } from "lucide-react";
 import { Input } from "./ui/input";
+import { Button } from "./ui/button";
 import { getTimeSlotsByDate } from "../utils/timeSlots";
 import { FilterDropdown } from "./FilterDropdown";
 
@@ -224,14 +225,62 @@ export function Accounting() {
     }
   };
 
+  // Export to CSV
+  const exportToCSV = () => {
+    // Create CSV headers
+    const headers = ["Date", "Time", "Pilot", "Payment", "Method", "Source", "Turn", "Pax", "Driver(s)", "Vehicle(s)"];
+
+    // Create CSV rows from filtered data
+    const csvRows = [headers.join(",")];
+
+    filteredData.forEach((row, index) => {
+      const isFirstRowOfTurn = index === 0 ||
+        (filteredData[index - 1].date !== row.date ||
+         filteredData[index - 1].time !== row.time);
+
+      const rowData = [
+        formatDate(row.date),
+        row.time,
+        row.pilot,
+        typeof row.payment === "number" ? row.payment.toFixed(2) : row.payment,
+        formatPaymentMethod(row.paymentMethod),
+        row.bookingSource,
+        isFirstRowOfTurn ? row.turn : "",
+        isFirstRowOfTurn ? row.pax : "",
+        isFirstRowOfTurn ? (row.drivers.length > 0 ? row.drivers.join("; ") : "-") : "",
+        isFirstRowOfTurn ? (row.vehicles.length > 0 ? row.vehicles.join("; ") : "-") : "",
+      ];
+
+      csvRows.push(rowData.map(field => `"${field}"`).join(","));
+    });
+
+    // Create blob and download
+    const csvContent = csvRows.join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+
+    link.setAttribute("href", url);
+    link.setAttribute("download", `accounting-${format(new Date(), "yyyy-MM-dd")}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="flex-1 flex flex-col bg-zinc-950 p-4 overflow-hidden">
       {/* Header */}
-      <div className="mb-4">
-        <h1 className="text-2xl font-bold text-white mb-2">Accounting</h1>
-        <p className="text-zinc-400 text-sm">
-          Track pilot payments and flight operations
-        </p>
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-white">Accounting</h1>
+        <Button
+          onClick={exportToCSV}
+          variant="outline"
+          className="border-zinc-700 text-white hover:bg-zinc-800"
+        >
+          <Download className="h-4 w-4 mr-2" />
+          Export CSV
+        </Button>
       </div>
 
       {/* Filters */}
