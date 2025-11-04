@@ -68,11 +68,6 @@ function AutocompleteField({
     setIsOpen(false);
   };
 
-  const handleInputFocus = () => {
-    setSearchQuery("");
-    setIsOpen(true);
-  };
-
   const handleDropdownToggle = () => {
     if (!isOpen) {
       setSearchQuery("");
@@ -90,7 +85,6 @@ function AutocompleteField({
           id={id}
           value={value}
           onChange={handleInputChange}
-          onFocus={handleInputFocus}
           className="pr-8"
           placeholder={placeholder}
         />
@@ -205,7 +199,10 @@ export function DriverVehicleModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="bg-zinc-950 border-zinc-800 text-white max-w-md">
+      <DialogContent
+        className="bg-zinc-950 border-zinc-800 text-white max-w-md"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>{driverColumn === 2 ? 'Driver 2' : 'Driver'}</DialogTitle>
         </DialogHeader>

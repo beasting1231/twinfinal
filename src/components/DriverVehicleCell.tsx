@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useRef } from "react";
 import type { Booking } from "../types";
 
 interface DriverVehicleCellProps {
@@ -12,6 +12,9 @@ export const DriverVehicleCell = memo(function DriverVehicleCell({
   onClick,
   onContextMenu,
 }: DriverVehicleCellProps) {
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
+
   if (!booking) {
     return null;
   }
@@ -26,6 +29,45 @@ export const DriverVehicleCell = memo(function DriverVehicleCell({
     onContextMenu({ x: e.clientX, y: e.clientY });
   };
 
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
+
+    longPressTimerRef.current = setTimeout(() => {
+      if (touchStartPosRef.current) {
+        onContextMenu({
+          x: touchStartPosRef.current.x,
+          y: touchStartPosRef.current.y,
+        });
+      }
+    }, 500);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStartPosRef.current) return;
+
+    const touch = e.touches[0];
+    const deltaX = Math.abs(touch.clientX - touchStartPosRef.current.x);
+    const deltaY = Math.abs(touch.clientY - touchStartPosRef.current.y);
+
+    // Cancel long press if moved more than 10px
+    if (deltaX > 10 || deltaY > 10) {
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
+      touchStartPosRef.current = null;
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    touchStartPosRef.current = null;
+  };
+
   return (
     <div
       className={`w-full h-full rounded-lg p-2 flex flex-col items-center justify-center cursor-pointer transition-colors ${
@@ -35,6 +77,10 @@ export const DriverVehicleCell = memo(function DriverVehicleCell({
       }`}
       onClick={onClick}
       onContextMenu={handleContextMenu}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
     >
       {!hasDriver && !hasVehicle ? (
         <div className="text-xs text-zinc-900 font-medium">no driver</div>
