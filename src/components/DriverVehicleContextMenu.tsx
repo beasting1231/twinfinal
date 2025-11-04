@@ -5,6 +5,7 @@ interface DriverVehicleContextMenuProps {
   position: { x: number; y: number };
   onDelete: () => void;
   onFill: () => void;
+  onClearColumn: () => void;
   onAddSecondDriver?: () => void;
   onDeleteSecondDriver?: () => void;
   onClose: () => void;
@@ -15,6 +16,7 @@ export function DriverVehicleContextMenu({
   position,
   onDelete,
   onFill,
+  onClearColumn,
   onAddSecondDriver,
   onDeleteSecondDriver,
   onClose,
@@ -118,6 +120,15 @@ export function DriverVehicleContextMenu({
         className="w-full px-4 py-2 text-left text-sm text-white hover:bg-zinc-800 transition-colors"
       >
         Fill
+      </button>
+      <button
+        onClick={() => {
+          onClearColumn();
+          onClose();
+        }}
+        className="w-full px-4 py-2 text-left text-sm text-white hover:bg-zinc-800 transition-colors"
+      >
+        Clear column
       </button>
       {onAddSecondDriver && (
         <button

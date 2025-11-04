@@ -23,6 +23,7 @@ interface BookingAvailableProps {
   onNoPilotContextMenu?: (position: { x: number; y: number }) => void;
   onAvailableContextMenu?: (position: { x: number; y: number }) => void;
   isCurrentUserPilot?: boolean; // Whether this cell is for the current user
+  isFemalePilot?: boolean; // Whether this pilot is a female pilot
 }
 
 export const BookingAvailable = memo(function BookingAvailable({
@@ -44,7 +45,8 @@ export const BookingAvailable = memo(function BookingAvailable({
   onContextMenu,
   onNoPilotContextMenu,
   onAvailableContextMenu,
-  isCurrentUserPilot = false
+  isCurrentUserPilot = false,
+  isFemalePilot = false
 }: BookingAvailableProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const longPressTimerRef = useRef<number | null>(null);
@@ -312,15 +314,17 @@ export const BookingAvailable = memo(function BookingAvailable({
   if (status === "noPilot") {
     return (
       <div
-        className={`w-full h-full bg-zinc-900 rounded-lg flex items-center justify-center ${
-          isCurrentUserPilot ? 'cursor-pointer hover:bg-zinc-800' : 'cursor-not-allowed'
+        className={`w-full h-full rounded-lg flex items-center justify-center ${
+          isFemalePilot
+            ? (isCurrentUserPilot ? 'bg-red-600/80 cursor-pointer hover:bg-red-700/80' : 'bg-red-600/80 cursor-not-allowed')
+            : (isCurrentUserPilot ? 'bg-zinc-900 cursor-pointer hover:bg-zinc-800' : 'bg-zinc-900 cursor-not-allowed')
         }`}
         onContextMenu={handleNoPilotContextMenu}
         onTouchStart={handleNoPilotTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
-        <div className="text-xs text-zinc-500">no {pilotId.toLowerCase()}</div>
+        <div className={`text-xs ${isFemalePilot ? 'text-white' : 'text-zinc-500'}`}>no {pilotId.toLowerCase()}</div>
       </div>
     );
   }

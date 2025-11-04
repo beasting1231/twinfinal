@@ -68,6 +68,13 @@ function AutocompleteField({
     setIsOpen(false);
   };
 
+  const handleInputClick = () => {
+    if (!isOpen) {
+      setSearchQuery("");
+      setIsOpen(true);
+    }
+  };
+
   const handleDropdownToggle = () => {
     if (!isOpen) {
       setSearchQuery("");
@@ -85,6 +92,7 @@ function AutocompleteField({
           id={id}
           value={value}
           onChange={handleInputChange}
+          onClick={handleInputClick}
           className="pr-8"
           placeholder={placeholder}
         />

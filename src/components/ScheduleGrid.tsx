@@ -180,6 +180,41 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
     setDriverVehicleContextMenu(null);
   };
 
+  // Handle clear column - clear all driver/vehicle for this column on this day
+  const handleClearColumn = () => {
+    if (!driverVehicleContextMenu || !onUpdateBooking) return;
+
+    const { driverColumn } = driverVehicleContextMenu;
+
+    // Get all bookings for this day
+    const dateString = format(selectedDate, "yyyy-MM-dd");
+    const bookingsOnThisDay = bookings.filter(b => b.date === dateString);
+
+    if (driverColumn === 2) {
+      // Clear all driver2/vehicle2 for this day
+      bookingsOnThisDay.forEach(b => {
+        if (b.id && (b.driver2 || b.vehicle2)) {
+          onUpdateBooking(b.id, {
+            driver2: "",
+            vehicle2: "",
+          });
+        }
+      });
+    } else {
+      // Clear all driver/vehicle for this day
+      bookingsOnThisDay.forEach(b => {
+        if (b.id && (b.driver || b.vehicle)) {
+          onUpdateBooking(b.id, {
+            driver: "",
+            vehicle: "",
+          });
+        }
+      });
+    }
+
+    setDriverVehicleContextMenu(null);
+  };
+
   // Handle add second driver
   const handleAddSecondDriver = () => {
     setShowSecondDriverColumn(true);
@@ -623,6 +658,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                         status={cell.status}
                         span={1}
                         isCurrentUserPilot={isCurrentUserPilot}
+                        isFemalePilot={cell.pilot.femalePilot}
                         onAvailableClick={
                           cell.status === "available"
                             ? () => handleAvailableCellClick(cell.pilotIndex!, timeIndex, timeSlot)
@@ -824,6 +860,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
           position={driverVehicleContextMenu.position}
           onDelete={handleDeleteDriverVehicle}
           onFill={handleFillDriverVehicle}
+          onClearColumn={handleClearColumn}
           onAddSecondDriver={
             driverVehicleContextMenu.driverColumn === 1 && !showSecondDriverColumn
               ? handleAddSecondDriver
