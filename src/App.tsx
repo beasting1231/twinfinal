@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { startOfWeek, format } from "date-fns";
 import { Header } from "./components/Header";
 import { ScheduleGrid } from "./components/ScheduleGrid";
@@ -7,6 +7,8 @@ import { Account } from "./components/Account/Account";
 import { BookingSources } from "./components/BookingSources";
 import { Accounting } from "./components/Accounting";
 import { Priority } from "./components/Priority";
+import { Forms } from "./components/Forms";
+import { BookingRequestForm } from "./components/BookingRequestForm";
 import { useBookings } from "./hooks/useBookings";
 import { usePilots } from "./hooks/usePilots";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
@@ -14,9 +16,28 @@ import { EditingProvider } from "./contexts/EditingContext";
 import { Login } from "./components/Auth/Login";
 import { getTimeSlotsByDate } from "./utils/timeSlots";
 
-type View = "daily-plan" | "availability" | "account" | "booking-sources" | "accounting" | "priority";
+type View = "daily-plan" | "availability" | "account" | "booking-sources" | "accounting" | "priority" | "forms";
 
 function AppContent() {
+  // Check if we're on the booking request form route
+  const [isBookingRequestRoute, setIsBookingRequestRoute] = useState(
+    window.location.pathname === "/booking-request"
+  );
+
+  useEffect(() => {
+    // Handle browser navigation
+    const handlePopState = () => {
+      setIsBookingRequestRoute(window.location.pathname === "/booking-request");
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  // If on booking request route, show the public form (no auth required)
+  if (isBookingRequestRoute) {
+    return <BookingRequestForm />;
+  }
   const [currentView, setCurrentView] = useState<View>("daily-plan");
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [weekStartDate, setWeekStartDate] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
@@ -79,6 +100,8 @@ function AppContent() {
         <Accounting />
       ) : currentView === "priority" ? (
         <Priority />
+      ) : currentView === "forms" ? (
+        <Forms />
       ) : null}
     </div>
   );

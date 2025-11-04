@@ -7,8 +7,10 @@ import { AvailabilityContextMenu } from "./AvailabilityContextMenu";
 import { DriverVehicleCell } from "./DriverVehicleCell";
 import { DriverVehicleModal } from "./DriverVehicleModal";
 import { DriverVehicleContextMenu } from "./DriverVehicleContextMenu";
+import { BookingRequestModal } from "./BookingRequestModal";
 import { useBookingSourceColors } from "../hooks/useBookingSourceColors";
 import { useDriverAssignments } from "../hooks/useDriverAssignments";
+import { useBookingRequests } from "../hooks/useBookingRequests";
 import type { Booking, Pilot } from "../types/index";
 import { format } from "date-fns";
 
@@ -43,6 +45,13 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
     updateDriverAssignment,
     addDriverAssignment
   } = useDriverAssignments(dateString);
+
+  // Fetch booking requests
+  const { bookingRequests } = useBookingRequests();
+
+  // State for selected booking request
+  const [selectedBookingRequest, setSelectedBookingRequest] = useState<any>(null);
+  const [isBookingRequestModalOpen, setIsBookingRequestModalOpen] = useState(false);
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
@@ -752,6 +761,43 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
         </div>
       </div>
 
+      {/* Booking Requests Inbox */}
+      {bookingRequests.length > 0 && (
+        <div className="mt-6 max-w-4xl">
+          <h2 className="text-xl font-semibold text-white mb-3">New Booking Requests</h2>
+          <div className="space-y-2">
+            {bookingRequests.map((request) => (
+              <div
+                key={request.id}
+                onClick={() => {
+                  setSelectedBookingRequest(request);
+                  setIsBookingRequestModalOpen(true);
+                }}
+                className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 cursor-pointer hover:bg-zinc-800 transition-colors"
+              >
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="text-white font-medium">{request.customerName}</p>
+                    <p className="text-sm text-zinc-400">{request.email}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-white">{request.date}</p>
+                    <p className="text-sm text-zinc-400">{request.time}</p>
+                  </div>
+                </div>
+                <div className="mt-2 flex gap-4 text-sm text-zinc-400">
+                  <span>{request.numberOfPeople} {request.numberOfPeople === 1 ? 'person' : 'people'}</span>
+                  {request.phone && <span>{request.phone}</span>}
+                </div>
+                {request.notes && (
+                  <p className="mt-2 text-sm text-zinc-500 truncate">{request.notes}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {selectedCell && (
         <NewBookingModal
           open={isModalOpen}
@@ -916,6 +962,13 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
         driverColumn={selectedDriverColumn}
         timeIndex={selectedTimeIndex}
         date={selectedDriverDate}
+      />
+
+      {/* Booking Request Modal */}
+      <BookingRequestModal
+        open={isBookingRequestModalOpen}
+        onOpenChange={setIsBookingRequestModalOpen}
+        request={selectedBookingRequest}
       />
     </div>
   );

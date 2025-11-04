@@ -65,3 +65,17 @@ export interface DriverAssignment {
   driver2?: string;
   vehicle2?: string;
 }
+
+export interface BookingRequest {
+  id?: string;
+  customerName: string;
+  email: string;
+  phone?: string;
+  date: string; // ISO date string (YYYY-MM-DD)
+  time: string; // Time string (HH:mm)
+  timeIndex: number; // Index of the time slot
+  numberOfPeople: number;
+  notes?: string;
+  status: "pending" | "approved" | "rejected";
+  createdAt: Date;
+}
