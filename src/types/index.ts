@@ -23,6 +23,7 @@ export interface Booking {
   email?: string;
   notes?: string;
   commission?: number | null;
+  commissionStatus?: "paid" | "unpaid";
   femalePilotsRequired?: number;
   flightType?: "sensational" | "classic" | "early bird";
   assignedPilots: string[];

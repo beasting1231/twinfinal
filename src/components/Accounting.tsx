@@ -6,6 +6,8 @@ import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { getTimeSlotsByDate } from "../utils/timeSlots";
 import { FilterDropdown } from "./FilterDropdown";
+import { doc, updateDoc } from "firebase/firestore";
+import { db } from "../firebase/config";
 
 interface AccountingRow {
   date: string;
@@ -18,6 +20,9 @@ interface AccountingRow {
   drivers: string[];
   vehicles: string[];
   bookingSource: string;
+  commission: number | null;
+  commissionStatus: "paid" | "unpaid";
+  bookingId: string | undefined;
   bookingIds: string[];
 }
 
@@ -114,6 +119,9 @@ export function Accounting() {
           drivers,
           vehicles,
           bookingSource: booking.bookingSource || "Unknown",
+          commission: booking.commission || null,
+          commissionStatus: booking.commissionStatus || "unpaid",
+          bookingId: booking.id,
           bookingIds: booking.id ? [booking.id] : [],
         });
       });
@@ -225,10 +233,22 @@ export function Accounting() {
     }
   };
 
+  // Update commission status
+  const updateCommissionStatus = async (bookingId: string, newStatus: "paid" | "unpaid") => {
+    try {
+      const bookingRef = doc(db, "bookings", bookingId);
+      await updateDoc(bookingRef, {
+        commissionStatus: newStatus
+      });
+    } catch (error) {
+      console.error("Error updating commission status:", error);
+    }
+  };
+
   // Export to CSV
   const exportToCSV = () => {
     // Create CSV headers
-    const headers = ["Date", "Time", "Pilot", "Payment", "Method", "Source", "Turn", "Pax", "Driver(s)", "Vehicle(s)"];
+    const headers = ["Date", "Time", "Pilot", "Payment", "Method", "Source", "Turn", "Pax", "Driver(s)", "Vehicle(s)", "Commission", "Comm. Status"];
 
     // Create CSV rows from filtered data
     const csvRows = [headers.join(",")];
@@ -249,6 +269,8 @@ export function Accounting() {
         isFirstRowOfTurn ? row.pax : "",
         isFirstRowOfTurn ? (row.drivers.length > 0 ? row.drivers.join("; ") : "-") : "",
         isFirstRowOfTurn ? (row.vehicles.length > 0 ? row.vehicles.join("; ") : "-") : "",
+        row.commission !== null ? row.commission.toFixed(2) : "-",
+        row.commission !== null ? (row.commissionStatus === "paid" ? "Paid" : "Unpaid") : "-",
       ];
 
       csvRows.push(rowData.map(field => `"${field}"`).join(","));
@@ -411,12 +433,14 @@ export function Accounting() {
                     />
                   </div>
                 </th>
+                <th className="text-right px-4 py-3 text-zinc-300 font-medium">Commission</th>
+                <th className="text-left px-4 py-3 text-zinc-300 font-medium">Comm. Status</th>
               </tr>
             </thead>
             <tbody>
               {filteredData.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-12 text-center text-zinc-500">
+                  <td colSpan={12} className="px-4 py-12 text-center text-zinc-500">
                     <p>No records found matching your filters</p>
                   </td>
                 </tr>
@@ -461,6 +485,37 @@ export function Accounting() {
                       </td>
                       <td className="px-4 py-3 text-zinc-300">
                         {isFirstRowOfTurn ? (row.vehicles.length > 0 ? row.vehicles.join(", ") : "-") : ""}
+                      </td>
+                      <td className="px-4 py-3 text-right text-white">
+                        {row.commission !== null ? row.commission.toFixed(2) : "-"}
+                      </td>
+                      <td className="px-4 py-3">
+                        {row.commission !== null ? (
+                          row.bookingId ? (
+                            <select
+                              value={row.commissionStatus}
+                              onChange={(e) => updateCommissionStatus(row.bookingId!, e.target.value as "paid" | "unpaid")}
+                              className={`px-2 py-1 rounded text-xs font-medium border-0 ${
+                                row.commissionStatus === "paid"
+                                  ? "bg-green-900/30 text-green-400"
+                                  : "bg-red-900/30 text-red-400"
+                              }`}
+                            >
+                              <option value="unpaid">Unpaid</option>
+                              <option value="paid">Paid</option>
+                            </select>
+                          ) : (
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                              row.commissionStatus === "paid"
+                                ? "bg-green-900/30 text-green-400"
+                                : "bg-red-900/30 text-red-400"
+                            }`}>
+                              {row.commissionStatus === "paid" ? "Paid" : "Unpaid"}
+                            </span>
+                          )
+                        ) : (
+                          <span className="text-zinc-500">-</span>
+                        )}
                       </td>
                     </tr>
                   );

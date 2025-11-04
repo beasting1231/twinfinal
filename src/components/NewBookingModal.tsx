@@ -58,6 +58,7 @@ export function NewBookingModal({
   const [email, setEmail] = useState("");
   const [notes, setNotes] = useState("");
   const [commission, setCommission] = useState("");
+  const [commissionStatus, setCommissionStatus] = useState<"paid" | "unpaid">("unpaid");
   const [femalePilotsRequired, setFemalePilotsRequired] = useState(0);
   const [flightType, setFlightType] = useState<"sensational" | "classic" | "early bird">("sensational");
   const [showAdditionalOptions, setShowAdditionalOptions] = useState(false);
@@ -191,6 +192,7 @@ export function NewBookingModal({
       const commissionNum = parseFloat(commission);
       if (!isNaN(commissionNum)) {
         bookingData.commission = commissionNum;
+        bookingData.commissionStatus = commissionStatus;
       }
     }
     if (femalePilotsRequired > 0) {
@@ -355,6 +357,22 @@ export function NewBookingModal({
                     onChange={(e) => setCommission(e.target.value)}
                     placeholder="0.00"
                   />
+                </div>
+
+                {/* Commission Status */}
+                <div className="space-y-2">
+                  <Label htmlFor="commissionStatus" className="text-white">
+                    Commission Status
+                  </Label>
+                  <select
+                    id="commissionStatus"
+                    value={commissionStatus}
+                    onChange={(e) => setCommissionStatus(e.target.value as "paid" | "unpaid")}
+                    className="flex h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-white ring-offset-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2"
+                  >
+                    <option value="unpaid">Unpaid</option>
+                    <option value="paid">Paid</option>
+                  </select>
                 </div>
 
                 {/* Lady Pilots Required */}

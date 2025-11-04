@@ -382,6 +382,9 @@ export function BookingDetailsModal({
       if (editedBooking.commission !== booking.commission) {
         updates.commission = editedBooking.commission;
       }
+      if (editedBooking.commissionStatus !== booking.commissionStatus) {
+        updates.commissionStatus = editedBooking.commissionStatus;
+      }
       if (editedBooking.femalePilotsRequired !== booking.femalePilotsRequired) {
         updates.femalePilotsRequired = editedBooking.femalePilotsRequired;
       }
@@ -947,6 +950,21 @@ export function BookingDetailsModal({
                           onChange={(e) => setEditedBooking({ ...editedBooking, commission: e.target.value ? parseFloat(e.target.value) : null })}
                           placeholder="0.00"
                         />
+                      </div>
+
+                      {/* Commission Status */}
+                      <div className="space-y-2">
+                        <Label className="text-white">
+                          Commission Status
+                        </Label>
+                        <select
+                          value={editedBooking.commissionStatus || "unpaid"}
+                          onChange={(e) => setEditedBooking({ ...editedBooking, commissionStatus: e.target.value as "paid" | "unpaid" })}
+                          className="flex h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-white ring-offset-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2"
+                        >
+                          <option value="unpaid">Unpaid</option>
+                          <option value="paid">Paid</option>
+                        </select>
                       </div>
 
                       {/* Lady Pilots Required */}
