@@ -31,6 +31,8 @@ export interface Booking {
   pilotPayments?: PilotPayment[];
   driver?: string;
   vehicle?: string;
+  driver2?: string;
+  vehicle2?: string;
 }
 
 export interface UserProfile {

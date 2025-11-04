@@ -4,8 +4,12 @@ import { NewBookingModal } from "./NewBookingModal";
 import { BookingDetailsModal } from "./BookingDetailsModal";
 import { PilotContextMenu } from "./PilotContextMenu";
 import { AvailabilityContextMenu } from "./AvailabilityContextMenu";
+import { DriverVehicleCell } from "./DriverVehicleCell";
+import { DriverVehicleModal } from "./DriverVehicleModal";
+import { DriverVehicleContextMenu } from "./DriverVehicleContextMenu";
 import { useBookingSourceColors } from "../hooks/useBookingSourceColors";
 import type { Booking, Pilot } from "../types/index";
+import { format } from "date-fns";
 
 interface ScheduleGridProps {
   selectedDate: Date;
@@ -48,6 +52,30 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
     isSignedOut: boolean;
   } | null>(null);
 
+  // Driver/Vehicle modal state
+  const [isDriverVehicleModalOpen, setIsDriverVehicleModalOpen] = useState(false);
+  const [selectedBookingForDriverVehicle, setSelectedBookingForDriverVehicle] = useState<Booking | null>(null);
+  const [selectedDriverColumn, setSelectedDriverColumn] = useState<1 | 2>(1);
+
+  // Driver/Vehicle context menu state
+  const [driverVehicleContextMenu, setDriverVehicleContextMenu] = useState<{
+    isOpen: boolean;
+    position: { x: number; y: number };
+    booking: Booking;
+    driverColumn: 1 | 2;
+  } | null>(null);
+
+  // Second driver column visibility state
+  const [showSecondDriverColumn, setShowSecondDriverColumn] = useState(() => {
+    const saved = localStorage.getItem('showSecondDriverColumn');
+    return saved === 'true';
+  });
+
+  // Save second driver column visibility to localStorage
+  useEffect(() => {
+    localStorage.setItem('showSecondDriverColumn', String(showSecondDriverColumn));
+  }, [showSecondDriverColumn]);
+
   // Zoom state
   const [scale, setScale] = useState(1);
   const [isPinching, setIsPinching] = useState(false);
@@ -71,6 +99,114 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
       onAddBooking(booking);
     }
   }, [onAddBooking]);
+
+  const handleDriverVehicleCellClick = useCallback((booking: Booking, driverColumn: 1 | 2 = 1) => {
+    setSelectedBookingForDriverVehicle(booking);
+    setSelectedDriverColumn(driverColumn);
+    setIsDriverVehicleModalOpen(true);
+  }, []);
+
+  // Handle driver/vehicle context menu
+  const handleDriverVehicleContextMenu = (booking: Booking, driverColumn: 1 | 2 = 1) => (
+    position: { x: number; y: number }
+  ) => {
+    setDriverVehicleContextMenu({
+      isOpen: true,
+      position,
+      booking,
+      driverColumn,
+    });
+  };
+
+  // Handle delete driver/vehicle
+  const handleDeleteDriverVehicle = () => {
+    if (!driverVehicleContextMenu || !onUpdateBooking) return;
+
+    const { booking, driverColumn } = driverVehicleContextMenu;
+    if (booking.id) {
+      if (driverColumn === 2) {
+        onUpdateBooking(booking.id, {
+          driver2: "",
+          vehicle2: "",
+        });
+      } else {
+        onUpdateBooking(booking.id, {
+          driver: "",
+          vehicle: "",
+        });
+      }
+    }
+    setDriverVehicleContextMenu(null);
+  };
+
+  // Handle fill driver/vehicle for all bookings on this day
+  const handleFillDriverVehicle = () => {
+    if (!driverVehicleContextMenu || !onUpdateBooking) return;
+
+    const { booking, driverColumn } = driverVehicleContextMenu;
+
+    // Get all bookings for this day
+    const dateString = format(selectedDate, "yyyy-MM-dd");
+    const bookingsOnThisDay = bookings.filter(b => b.date === dateString);
+
+    if (driverColumn === 2) {
+      const driver = booking.driver2 || "";
+      const vehicle = booking.vehicle2 || "";
+
+      // Update all bookings that don't have driver2/vehicle2 set
+      bookingsOnThisDay.forEach(b => {
+        if (b.id && (!b.driver2 || !b.vehicle2)) {
+          onUpdateBooking(b.id, {
+            driver2: driver,
+            vehicle2: vehicle,
+          });
+        }
+      });
+    } else {
+      const driver = booking.driver || "";
+      const vehicle = booking.vehicle || "";
+
+      // Update all bookings that don't have driver/vehicle set
+      bookingsOnThisDay.forEach(b => {
+        if (b.id && (!b.driver || !b.vehicle)) {
+          onUpdateBooking(b.id, {
+            driver: driver,
+            vehicle: vehicle,
+          });
+        }
+      });
+    }
+
+    setDriverVehicleContextMenu(null);
+  };
+
+  // Handle add second driver
+  const handleAddSecondDriver = () => {
+    setShowSecondDriverColumn(true);
+    setDriverVehicleContextMenu(null);
+  };
+
+  // Handle delete second driver - hide column and clear all driver2/vehicle2 data
+  const handleDeleteSecondDriver = () => {
+    if (!onUpdateBooking) return;
+
+    // Get all bookings that have driver2 or vehicle2 data
+    const bookingsWithSecondDriver = bookings.filter(b => b.driver2 || b.vehicle2);
+
+    // Clear driver2/vehicle2 data from all bookings
+    bookingsWithSecondDriver.forEach(b => {
+      if (b.id) {
+        onUpdateBooking(b.id, {
+          driver2: "",
+          vehicle2: "",
+        });
+      }
+    });
+
+    // Hide the second driver column
+    setShowSecondDriverColumn(false);
+    setDriverVehicleContextMenu(null);
+  };
 
   // Handle context menu on booking cell
   const handleBookingContextMenu = (booking: Booking, timeSlot: string) => (
@@ -336,7 +472,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
         className={`inline-block origin-top-left ${!isPinching ? 'transition-transform duration-100' : ''}`}
         style={{ transform: `scale(${scale})` }}
       >
-        <div className="grid gap-2" style={{ gridTemplateColumns: `80px repeat(${pilots.length}, 220px)` }}>
+        <div className="grid gap-2" style={{ gridTemplateColumns: `80px repeat(${pilots.length}, 220px) 98px${showSecondDriverColumn ? ' 98px' : ''}` }}>
           {/* Header Row - Shows pilots present today */}
           <div className="h-7" />
           {pilots.map((p, index) => (
@@ -348,6 +484,16 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
               <span>{p.displayName}</span>
             </div>
           ))}
+          {/* Driver Header */}
+          <div className="h-7 flex items-center justify-center bg-yellow-400/80 rounded-lg font-medium text-sm text-zinc-900">
+            Driver
+          </div>
+          {/* Second Driver Header */}
+          {showSecondDriverColumn && (
+            <div className="h-7 flex items-center justify-center bg-yellow-400/80 rounded-lg font-medium text-sm text-zinc-900">
+              Driver 2
+            </div>
+          )}
 
           {/* Time Slots and Booking Cells */}
           {timeSlots.map((timeSlot, timeIndex) => {
@@ -497,7 +643,41 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                   );
                 }
                 return null;
-              })
+              }),
+
+              // Driver/Vehicle Cell - Show for the first booking at this time slot
+              <div
+                key={`driver-vehicle-${timeIndex}`}
+                className="h-14"
+              >
+                {bookingsAtThisTime.length > 0 && (
+                  <DriverVehicleCell
+                    booking={bookingsAtThisTime[0]}
+                    onClick={() => handleDriverVehicleCellClick(bookingsAtThisTime[0])}
+                    onContextMenu={handleDriverVehicleContextMenu(bookingsAtThisTime[0])}
+                  />
+                )}
+              </div>,
+
+              // Second Driver/Vehicle Cell - Show only when second driver column is visible
+              ...(showSecondDriverColumn ? [
+                <div
+                  key={`driver-vehicle-2-${timeIndex}`}
+                  className="h-14"
+                >
+                  {bookingsAtThisTime.length > 0 && (
+                    <DriverVehicleCell
+                      booking={{
+                        ...bookingsAtThisTime[0],
+                        driver: bookingsAtThisTime[0].driver2,
+                        vehicle: bookingsAtThisTime[0].vehicle2,
+                      }}
+                      onClick={() => handleDriverVehicleCellClick(bookingsAtThisTime[0], 2)}
+                      onContextMenu={handleDriverVehicleContextMenu(bookingsAtThisTime[0], 2)}
+                    />
+                  )}
+                </div>
+              ] : [])
             ];
           })}
         </div>
@@ -636,6 +816,35 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
           onClose={() => setAvailabilityContextMenu(null)}
         />
       )}
+
+      {/* Driver/Vehicle Context Menu */}
+      {driverVehicleContextMenu && (
+        <DriverVehicleContextMenu
+          isOpen={driverVehicleContextMenu.isOpen}
+          position={driverVehicleContextMenu.position}
+          onDelete={handleDeleteDriverVehicle}
+          onFill={handleFillDriverVehicle}
+          onAddSecondDriver={
+            driverVehicleContextMenu.driverColumn === 1 && !showSecondDriverColumn
+              ? handleAddSecondDriver
+              : undefined
+          }
+          onDeleteSecondDriver={
+            showSecondDriverColumn
+              ? handleDeleteSecondDriver
+              : undefined
+          }
+          onClose={() => setDriverVehicleContextMenu(null)}
+        />
+      )}
+
+      {/* Driver/Vehicle Modal */}
+      <DriverVehicleModal
+        isOpen={isDriverVehicleModalOpen}
+        onClose={() => setIsDriverVehicleModalOpen(false)}
+        booking={selectedBookingForDriverVehicle}
+        driverColumn={selectedDriverColumn}
+      />
     </div>
   );
 }

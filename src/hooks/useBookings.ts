@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from "firebase/firestore";
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, deleteField } from "firebase/firestore";
 import { db } from "../firebase/config";
 import type { Booking } from "../types/index";
 import { useEditing } from "../contexts/EditingContext";
@@ -119,6 +119,10 @@ export function useBookings() {
           // Special handling for assignedPilots array to ensure no undefined values
           if (key === 'assignedPilots' && Array.isArray(value)) {
             sanitizedBooking[key] = value.map(pilot => pilot === undefined ? "" : pilot);
+          }
+          // Convert empty strings to deleteField() to remove the field from Firestore
+          else if (value === "") {
+            sanitizedBooking[key] = deleteField();
           } else {
             sanitizedBooking[key] = value;
           }
