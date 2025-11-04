@@ -5,6 +5,7 @@ import { ScheduleGrid } from "./components/ScheduleGrid";
 import { AvailabilityGrid } from "./components/AvailabilityGrid";
 import { Account } from "./components/Account/Account";
 import { BookingSources } from "./components/BookingSources";
+import { Accounting } from "./components/Accounting";
 import { useBookings } from "./hooks/useBookings";
 import { usePilots } from "./hooks/usePilots";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
@@ -12,7 +13,7 @@ import { EditingProvider } from "./contexts/EditingContext";
 import { Login } from "./components/Auth/Login";
 import { getTimeSlotsByDate } from "./utils/timeSlots";
 
-type View = "daily-plan" | "availability" | "account" | "booking-sources";
+type View = "daily-plan" | "availability" | "account" | "booking-sources" | "accounting";
 
 function AppContent() {
   const [currentView, setCurrentView] = useState<View>("daily-plan");
@@ -73,6 +74,8 @@ function AppContent() {
         <Account />
       ) : currentView === "booking-sources" ? (
         <BookingSources />
+      ) : currentView === "accounting" ? (
+        <Accounting />
       ) : null}
     </div>
   );
