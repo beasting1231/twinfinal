@@ -75,6 +75,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
     booking: Booking;
     slotIndex: number;
     timeSlot: string;
+    isPilotSelfUnassign?: boolean;
   } | null>(null);
 
   // Availability context menu state
@@ -157,8 +158,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
 
   // Check if user can manage pilot assignments (context menu)
   const canManagePilots = useCallback(() => {
-    // Agency users cannot assign/unassign pilots
-    return role !== "agency";
+    // Agency and pilot users cannot assign/unassign pilots
+    return role !== "agency" && role !== "pilot";
   }, [role]);
 
   // Check if user can manage drivers
@@ -354,12 +355,24 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
     slotIndex: number,
     position: { x: number; y: number }
   ) => {
+    // Check if this is a pilot clicking on their own assigned position
+    const assignedPilotAtSlot = booking.assignedPilots[slotIndex];
+    const isPilotSelfUnassign = !!(role === "pilot" &&
+      currentUserDisplayName &&
+      assignedPilotAtSlot === currentUserDisplayName);
+
+    // If it's a pilot and they're NOT clicking on their own position, don't open context menu
+    if (role === "pilot" && !isPilotSelfUnassign) {
+      return;
+    }
+
     setContextMenu({
       isOpen: true,
       position,
       booking,
       slotIndex,
       timeSlot,
+      isPilotSelfUnassign,
     });
   };
 
@@ -399,6 +412,25 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
       assignedPilots: updatedPilots,
     });
   };
+
+  // Handle pilot clicking on their own name to unassign themselves
+  const handlePilotSelfUnassign = useCallback((booking: Booking) => (slotIndex: number, pilotName: string) => {
+    if (!onUpdateBooking || !currentUserDisplayName || pilotName !== currentUserDisplayName) return;
+
+    // Only allow pilots to unassign themselves
+    if (role !== "pilot") return;
+
+    const requiredLength = Math.max(booking.numberOfPeople, slotIndex + 1);
+    const updatedPilots = [...booking.assignedPilots];
+    while (updatedPilots.length < requiredLength) {
+      updatedPilots.push("");
+    }
+    updatedPilots[slotIndex] = "";
+
+    onUpdateBooking(booking.id!, {
+      assignedPilots: updatedPilots,
+    });
+  }, [onUpdateBooking, currentUserDisplayName, role]);
 
   // Handle opening availability context menu
   const handleNoPilotContextMenu = (pilotIndex: number, timeIndex: number) => (position: { x: number; y: number }) => {
@@ -890,7 +922,9 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                         notes={cell.booking.notes}
                         bookingSourceColor={getSourceColor(cell.booking.bookingSource)}
                         onBookedClick={canViewBooking(cell.booking) ? () => handleBookedCellClick(cell.booking) : undefined}
-                        onContextMenu={canViewBooking(cell.booking) && canManagePilots() ? handleBookingContextMenu(cell.booking, timeSlot) : undefined}
+                        onContextMenu={canViewBooking(cell.booking) && (canManagePilots() || role === "pilot") ? handleBookingContextMenu(cell.booking, timeSlot) : undefined}
+                        onPilotNameClick={role === "pilot" ? handlePilotSelfUnassign(cell.booking) : undefined}
+                        currentUserDisplayName={currentUserDisplayName}
                       />
                     </div>
                   );
@@ -1149,6 +1183,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
           onSelectPilot={handleSelectPilot}
           onUnassign={handleUnassignPilot}
           onClose={() => setContextMenu(null)}
+          isPilotSelfUnassign={contextMenu.isPilotSelfUnassign}
         />
       )}
 

@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import { format, parseISO, startOfDay } from "date-fns";
 import { useBookings } from "../hooks/useBookings";
 import { useDriverAssignments } from "../hooks/useDriverAssignments";
+import { useAuth } from "../contexts/AuthContext";
+import { useRole } from "../hooks/useRole";
 import { Download, Filter } from "lucide-react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
@@ -30,6 +32,8 @@ interface AccountingRow {
 export function Accounting() {
   const { bookings, loading } = useBookings();
   const { driverAssignments, loading: driversLoading } = useDriverAssignments(); // Fetch all driver assignments
+  const { currentUser } = useAuth();
+  const { role } = useRole();
 
   // Filter states
   const [dateRange, setDateRange] = useState<{ from: string; to: string }>(() => {
@@ -141,6 +145,14 @@ export function Accounting() {
     return rows;
   }, [bookings, driverAssignments]);
 
+  // Filter accounting data for pilots - they should only see their own rows
+  const visibleAccountingData = useMemo(() => {
+    if (role === "pilot" && currentUser?.displayName) {
+      return accountingData.filter(row => row.pilot === currentUser.displayName);
+    }
+    return accountingData;
+  }, [accountingData, role, currentUser]);
+
   // Extract unique values for filters
   const filterOptions = useMemo(() => {
     const pilots = new Set<string>();
@@ -148,7 +160,7 @@ export function Accounting() {
     const vehicles = new Set<string>();
     const sources = new Set<string>();
 
-    accountingData.forEach((row) => {
+    visibleAccountingData.forEach((row) => {
       pilots.add(row.pilot);
       row.drivers.forEach((d) => drivers.add(d));
       row.vehicles.forEach((v) => vehicles.add(v));
@@ -162,11 +174,11 @@ export function Accounting() {
       vehicles: Array.from(vehicles).sort(),
       sources: Array.from(sources).sort(),
     };
-  }, [accountingData]);
+  }, [visibleAccountingData]);
 
   // Filter rows by all filters and search term
   const filteredData = useMemo(() => {
-    let filtered = accountingData;
+    let filtered = visibleAccountingData;
 
     // Apply date range filter
     filtered = filtered.filter((row) => {
@@ -210,7 +222,7 @@ export function Accounting() {
     }
 
     return filtered;
-  }, [accountingData, dateRange, selectedPilots, selectedMethods, selectedDrivers, selectedVehicles, selectedSources]);
+  }, [visibleAccountingData, dateRange, selectedPilots, selectedMethods, selectedDrivers, selectedVehicles, selectedSources]);
 
   // Format date for display
   const formatDate = (dateStr: string) => {
@@ -480,7 +492,7 @@ export function Accounting() {
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         {row.commission !== null ? (
-                          row.bookingId ? (
+                          row.bookingId && role !== "pilot" ? (
                             <select
                               value={row.commissionStatus}
                               onChange={(e) => updateCommissionStatus(row.bookingId!, e.target.value as "paid" | "unpaid")}

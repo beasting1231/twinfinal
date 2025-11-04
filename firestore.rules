@@ -50,8 +50,8 @@ service cloud.firestore {
     match /bookingRequests/{requestId} {
       // Anyone can create a booking request (public form)
       allow create: if true;
-      // Driver and admin can read/update/delete
-      allow read, update, delete: if request.auth != null && hasAnyRole(['driver', 'admin']);
+      // Only admin can read/update/delete
+      allow read, update, delete: if request.auth != null && hasRole('admin');
     }
 
     // Availability collection
@@ -82,8 +82,10 @@ service cloud.firestore {
 
     // Driver assignments collection
     match /driverAssignments/{assignmentId} {
+      // Pilots can read (view driver assignments)
       // Driver and admin can read/write
-      allow read, write: if request.auth != null && hasAnyRole(['driver', 'admin']);
+      allow read: if request.auth != null && hasAnyRole(['pilot', 'driver', 'admin']);
+      allow write: if request.auth != null && hasAnyRole(['driver', 'admin']);
     }
 
     // User profiles collection

@@ -22,8 +22,10 @@ interface BookingAvailableProps {
   onContextMenu?: (slotIndex: number, position: { x: number; y: number }) => void;
   onNoPilotContextMenu?: (position: { x: number; y: number }) => void;
   onAvailableContextMenu?: (position: { x: number; y: number }) => void;
+  onPilotNameClick?: (slotIndex: number, pilotName: string) => void; // Handler for clicking on a pilot name
   isCurrentUserPilot?: boolean; // Whether this cell is for the current user
   isFemalePilot?: boolean; // Whether this pilot is a female pilot
+  currentUserDisplayName?: string; // Current user's display name to check if they're clicking their own name
 }
 
 export const BookingAvailable = memo(function BookingAvailable({
@@ -45,8 +47,10 @@ export const BookingAvailable = memo(function BookingAvailable({
   onContextMenu,
   onNoPilotContextMenu,
   onAvailableContextMenu,
+  onPilotNameClick,
   isCurrentUserPilot = false,
-  isFemalePilot = false
+  isFemalePilot = false,
+  currentUserDisplayName
 }: BookingAvailableProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const longPressTimerRef = useRef<number | null>(null);
@@ -241,12 +245,24 @@ export const BookingAvailable = memo(function BookingAvailable({
               return <div key={index} className="flex justify-center" />;
             }
 
+            // Check if this is the current user's name (pilot can only unassign themselves)
+            const isOwnName = currentUserDisplayName && pilot === currentUserDisplayName;
+            const canClickToUnassign = isOwnName && onPilotNameClick;
+
             return (
               <div key={index} className="flex justify-center">
-                <div className={requiresFemalePilot
-                  ? "text-xs text-white bg-red-600/90 rounded-t-lg px-2 py-0.5 w-[80%] relative"
-                  : "text-xs text-white bg-zinc-800/90 rounded-t-lg px-2 py-0.5 w-[80%] relative"
-                }>
+                <div
+                  className={`${requiresFemalePilot
+                    ? "text-xs text-white bg-red-600/90 rounded-t-lg px-2 py-0.5 w-[80%] relative"
+                    : "text-xs text-white bg-zinc-800/90 rounded-t-lg px-2 py-0.5 w-[80%] relative"
+                  } ${canClickToUnassign ? 'cursor-pointer hover:opacity-80' : ''}`}
+                  onClick={(e) => {
+                    if (canClickToUnassign) {
+                      e.stopPropagation(); // Prevent triggering onBookedClick
+                      onPilotNameClick(index, pilot);
+                    }
+                  }}
+                >
                   <div className="text-center truncate">{pilot}</div>
                   {numAmount !== undefined && numAmount !== 0 && !isNaN(numAmount) && (
                     <span className="absolute right-2 top-0.5 font-medium text-white">{numAmount}</span>

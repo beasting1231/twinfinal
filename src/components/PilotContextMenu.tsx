@@ -11,6 +11,7 @@ interface PilotContextMenuProps {
   onSelectPilot: (pilotName: string) => void;
   onUnassign: () => void;
   onClose: () => void;
+  isPilotSelfUnassign?: boolean; // Whether this is a pilot unassigning themselves
 }
 
 export function PilotContextMenu({
@@ -22,6 +23,7 @@ export function PilotContextMenu({
   onSelectPilot,
   onUnassign,
   onClose,
+  isPilotSelfUnassign = false,
 }: PilotContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [isPositioned, setIsPositioned] = useState(false);
@@ -106,61 +108,65 @@ export function PilotContextMenu({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="px-3 py-1.5 text-xs font-medium text-zinc-400 border-b border-zinc-700">
-          Assign Pilot
-        </div>
+        {!isPilotSelfUnassign && (
+          <div className="px-3 py-1.5 text-xs font-medium text-zinc-400 border-b border-zinc-700">
+            Assign Pilot
+          </div>
+        )}
 
         {/* Un-assign Option */}
         {currentPilot && (
-          <>
-            <button
-              onClick={() => {
-                onUnassign();
-                onClose();
-              }}
-              className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-zinc-700 transition-colors flex items-center gap-2"
-            >
-              <X className="w-4 h-4" />
-              <span>Un-assign</span>
-            </button>
-            <div className="border-t border-zinc-700 my-1" />
-          </>
+          <button
+            onClick={() => {
+              onUnassign();
+              onClose();
+            }}
+            className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-zinc-700 transition-colors flex items-center gap-2"
+          >
+            <X className="w-4 h-4" />
+            <span>Un-assign</span>
+          </button>
         )}
 
-        {/* Available Pilots */}
-        {availablePilots.length > 0 ? (
-          <div className="py-1">
-            {availablePilots.map((pilot) => {
-              const isCurrent = currentPilot === pilot.displayName;
-              const flightCount = pilotFlightCounts[pilot.displayName] || 0;
-              return (
-                <button
-                  key={pilot.uid}
-                  onClick={() => {
-                    onSelectPilot(pilot.displayName);
-                    onClose();
-                  }}
-                  className={`w-full px-3 py-2 text-left text-sm hover:bg-zinc-700 transition-colors flex items-center justify-between gap-2 ${
-                    isCurrent ? "text-green-400" : "text-white"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span>{pilot.displayName}</span>
-                    {flightCount > 0 && (
-                      <span className="bg-blue-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                        {flightCount}
-                      </span>
-                    )}
-                  </div>
-                  {isCurrent && <UserCheck className="w-4 h-4" />}
-                </button>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="px-3 py-2 text-sm text-zinc-500">
-            No pilots available
-          </div>
+        {/* Available Pilots - Only show if not pilot self-unassign */}
+        {!isPilotSelfUnassign && (
+          <>
+            {currentPilot && <div className="border-t border-zinc-700 my-1" />}
+            {availablePilots.length > 0 ? (
+              <div className="py-1">
+                {availablePilots.map((pilot) => {
+                  const isCurrent = currentPilot === pilot.displayName;
+                  const flightCount = pilotFlightCounts[pilot.displayName] || 0;
+                  return (
+                    <button
+                      key={pilot.uid}
+                      onClick={() => {
+                        onSelectPilot(pilot.displayName);
+                        onClose();
+                      }}
+                      className={`w-full px-3 py-2 text-left text-sm hover:bg-zinc-700 transition-colors flex items-center justify-between gap-2 ${
+                        isCurrent ? "text-green-400" : "text-white"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span>{pilot.displayName}</span>
+                        {flightCount > 0 && (
+                          <span className="bg-blue-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                            {flightCount}
+                          </span>
+                        )}
+                      </div>
+                      {isCurrent && <UserCheck className="w-4 h-4" />}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="px-3 py-2 text-sm text-zinc-500">
+                No pilots available
+              </div>
+            )}
+          </>
         )}
       </div>
     </>
