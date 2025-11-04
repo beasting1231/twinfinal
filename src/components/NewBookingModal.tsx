@@ -35,6 +35,13 @@ interface NewBookingModalProps {
     bookingStatus: "confirmed" | "pending" | "cancelled";
     span: number;
   }) => void;
+  initialData?: {
+    customerName?: string;
+    numberOfPeople?: number;
+    phoneNumber?: string;
+    email?: string;
+    notes?: string;
+  };
 }
 
 export function NewBookingModal({
@@ -48,6 +55,7 @@ export function NewBookingModal({
   bookings,
   isPilotAvailableForTimeSlot,
   onSubmit,
+  initialData,
 }: NewBookingModalProps) {
   // Modal component for creating new bookings
   const [customerName, setCustomerName] = useState("");
@@ -62,6 +70,17 @@ export function NewBookingModal({
   const [femalePilotsRequired, setFemalePilotsRequired] = useState(0);
   const [flightType, setFlightType] = useState<"sensational" | "classic" | "early bird">("sensational");
   const [showAdditionalOptions, setShowAdditionalOptions] = useState(false);
+
+  // Initialize form with initialData if provided
+  useEffect(() => {
+    if (open && initialData) {
+      if (initialData.customerName) setCustomerName(initialData.customerName);
+      if (initialData.numberOfPeople) setNumberOfPeople(String(initialData.numberOfPeople));
+      if (initialData.phoneNumber) setPhoneNumber(initialData.phoneNumber);
+      if (initialData.email) setEmail(initialData.email);
+      if (initialData.notes) setNotes(initialData.notes);
+    }
+  }, [open, initialData]);
 
   const { startEditing, stopEditing } = useEditing();
 

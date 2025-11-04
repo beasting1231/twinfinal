@@ -7,12 +7,15 @@ import { AvailabilityContextMenu } from "./AvailabilityContextMenu";
 import { DriverVehicleCell } from "./DriverVehicleCell";
 import { DriverVehicleModal } from "./DriverVehicleModal";
 import { DriverVehicleContextMenu } from "./DriverVehicleContextMenu";
-import { BookingRequestModal } from "./BookingRequestModal";
+import { BookingRequestContextMenu } from "./BookingRequestContextMenu";
+import { BookingRequestItem } from "./BookingRequestItem";
 import { useBookingSourceColors } from "../hooks/useBookingSourceColors";
 import { useDriverAssignments } from "../hooks/useDriverAssignments";
 import { useBookingRequests } from "../hooks/useBookingRequests";
-import type { Booking, Pilot } from "../types/index";
+import type { Booking, Pilot, BookingRequest } from "../types/index";
 import { format } from "date-fns";
+import { doc, updateDoc, deleteDoc } from "firebase/firestore";
+import { db } from "../firebase/config";
 
 interface ScheduleGridProps {
   selectedDate: Date;
@@ -49,9 +52,15 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
   // Fetch booking requests
   const { bookingRequests } = useBookingRequests();
 
-  // State for selected booking request
-  const [selectedBookingRequest, setSelectedBookingRequest] = useState<any>(null);
-  const [isBookingRequestModalOpen, setIsBookingRequestModalOpen] = useState(false);
+  // Booking request context menu state
+  const [bookingRequestContextMenu, setBookingRequestContextMenu] = useState<{
+    isOpen: boolean;
+    position: { x: number; y: number };
+    request: BookingRequest;
+  } | null>(null);
+
+  // State for pre-filling new booking modal from a booking request
+  const [bookingRequestToBook, setBookingRequestToBook] = useState<BookingRequest | null>(null);
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
@@ -101,9 +110,30 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
   const [scale, setScale] = useState(1);
   const [isPinching, setIsPinching] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const [gridHeight, setGridHeight] = useState(0);
   const initialDistanceRef = useRef<number | null>(null);
   const initialScaleRef = useRef<number>(1);
   const rafRef = useRef<number | null>(null);
+
+  // Measure grid height for zoom compensation
+  useEffect(() => {
+    if (gridRef.current) {
+      const updateHeight = () => {
+        if (gridRef.current) {
+          setGridHeight(gridRef.current.offsetHeight);
+        }
+      };
+
+      // Measure initially
+      updateHeight();
+
+      // Re-measure when window resizes or scale changes
+      window.addEventListener('resize', updateHeight);
+
+      return () => window.removeEventListener('resize', updateHeight);
+    }
+  }, [pilots.length, timeSlots.length, bookings.length, scale]);
 
   const handleAvailableCellClick = useCallback((pilotIndex: number, timeIndex: number, timeSlot: string) => {
     setSelectedCell({ pilotIndex, timeIndex, timeSlot });
@@ -115,11 +145,24 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
     setIsDetailsModalOpen(true);
   }, []);
 
-  const handleBookingSubmit = useCallback((booking: Omit<Booking, "id">) => {
+  const handleBookingSubmit = useCallback(async (booking: Omit<Booking, "id">) => {
     if (onAddBooking) {
       onAddBooking(booking);
+
+      // If this booking was created from a booking request, mark the request as approved
+      if (bookingRequestToBook?.id) {
+        try {
+          await updateDoc(doc(db, "bookingRequests", bookingRequestToBook.id), {
+            status: "approved",
+          });
+        } catch (error) {
+          console.error("Error updating booking request status:", error);
+        }
+      }
     }
-  }, [onAddBooking]);
+    setIsModalOpen(false);
+    setBookingRequestToBook(null);
+  }, [onAddBooking, bookingRequestToBook]);
 
   const handleDriverVehicleCellClick = useCallback((booking: Booking | null, driverColumn: 1 | 2 = 1, timeIndex: number) => {
     setSelectedBookingForDriverVehicle(booking);
@@ -532,6 +575,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
       onTouchEnd={handleTouchEnd}
     >
       <div
+        ref={gridRef}
         className={`inline-block origin-top-left ${!isPinching ? 'transition-transform duration-100' : ''}`}
         style={{ transform: `scale(${scale})` }}
       >
@@ -763,36 +807,34 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
 
       {/* Booking Requests Inbox */}
       {bookingRequests.length > 0 && (
-        <div className="mt-6 max-w-4xl">
+        <div
+          className="max-w-lg"
+          style={{
+            marginTop: `${24 + (gridHeight * (scale - 1))}px`
+          }}
+        >
           <h2 className="text-xl font-semibold text-white mb-3">New Booking Requests</h2>
           <div className="space-y-2">
             {bookingRequests.map((request) => (
-              <div
+              <BookingRequestItem
                 key={request.id}
-                onClick={() => {
-                  setSelectedBookingRequest(request);
-                  setIsBookingRequestModalOpen(true);
+                request={request}
+                onContextMenu={(req, position) => {
+                  setBookingRequestContextMenu({
+                    isOpen: true,
+                    position,
+                    request: req,
+                  });
                 }}
-                className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 cursor-pointer hover:bg-zinc-800 transition-colors"
-              >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-white font-medium">{request.customerName}</p>
-                    <p className="text-sm text-zinc-400">{request.email}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-white">{request.date}</p>
-                    <p className="text-sm text-zinc-400">{request.time}</p>
-                  </div>
-                </div>
-                <div className="mt-2 flex gap-4 text-sm text-zinc-400">
-                  <span>{request.numberOfPeople} {request.numberOfPeople === 1 ? 'person' : 'people'}</span>
-                  {request.phone && <span>{request.phone}</span>}
-                </div>
-                {request.notes && (
-                  <p className="mt-2 text-sm text-zinc-500 truncate">{request.notes}</p>
-                )}
-              </div>
+                onDateClick={(dateString) => {
+                  if (onNavigateToDate) {
+                    // Parse the date string (YYYY-MM-DD) to a Date object
+                    const [year, month, day] = dateString.split('-').map(Number);
+                    const date = new Date(year, month - 1, day);
+                    onNavigateToDate(date);
+                  }
+                }}
+              />
             ))}
           </div>
         </div>
@@ -801,7 +843,13 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
       {selectedCell && (
         <NewBookingModal
           open={isModalOpen}
-          onOpenChange={setIsModalOpen}
+          onOpenChange={(open) => {
+            setIsModalOpen(open);
+            if (!open) {
+              // Clear booking request data when modal closes
+              setBookingRequestToBook(null);
+            }
+          }}
           selectedDate={selectedDate}
           pilotIndex={selectedCell.pilotIndex}
           timeIndex={selectedCell.timeIndex}
@@ -810,6 +858,13 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
           bookings={bookings}
           isPilotAvailableForTimeSlot={isPilotAvailableForTimeSlot}
           onSubmit={handleBookingSubmit}
+          initialData={bookingRequestToBook ? {
+            customerName: bookingRequestToBook.customerName,
+            numberOfPeople: bookingRequestToBook.numberOfPeople,
+            phoneNumber: bookingRequestToBook.phone,
+            email: bookingRequestToBook.email,
+            notes: bookingRequestToBook.notes,
+          } : undefined}
         />
       )}
 
@@ -964,12 +1019,84 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
         date={selectedDriverDate}
       />
 
-      {/* Booking Request Modal */}
-      <BookingRequestModal
-        open={isBookingRequestModalOpen}
-        onOpenChange={setIsBookingRequestModalOpen}
-        request={selectedBookingRequest}
-      />
+      {/* Booking Request Context Menu */}
+      {bookingRequestContextMenu && (
+        <BookingRequestContextMenu
+          isOpen={bookingRequestContextMenu.isOpen}
+          position={bookingRequestContextMenu.position}
+          onBook={async () => {
+            const request = bookingRequestContextMenu.request;
+            if (!request.id || !onAddBooking) return;
+
+            try {
+              // Find the time index
+              const timeSlotIndex = timeSlots.findIndex(slot => slot === request.time);
+
+              if (timeSlotIndex === -1) {
+                alert("The requested time slot is not available in the schedule.");
+                return;
+              }
+
+              // Create the booking
+              await onAddBooking({
+                date: request.date,
+                pilotIndex: 0, // Will be assigned later
+                timeIndex: timeSlotIndex,
+                customerName: request.customerName,
+                numberOfPeople: request.numberOfPeople,
+                pickupLocation: "",
+                bookingSource: "twin",
+                phoneNumber: request.phone || "",
+                email: request.email,
+                notes: request.notes || "",
+                assignedPilots: [],
+                bookingStatus: "pending",
+                span: request.numberOfPeople,
+              });
+
+              // Mark request as approved
+              await updateDoc(doc(db, "bookingRequests", request.id), {
+                status: "approved",
+              });
+            } catch (error) {
+              console.error("Error creating booking from request:", error);
+              alert("Failed to create booking. Please try again.");
+            }
+          }}
+          onBookForAnotherTime={() => {
+            setBookingRequestToBook(bookingRequestContextMenu.request);
+            // Open the new booking modal with default time slot (user can change it)
+            setSelectedCell({ pilotIndex: 0, timeIndex: 0, timeSlot: timeSlots[0] });
+            setIsModalOpen(true);
+          }}
+          onAddToWaitingList={async () => {
+            const request = bookingRequestContextMenu.request;
+            // For now, just show an alert. You can implement a waiting list feature later.
+            alert(`Added ${request.customerName} to the waiting list for ${request.date} at ${request.time}`);
+
+            // Optionally mark the request with a different status or add to a waiting list collection
+            if (request.id) {
+              await updateDoc(doc(db, "bookingRequests", request.id), {
+                status: "rejected", // or create a "waiting_list" status
+              });
+            }
+          }}
+          onDelete={async () => {
+            const request = bookingRequestContextMenu.request;
+            if (!request.id) return;
+
+            if (confirm(`Delete booking request from ${request.customerName}?`)) {
+              try {
+                await deleteDoc(doc(db, "bookingRequests", request.id));
+              } catch (error) {
+                console.error("Error deleting booking request:", error);
+                alert("Failed to delete booking request. Please try again.");
+              }
+            }
+          }}
+          onClose={() => setBookingRequestContextMenu(null)}
+        />
+      )}
     </div>
   );
 }

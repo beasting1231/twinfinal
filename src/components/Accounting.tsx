@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { format, parseISO, startOfDay } from "date-fns";
 import { useBookings } from "../hooks/useBookings";
+import { useDriverAssignments } from "../hooks/useDriverAssignments";
 import { Download, Filter } from "lucide-react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
@@ -28,6 +29,7 @@ interface AccountingRow {
 
 export function Accounting() {
   const { bookings, loading } = useBookings();
+  const { driverAssignments, loading: driversLoading } = useDriverAssignments(); // Fetch all driver assignments
 
   // Filter states
   const [dateRange, setDateRange] = useState<{ from: string; to: string }>(() => {
@@ -67,20 +69,25 @@ export function Accounting() {
       const uniqueAssignedPilots = new Set(booking.assignedPilots?.filter(p => p && p.trim()) || []);
       const currentPax = totalPaxByTurn.get(turnKey) || 0;
       totalPaxByTurn.set(turnKey, currentPax + uniqueAssignedPilots.size);
+    });
+
+    // Collect drivers and vehicles from driverAssignments
+    driverAssignments.forEach((assignment) => {
+      const turnKey = `${assignment.date}@${assignment.timeIndex}`;
 
       // Collect drivers for this turn
       if (!driversByTurn.has(turnKey)) {
         driversByTurn.set(turnKey, new Set());
       }
-      if (booking.driver) driversByTurn.get(turnKey)!.add(booking.driver);
-      if (booking.driver2) driversByTurn.get(turnKey)!.add(booking.driver2);
+      if (assignment.driver) driversByTurn.get(turnKey)!.add(assignment.driver);
+      if (assignment.driver2) driversByTurn.get(turnKey)!.add(assignment.driver2);
 
       // Collect vehicles for this turn
       if (!vehiclesByTurn.has(turnKey)) {
         vehiclesByTurn.set(turnKey, new Set());
       }
-      if (booking.vehicle) vehiclesByTurn.get(turnKey)!.add(booking.vehicle);
-      if (booking.vehicle2) vehiclesByTurn.get(turnKey)!.add(booking.vehicle2);
+      if (assignment.vehicle) vehiclesByTurn.get(turnKey)!.add(assignment.vehicle);
+      if (assignment.vehicle2) vehiclesByTurn.get(turnKey)!.add(assignment.vehicle2);
     });
 
     // Create rows - one row per assigned pilot per booking
@@ -132,7 +139,7 @@ export function Accounting() {
     });
 
     return rows;
-  }, [bookings]);
+  }, [bookings, driverAssignments]);
 
   // Extract unique values for filters
   const filterOptions = useMemo(() => {
@@ -322,7 +329,7 @@ export function Accounting() {
 
       {/* Table */}
       <div className="flex-1 overflow-auto bg-zinc-900 rounded-lg border border-zinc-800">
-        {loading ? (
+        {(loading || driversLoading) ? (
           <div className="flex items-center justify-center h-32">
             <div className="w-8 h-8 border-4 border-zinc-700 border-t-white rounded-full animate-spin"></div>
           </div>
