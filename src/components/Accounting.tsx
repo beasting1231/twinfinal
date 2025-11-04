@@ -330,9 +330,9 @@ export function Accounting() {
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-zinc-800 border-b border-zinc-700">
               <tr>
-                <th className="text-left px-4 py-3 text-zinc-300 font-medium">Date</th>
-                <th className="text-left px-4 py-3 text-zinc-300 font-medium">Time</th>
-                <th className="text-left px-4 py-3 text-zinc-300 font-medium">
+                <th className="text-left px-4 py-3 text-zinc-300 font-medium whitespace-nowrap">Date</th>
+                <th className="text-left px-4 py-3 text-zinc-300 font-medium whitespace-nowrap">Time</th>
+                <th className="text-left px-4 py-3 text-zinc-300 font-medium whitespace-nowrap">
                   <div className="flex items-center gap-2">
                     <span>Pilot</span>
                     <FilterDropdown
@@ -348,8 +348,8 @@ export function Accounting() {
                     />
                   </div>
                 </th>
-                <th className="text-right px-4 py-3 text-zinc-300 font-medium">Payment</th>
-                <th className="text-left px-4 py-3 text-zinc-300 font-medium">
+                <th className="text-right px-4 py-3 text-zinc-300 font-medium whitespace-nowrap">Payment</th>
+                <th className="text-left px-4 py-3 text-zinc-300 font-medium whitespace-nowrap">
                   <div className="flex items-center gap-2">
                     <span>Method</span>
                     <FilterDropdown
@@ -365,7 +365,7 @@ export function Accounting() {
                     />
                   </div>
                 </th>
-                <th className="text-left px-4 py-3 text-zinc-300 font-medium">
+                <th className="text-left px-4 py-3 text-zinc-300 font-medium whitespace-nowrap">
                   <div className="flex items-center gap-2">
                     <span>Source</span>
                     <FilterDropdown
@@ -381,9 +381,9 @@ export function Accounting() {
                     />
                   </div>
                 </th>
-                <th className="text-center px-4 py-3 text-zinc-300 font-medium">Turn</th>
-                <th className="text-center px-4 py-3 text-zinc-300 font-medium">Pax</th>
-                <th className="text-left px-4 py-3 text-zinc-300 font-medium">
+                <th className="text-center px-4 py-3 text-zinc-300 font-medium whitespace-nowrap">Turn</th>
+                <th className="text-center px-4 py-3 text-zinc-300 font-medium whitespace-nowrap">Pax</th>
+                <th className="text-left px-4 py-3 text-zinc-300 font-medium whitespace-nowrap">
                   <div className="flex items-center gap-2">
                     <span>Driver(s)</span>
                     <FilterDropdown
@@ -399,7 +399,7 @@ export function Accounting() {
                     />
                   </div>
                 </th>
-                <th className="text-left px-4 py-3 text-zinc-300 font-medium">
+                <th className="text-left px-4 py-3 text-zinc-300 font-medium whitespace-nowrap">
                   <div className="flex items-center gap-2">
                     <span>Vehicle(s)</span>
                     <FilterDropdown
@@ -415,8 +415,8 @@ export function Accounting() {
                     />
                   </div>
                 </th>
-                <th className="text-right px-4 py-3 text-zinc-300 font-medium">Commission</th>
-                <th className="text-left px-4 py-3 text-zinc-300 font-medium">Comm. Status</th>
+                <th className="text-right px-4 py-3 text-zinc-300 font-medium whitespace-nowrap">Commission</th>
+                <th className="text-left px-4 py-3 text-zinc-300 font-medium whitespace-nowrap">Comm. Status</th>
               </tr>
             </thead>
             <tbody>
@@ -438,13 +438,13 @@ export function Accounting() {
                       key={`${row.date}-${row.time}-${row.pilot}-${index}`}
                       className="border-b border-zinc-800 hover:bg-zinc-800/50 transition-colors"
                     >
-                      <td className="px-4 py-3 text-white">{formatDate(row.date)}</td>
-                      <td className="px-4 py-3 text-white">{row.time}</td>
-                      <td className="px-4 py-3 text-white">{row.pilot}</td>
-                      <td className="px-4 py-3 text-right text-white font-medium">
+                      <td className="px-4 py-3 text-white whitespace-nowrap">{formatDate(row.date)}</td>
+                      <td className="px-4 py-3 text-white whitespace-nowrap">{row.time}</td>
+                      <td className="px-4 py-3 text-white whitespace-nowrap">{row.pilot}</td>
+                      <td className="px-4 py-3 text-right text-white font-medium whitespace-nowrap">
                         {typeof row.payment === "number" ? row.payment.toFixed(2) : row.payment}
                       </td>
-                      <td className="px-4 py-3 text-zinc-300">
+                      <td className="px-4 py-3 text-zinc-300 whitespace-nowrap">
                         <span className={`px-2 py-1 rounded text-xs font-medium ${
                           row.paymentMethod === "direkt" ? "bg-green-900/30 text-green-400" :
                           row.paymentMethod === "ticket" ? "bg-blue-900/30 text-blue-400" :
@@ -453,25 +453,25 @@ export function Accounting() {
                           {formatPaymentMethod(row.paymentMethod)}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-zinc-300">
+                      <td className="px-4 py-3 text-zinc-300 whitespace-nowrap">
                         {row.bookingSource}
                       </td>
-                      <td className="px-4 py-3 text-center text-white">
+                      <td className="px-4 py-3 text-center text-white whitespace-nowrap">
                         {isFirstRowOfTurn ? row.turn : ""}
                       </td>
-                      <td className="px-4 py-3 text-center text-white">
+                      <td className="px-4 py-3 text-center text-white whitespace-nowrap">
                         {isFirstRowOfTurn ? row.pax : ""}
                       </td>
-                      <td className="px-4 py-3 text-zinc-300">
+                      <td className="px-4 py-3 text-zinc-300 whitespace-nowrap">
                         {isFirstRowOfTurn ? (row.drivers.length > 0 ? row.drivers.join(", ") : "-") : ""}
                       </td>
-                      <td className="px-4 py-3 text-zinc-300">
+                      <td className="px-4 py-3 text-zinc-300 whitespace-nowrap">
                         {isFirstRowOfTurn ? (row.vehicles.length > 0 ? row.vehicles.join(", ") : "-") : ""}
                       </td>
-                      <td className="px-4 py-3 text-right text-white">
+                      <td className="px-4 py-3 text-right text-white whitespace-nowrap">
                         {row.commission !== null ? row.commission.toFixed(2) : "-"}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 whitespace-nowrap">
                         {row.commission !== null ? (
                           row.bookingId ? (
                             <select

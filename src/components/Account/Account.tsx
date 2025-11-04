@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, collection, getDocs, updateDoc } from "firebase/firestore";
 import { updateProfile } from "firebase/auth";
 import { db } from "../../firebase/config";
 import { useAuth } from "../../contexts/AuthContext";
@@ -52,11 +52,15 @@ export function Account() {
     setMessage(null);
 
     try {
+      // Get the old display name from Firestore
+      const profileRef = doc(db, "userProfiles", currentUser.uid);
+      const profileSnap = await getDoc(profileRef);
+      const oldDisplayName = profileSnap.exists() ? (profileSnap.data() as UserProfile).displayName : null;
+
       // Update Firebase Auth display name
       await updateProfile(currentUser, { displayName });
 
       // Update Firestore user profile
-      const profileRef = doc(db, "userProfiles", currentUser.uid);
       await setDoc(
         profileRef,
         {
@@ -69,7 +73,50 @@ export function Account() {
         { merge: true }
       );
 
-      setMessage({ type: "success", text: "Profile updated successfully!" });
+      // If the display name changed, update all bookings with the old name
+      if (oldDisplayName && oldDisplayName !== displayName) {
+        const bookingsSnapshot = await getDocs(collection(db, "bookings"));
+
+        const updatePromises: Promise<void>[] = [];
+
+        bookingsSnapshot.docs.forEach((bookingDoc) => {
+          const bookingData = bookingDoc.data();
+          let needsUpdate = false;
+          const updates: any = {};
+
+          // Update assignedPilots array
+          if (bookingData.assignedPilots && Array.isArray(bookingData.assignedPilots)) {
+            const updatedAssignedPilots = bookingData.assignedPilots.map((pilot: string) =>
+              pilot === oldDisplayName ? displayName : pilot
+            );
+            if (JSON.stringify(updatedAssignedPilots) !== JSON.stringify(bookingData.assignedPilots)) {
+              updates.assignedPilots = updatedAssignedPilots;
+              needsUpdate = true;
+            }
+          }
+
+          // Update pilotPayments array
+          if (bookingData.pilotPayments && Array.isArray(bookingData.pilotPayments)) {
+            const updatedPilotPayments = bookingData.pilotPayments.map((payment: any) =>
+              payment.pilotName === oldDisplayName
+                ? { ...payment, pilotName: displayName }
+                : payment
+            );
+            if (JSON.stringify(updatedPilotPayments) !== JSON.stringify(bookingData.pilotPayments)) {
+              updates.pilotPayments = updatedPilotPayments;
+              needsUpdate = true;
+            }
+          }
+
+          if (needsUpdate) {
+            updatePromises.push(updateDoc(doc(db, "bookings", bookingDoc.id), updates));
+          }
+        });
+
+        await Promise.all(updatePromises);
+      }
+
+      setMessage({ type: "success", text: "Profile updated successfully! All your bookings have been updated." });
     } catch (error) {
       console.error("Error saving profile:", error);
       setMessage({ type: "error", text: "Failed to update profile. Please try again." });
