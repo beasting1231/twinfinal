@@ -3,10 +3,12 @@ import { format, addDays } from "date-fns";
 import { useAvailability } from "../hooks/useAvailability";
 import { useBookings } from "../hooks/useBookings";
 import { useAuth } from "../contexts/AuthContext";
+import { useRole } from "../hooks/useRole";
 import { getTimeSlotsByDate } from "../utils/timeSlots";
 import { useMemo, useState, useRef, useEffect } from "react";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../firebase/config";
+import type { UserProfile } from "../types/index";
 
 interface AvailabilityGridProps {
   weekStartDate: Date;
@@ -15,7 +17,9 @@ interface AvailabilityGridProps {
 
 export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
   // Generate the 7 days of the week starting from weekStartDate
-  const days = Array.from({ length: 7 }, (_, i) => addDays(weekStartDate, i));
+  const days = useMemo(() => {
+    return Array.from({ length: 7 }, (_, i) => addDays(weekStartDate, i));
+  }, [weekStartDate]);
 
   // Get time slots for each day based on the date
   const dailyTimeSlots = useMemo(() => {
@@ -24,9 +28,17 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
 
   // No longer need to create a union of all time slots - each day will render its own slots independently
 
-  const { isAvailable, toggleAvailability, toggleDay, loading, saving, justSaved } = useAvailability();
-  const { bookings } = useBookings();
   const { currentUser } = useAuth();
+  const { role } = useRole();
+  const [selectedUserId, setSelectedUserId] = useState<string | undefined>(undefined);
+  const [pilotsAndAdmins, setPilotsAndAdmins] = useState<UserProfile[]>([]);
+
+  // For admins, use selectedUserId if set, otherwise currentUser
+  // For non-admins, always use currentUser
+  const targetUserId = role === 'admin' && selectedUserId ? selectedUserId : undefined;
+
+  const { isAvailable, toggleAvailability, toggleDay, loading, saving, justSaved } = useAvailability(targetUserId);
+  const { bookings } = useBookings();
 
   // State to track all pilots' availability data
   const [pilotsAvailabilityData, setPilotsAvailabilityData] = useState<{
@@ -42,18 +54,57 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
   // Track if initial load is complete - stays true until everything is loaded
   const [isInitialLoading, setIsInitialLoading] = useState(true);
 
-  // Update initial loading state - only set to false when BOTH are loaded
+  // Track if we're changing dates to prevent premature loading state changes
+  const [isChangingDate, setIsChangingDate] = useState(false);
+
+  // Reset loading state when date/week changes
   useEffect(() => {
-    if (!loading && !pilotsAvailabilityLoading) {
+    setIsInitialLoading(true);
+    setIsChangingDate(true);
+    setPilotsAvailabilityLoading(true);
+  }, [weekStartDate]);
+
+  // Update initial loading state - only set to false when BOTH are loaded AND we're not changing dates
+  useEffect(() => {
+    if (!loading && !pilotsAvailabilityLoading && !isChangingDate) {
       setIsInitialLoading(false);
     }
-  }, [loading, pilotsAvailabilityLoading]);
+  }, [loading, pilotsAvailabilityLoading, isChangingDate]);
+
+  // Fetch all pilots and admins for the dropdown (admin only)
+  useEffect(() => {
+    if (role !== 'admin') return;
+
+    async function fetchPilotsAndAdmins() {
+      try {
+        const usersQuery = query(
+          collection(db, "userProfiles"),
+          where("role", "in", ["pilot", "admin"])
+        );
+        const snapshot = await getDocs(usersQuery);
+        const users = snapshot.docs.map(doc => ({
+          ...doc.data(),
+          uid: doc.id
+        } as UserProfile));
+
+        // Sort by display name
+        users.sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+        setPilotsAndAdmins(users);
+      } catch (error) {
+        console.error("Error fetching pilots and admins:", error);
+      }
+    }
+
+    fetchPilotsAndAdmins();
+  }, [role]);
 
   // Fetch availability data for all pilots to determine if cells should be locked
   useEffect(() => {
     async function fetchAllPilotsAvailability() {
       if (!currentUser) {
         setPilotsAvailabilityLoading(false);
+        setIsChangingDate(false);
         return;
       }
 
@@ -63,8 +114,11 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
         const pilotsSignedInPerDay = new Map<string, Set<string>>();
         const pilotsAvailablePerTimeSlot = new Map<string, Set<string>>();
 
+        // Generate days for this week
+        const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStartDate, i));
+
         // For each day in the week
-        for (const day of days) {
+        for (const day of weekDays) {
           const dateStr = format(day, "yyyy-MM-dd");
 
           // Query availability for this date
@@ -101,14 +155,16 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
           pilotsAvailablePerTimeSlot,
         });
         setPilotsAvailabilityLoading(false);
+        setIsChangingDate(false);
       } catch (error) {
         console.error("Error fetching pilots availability:", error);
         setPilotsAvailabilityLoading(false);
+        setIsChangingDate(false);
       }
     }
 
     fetchAllPilotsAvailability();
-  }, [days, currentUser]);
+  }, [weekStartDate, currentUser]);
 
   // Function to check if a cell should be locked (cannot be toggled to unavailable)
   const isCellLocked = (day: Date, timeSlot: string): boolean => {
@@ -272,6 +328,27 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
+      {/* Admin User Selector */}
+      {role === 'admin' && (
+        <div className="mb-6 max-w-xs">
+          <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-2">
+            Viewing Availability For
+          </label>
+          <select
+            value={selectedUserId || ''}
+            onChange={(e) => setSelectedUserId(e.target.value || undefined)}
+            className="w-full bg-zinc-900 border-2 border-zinc-700 rounded-lg px-3 py-2.5 text-white text-sm font-medium shadow-sm hover:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors cursor-pointer"
+          >
+            <option value="">My Availability</option>
+            {pilotsAndAdmins.map(user => (
+              <option key={user.uid} value={user.uid}>
+                {user.displayName} {user.role === 'admin' ? '• Admin' : '• Pilot'}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {/* Saving indicator */}
       {(saving || justSaved) && (
         <div className="fixed bottom-4 right-4 z-50">

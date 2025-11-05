@@ -57,7 +57,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   async function loginWithGoogle() {
     const provider = new GoogleAuthProvider();
-    await signInWithPopup(auth, provider);
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (error: any) {
+      // Handle popup closed error gracefully
+      if (error.code === 'auth/popup-closed-by-user') {
+        console.log("Sign-in popup was closed");
+      } else {
+        throw error;
+      }
+    }
   }
 
   async function logout() {

@@ -11,23 +11,26 @@ interface AvailabilityData {
   timeSlot: string;
 }
 
-export function useAvailability() {
+export function useAvailability(targetUserId?: string) {
   const { currentUser } = useAuth();
   const [availabilityMap, setAvailabilityMap] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
 
+  // Use targetUserId if provided (for admins viewing other users), otherwise use currentUser
+  const userId = targetUserId || currentUser?.uid;
+
   useEffect(() => {
-    if (!currentUser) {
+    if (!userId) {
       setLoading(false);
       return;
     }
 
-    // Subscribe to availability for current user
+    // Subscribe to availability for the specified user
     const q = query(
       collection(db, "availability"),
-      where("userId", "==", currentUser.uid)
+      where("userId", "==", userId)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -42,7 +45,7 @@ export function useAvailability() {
     });
 
     return unsubscribe;
-  }, [currentUser]);
+  }, [userId]);
 
   const isAvailable = (date: Date, timeSlot: string): boolean => {
     const dateStr = format(date, "yyyy-MM-dd");
@@ -51,7 +54,7 @@ export function useAvailability() {
   };
 
   const toggleAvailability = async (date: Date, timeSlot: string) => {
-    if (!currentUser) return;
+    if (!userId) return;
 
     try {
       setSaving(true);
@@ -64,7 +67,7 @@ export function useAvailability() {
         // Delete - user is marking as unavailable (red)
         const q = query(
           collection(db, "availability"),
-          where("userId", "==", currentUser.uid),
+          where("userId", "==", userId),
           where("date", "==", dateStr),
           where("timeSlot", "==", timeSlot)
         );
@@ -74,7 +77,7 @@ export function useAvailability() {
       } else {
         // Add - user is marking as available (green)
         await addDoc(collection(db, "availability"), {
-          userId: currentUser.uid,
+          userId: userId,
           date: dateStr,
           timeSlot: timeSlot,
         });
@@ -90,8 +93,8 @@ export function useAvailability() {
   };
 
   const toggleDay = async (date: Date, timeSlots: string[]) => {
-    if (!currentUser) {
-      console.log("No current user");
+    if (!userId) {
+      console.log("No user ID");
       return;
     }
 
@@ -115,7 +118,7 @@ export function useAvailability() {
         const deletePromises = timeSlots.map(async (slot) => {
           const q = query(
             collection(db, "availability"),
-            where("userId", "==", currentUser.uid),
+            where("userId", "==", userId),
             where("date", "==", dateStr),
             where("timeSlot", "==", slot)
           );
@@ -129,7 +132,7 @@ export function useAvailability() {
           const key = `${dateStr}-${slot}`;
           if (!availabilityMap.has(key)) {
             return addDoc(collection(db, "availability"), {
-              userId: currentUser.uid,
+              userId: userId,
               date: dateStr,
               timeSlot: slot,
             });
