@@ -653,9 +653,9 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
           </div>
         </div>
 
-        {/* Booking Requests Inbox - Always show even when no pilots */}
-        {(pendingRequests.length > 0 || waitlistRequests.length > 0) && (
-          <div className="max-w-lg mx-auto mt-8 bg-zinc-900 rounded-lg border border-zinc-800">
+        {/* Booking Requests Inbox - Only show to admins */}
+        {role === 'admin' && (
+        <div className="max-w-lg mx-auto mt-8 bg-zinc-900 rounded-lg border border-zinc-800">
             <Tabs defaultValue="requests" className="flex-1 flex flex-col">
               <TabsList className="grid w-full grid-cols-2 bg-zinc-800 border-b border-zinc-700 rounded-t-lg">
                 <TabsTrigger value="requests" className="data-[state=active]:bg-zinc-900">
@@ -669,7 +669,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
               <TabsContent value="requests" className="p-4 mt-0">
                 {pendingRequests.length === 0 ? (
                   <div className="flex items-center justify-center h-32">
-                    <p className="text-zinc-500">No booking requests</p>
+                    <p className="text-zinc-500">No new booking requests</p>
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -700,7 +700,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
               <TabsContent value="waitlist" className="p-4 mt-0">
                 {waitlistRequests.length === 0 ? (
                   <div className="flex items-center justify-center h-32">
-                    <p className="text-zinc-500">No items in waiting list</p>
+                    <p className="text-zinc-500">No items on waiting list for this date</p>
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -1096,14 +1096,14 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
         </div>
       </div>
 
-      {/* Booking Requests Inbox */}
-      {(pendingRequests.length > 0 || waitlistRequests.length > 0) && (
-        <div
-          className="max-w-lg bg-zinc-900 rounded-lg border border-zinc-800"
-          style={{
-            marginTop: `${24 + (gridHeight * (scale - 1))}px`
-          }}
-        >
+      {/* Booking Requests Inbox - Only show to admins */}
+      {role === 'admin' && (
+      <div
+        className="max-w-lg bg-zinc-900 rounded-lg border border-zinc-800"
+        style={{
+          marginTop: `${24 + (gridHeight * (scale - 1))}px`
+        }}
+      >
           <Tabs defaultValue="requests" className="flex-1 flex flex-col">
             <TabsList className="grid w-full grid-cols-2 bg-zinc-800 border-b border-zinc-700 rounded-t-lg">
               <TabsTrigger value="requests" className="data-[state=active]:bg-zinc-900">
