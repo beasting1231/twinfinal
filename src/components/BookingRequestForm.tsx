@@ -4,6 +4,7 @@ import { db } from "../firebase/config";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { CountryCodeSelect } from "./CountryCodeSelect";
 import { format, parse } from "date-fns";
 import { getTimeSlotsByDate } from "../utils/timeSlots";
 import type { Booking, Pilot, UserProfile } from "../types/index";
@@ -13,6 +14,7 @@ export function BookingRequestForm() {
     customerName: "",
     email: "",
     phone: "",
+    phoneCountryCode: "+41",
     date: format(new Date(), "yyyy-MM-dd"),
     timeIndex: "",
     numberOfPeople: 1,
@@ -174,10 +176,16 @@ export function BookingRequestForm() {
       // Convert timeIndex to time string
       const selectedTimeSlot = timeSlots[parseInt(formData.timeIndex)];
 
+      // Combine country code and phone number
+      const fullPhoneNumber = formData.phone
+        ? `${formData.phoneCountryCode} ${formData.phone}`.trim()
+        : "";
+
       await addDoc(collection(db, "bookingRequests"), {
         customerName: formData.customerName,
         email: formData.email,
-        phone: formData.phone,
+        phone: fullPhoneNumber,
+        phoneCountryCode: formData.phoneCountryCode,
         date: formData.date,
         time: selectedTimeSlot,
         timeIndex: parseInt(formData.timeIndex),
@@ -198,6 +206,7 @@ export function BookingRequestForm() {
         customerName: "",
         email: "",
         phone: "",
+        phoneCountryCode: "+41",
         date: format(new Date(), "yyyy-MM-dd"),
         timeIndex: "",
         numberOfPeople: 1,
@@ -266,15 +275,22 @@ export function BookingRequestForm() {
             <label htmlFor="phone" className="text-sm font-medium text-zinc-200">
               Phone Number
             </label>
-            <Input
-              id="phone"
-              name="phone"
-              type="tel"
-              value={formData.phone}
-              onChange={handleChange}
-              placeholder="+1 (555) 000-0000"
-              className="text-white"
-            />
+            <div className="flex gap-2">
+              <CountryCodeSelect
+                value={formData.phoneCountryCode}
+                onChange={(code) => setFormData((prev) => ({ ...prev, phoneCountryCode: code }))}
+              />
+              <Input
+                id="phone"
+                name="phone"
+                type="tel"
+                value={formData.phone}
+                onChange={handleChange}
+                placeholder="555 000 0000"
+                className="text-white flex-1"
+                autoComplete="off"
+              />
+            </div>
           </div>
 
           {/* Date */}

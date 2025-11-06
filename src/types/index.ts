@@ -75,6 +75,7 @@ export interface BookingRequest {
   customerName: string;
   email: string;
   phone?: string;
+  phoneCountryCode?: string;
   date: string; // ISO date string (YYYY-MM-DD)
   time: string; // Time string (HH:mm)
   timeIndex: number; // Index of the time slot

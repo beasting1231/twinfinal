@@ -92,10 +92,12 @@ export function BookingRequestItem({ request, onContextMenu, onDateClick }: Book
         {request.phone && (
           <div className="flex items-center gap-2">
             <Phone className="w-3.5 h-3.5 text-zinc-500 flex-shrink-0" />
-            <span className="text-xs text-zinc-300 flex-1 truncate">{request.phone}</span>
+            <span className="text-xs text-zinc-300 flex-1 truncate">
+              {request.phone}
+            </span>
             <div className="flex gap-1">
               <a
-                href={`tel:${request.phone}`}
+                href={`tel:${request.phone.replace(/\s/g, '')}`}
                 onClick={(e) => e.stopPropagation()}
                 className="p-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white transition-colors"
                 title="Call"
