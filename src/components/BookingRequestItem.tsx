@@ -1,15 +1,30 @@
 import { useRef } from "react";
 import { Phone, Mail, Send, Users, Calendar, Clock, PhoneCall } from "lucide-react";
 import type { BookingRequest } from "../types/index";
+import { useDraggable } from "@dnd-kit/core";
 
 interface BookingRequestItemProps {
   request: BookingRequest;
   onContextMenu: (request: BookingRequest, position: { x: number; y: number }) => void;
   onDateClick: (date: string) => void;
+  canDrag?: boolean; // Whether this request can be dragged (admin only)
 }
 
-export function BookingRequestItem({ request, onContextMenu, onDateClick }: BookingRequestItemProps) {
+export function BookingRequestItem({ request, onContextMenu, onDateClick, canDrag = false }: BookingRequestItemProps) {
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Set up draggable for booking requests (admin only)
+  const draggableId = request.id ? `request-${request.id}` : null;
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: draggableId || 'disabled',
+    disabled: !canDrag || !request.id,
+  });
+
+  // Apply drag transform
+  const dragStyle = transform ? {
+    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+    opacity: isDragging ? 0.5 : 1,
+  } : {};
 
   const handleContextMenuEvent = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -32,11 +47,14 @@ export function BookingRequestItem({ request, onContextMenu, onDateClick }: Book
 
   return (
     <div
+      ref={setNodeRef}
+      {...(canDrag && request.id ? { ...attributes, ...listeners } : {})}
       onContextMenu={handleContextMenuEvent}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       onTouchMove={handleTouchEnd}
-      className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 hover:bg-zinc-800 transition-colors select-none"
+      className={`bg-zinc-900 border border-zinc-800 rounded-lg p-3 hover:bg-zinc-800 transition-colors select-none ${canDrag && request.id ? 'cursor-grab active:cursor-grabbing' : ''}`}
+      style={dragStyle}
     >
       <div className="flex items-center justify-between gap-3">
         {/* Left side: Customer name and badges */}

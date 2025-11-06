@@ -1,6 +1,7 @@
 import { useRef, memo, useState } from "react";
 import { Info } from "lucide-react";
 import type { PilotPayment } from "../types/index";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
 
 interface BookingAvailableProps {
   pilotId: string;
@@ -27,6 +28,12 @@ interface BookingAvailableProps {
   isCurrentUserPilot?: boolean; // Whether this cell is for the current user
   isFemalePilot?: boolean; // Whether this pilot is a female pilot
   currentUserDisplayName?: string; // Current user's display name to check if they're clicking their own name
+  // Drag and drop props
+  bookingId?: string; // ID for drag source
+  droppableId?: string; // ID for drop target
+  canDrag?: boolean; // Whether this booking can be dragged (admin only)
+  draggedItemPax?: number; // Number of passengers in the currently dragged item
+  hasEnoughSpace?: boolean; // Whether there's enough space at this location for the dragged item
 }
 
 export const BookingAvailable = memo(function BookingAvailable({
@@ -52,13 +59,34 @@ export const BookingAvailable = memo(function BookingAvailable({
   onPilotNameClick,
   isCurrentUserPilot = false,
   isFemalePilot = false,
-  currentUserDisplayName
+  currentUserDisplayName,
+  bookingId,
+  droppableId,
+  canDrag = false,
+  draggedItemPax,
+  hasEnoughSpace = true
 }: BookingAvailableProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const longPressTimerRef = useRef<number | null>(null);
   const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
   const infoIconRef = useRef<HTMLDivElement>(null);
   const [showNotesTooltip, setShowNotesTooltip] = useState(false);
+
+  // Set up draggable for booked cells (admin only)
+  const draggableId = bookingId ? `booking-${bookingId}` : null;
+  const { attributes, listeners, setNodeRef: setDragNodeRef, transform, isDragging } = useDraggable({
+    id: draggableId || 'disabled',
+    disabled: !canDrag || !bookingId || status !== 'booked',
+  });
+
+  // Set up droppable for available cells
+  const { setNodeRef: setDropNodeRef, isOver } = useDroppable({
+    id: droppableId || 'disabled-drop',
+    disabled: !droppableId || status !== 'available' || !hasEnoughSpace,
+  });
+
+  // Determine drop zone width (how many columns to highlight)
+  const dropZoneWidth = draggedItemPax || 1;
 
   console.log("BookingAvailable render:", { pilotId, status, isCurrentUserPilot, hasNoPilotHandler: !!onNoPilotContextMenu, hasAvailableHandler: !!onAvailableContextMenu });
 
@@ -147,25 +175,40 @@ export const BookingAvailable = memo(function BookingAvailable({
     const borderColor = hexToRgba(bookingSourceColor, 0.5);
     const hoverColor = hexToRgba(bookingSourceColor, 0.5);
 
+    // Apply drag transform
+    const dragStyle = transform ? {
+      transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+      opacity: isDragging ? 0.5 : 1,
+    } : {};
+
     return (
       <div
-        ref={containerRef}
-        className={`w-full h-full rounded-lg pt-2 px-2 flex flex-col justify-between transition-colors overflow-hidden relative ${onBookedClick ? 'cursor-pointer' : 'cursor-default'}`}
+        ref={(node) => {
+          containerRef.current = node;
+          if (canDrag && bookingId) {
+            setDragNodeRef(node);
+          }
+        }}
+        className={`w-full h-full rounded-lg pt-2 px-2 flex flex-col justify-between transition-colors overflow-hidden relative ${onBookedClick ? 'cursor-pointer' : 'cursor-default'} ${canDrag && bookingId ? 'cursor-grab active:cursor-grabbing' : ''}`}
         style={{
           backgroundColor,
           borderWidth: '1px',
           borderStyle: 'solid',
-          borderColor
+          borderColor,
+          ...dragStyle,
         }}
+        {...(canDrag && bookingId ? { ...attributes, ...listeners } : {})}
         onMouseEnter={(e) => {
-          if (onBookedClick) {
+          if (onBookedClick && !isDragging) {
             e.currentTarget.style.backgroundColor = hoverColor;
           }
         }}
         onMouseLeave={(e) => {
-          e.currentTarget.style.backgroundColor = backgroundColor;
+          if (!isDragging) {
+            e.currentTarget.style.backgroundColor = backgroundColor;
+          }
         }}
-        onClick={onBookedClick}
+        onClick={isDragging ? undefined : onBookedClick}
         onContextMenu={handleContextMenu}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
@@ -351,9 +394,23 @@ export const BookingAvailable = memo(function BookingAvailable({
     );
   }
 
+  // Hide base cell styling when showing multi-column overlay
+  const showMultiColumnOverlay = isOver && hasEnoughSpace && dropZoneWidth > 1;
+
   return (
     <div
-      className="w-full h-full bg-zinc-800 rounded-lg hover:bg-zinc-700 transition-colors cursor-pointer"
+      ref={setDropNodeRef}
+      className={`w-full h-full rounded-lg transition-colors ${
+        hasEnoughSpace ? 'cursor-pointer' : 'cursor-not-allowed'
+      } ${
+        showMultiColumnOverlay
+          ? 'bg-zinc-800 relative' // Hide green styling when showing overlay
+          : isOver && hasEnoughSpace
+          ? 'bg-green-600/40 border-2 border-green-500'
+          : !hasEnoughSpace && draggedItemPax
+          ? 'bg-red-600/20 border border-red-500'
+          : 'bg-zinc-800 hover:bg-zinc-700'
+      }`}
       onClick={onAvailableClick}
       onContextMenu={handleAvailableContextMenu}
       onTouchStart={handleAvailableTouchStart}
@@ -361,6 +418,21 @@ export const BookingAvailable = memo(function BookingAvailable({
       onTouchEnd={handleTouchEnd}
     >
       {/* Empty booking cell - available for booking */}
+      {isOver && !hasEnoughSpace && (
+        <div className="flex items-center justify-center h-full text-xs text-red-400">
+          Not enough space
+        </div>
+      )}
+
+      {/* Multi-column drop zone indicator */}
+      {showMultiColumnOverlay && (
+        <div
+          className="absolute top-0 left-0 h-full bg-green-600/40 border-2 border-green-500 rounded-lg pointer-events-none"
+          style={{
+            width: `calc(${dropZoneWidth * 100}% + ${(dropZoneWidth - 1) * 8}px)`,
+          }}
+        />
+      )}
     </div>
   );
 });

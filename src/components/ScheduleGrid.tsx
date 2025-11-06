@@ -19,6 +19,8 @@ import type { Booking, Pilot, BookingRequest } from "../types/index";
 import { format } from "date-fns";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "../firebase/config";
+import { DndContext, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
+import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
 
 interface ScheduleGridProps {
   selectedDate: Date;
@@ -118,6 +120,44 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
     const saved = localStorage.getItem('showSecondDriverColumn');
     return saved === 'true';
   });
+
+  // Drag and drop state - track active drag for validation and multi-column highlighting
+  const [draggedBooking, setDraggedBooking] = useState<Booking | null>(null);
+  const [draggedRequest, setDraggedRequest] = useState<BookingRequest | null>(null);
+
+  // Configure drag sensors for better interaction
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // 8px movement required before drag starts
+      },
+    })
+  );
+
+  // Helper function to check if there's enough space for a booking at a given time
+  const hasEnoughSpaceAtTime = useCallback((timeIndex: number, _startPilotIndex: number, requiredPax: number): boolean => {
+    // Get all bookings at this time
+    const bookingsAtThisTime = bookings.filter(b => b.timeIndex === timeIndex && b.date === format(selectedDate, 'yyyy-MM-dd'));
+
+    // Calculate occupied slots at this time
+    const slotsOccupied = bookingsAtThisTime.reduce((total, booking) => {
+      return total + (booking.numberOfPeople || booking.span || 1);
+    }, 0);
+
+    // Count unavailable pilots at this time
+    const unavailablePilotsCount = pilots.filter((pilot) => {
+      const timeSlot = timeSlots[timeIndex];
+      return !isPilotAvailableForTimeSlot(pilot.uid, timeSlot);
+    }).length;
+
+    // Total capacity is the number of pilots
+    const totalCapacity = pilots.length;
+
+    // Available space is what's left after occupied bookings and unavailable pilots
+    const availableSpace = totalCapacity - slotsOccupied - unavailablePilotsCount;
+
+    return availableSpace >= requiredPax;
+  }, [bookings, pilots, timeSlots, selectedDate, isPilotAvailableForTimeSlot]);
 
   // Save second driver column visibility to localStorage
   useEffect(() => {
@@ -610,6 +650,137 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
     }
   };
 
+  // Handle drag start - track what's being dragged for validation
+  const handleDragStart = (event: DragStartEvent) => {
+    const { active } = event;
+
+    // Check if dragging a booking or a booking request
+    if (typeof active.id === 'string' && active.id.startsWith('booking-')) {
+      const bookingId = active.id.replace('booking-', '');
+      const booking = bookings.find(b => b.id === bookingId);
+      if (booking) {
+        setDraggedBooking(booking);
+      }
+    } else if (typeof active.id === 'string' && active.id.startsWith('request-')) {
+      const requestId = active.id.replace('request-', '');
+      const request = bookingRequests.find(r => r.id === requestId);
+      if (request) {
+        setDraggedRequest(request);
+      }
+    }
+  };
+
+  // Handle drag end
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    // Clear drag state
+    setDraggedBooking(null);
+    setDraggedRequest(null);
+
+    if (!over) return;
+
+    // Parse the drop target ID (format: "droppable-timeIndex-pilotIndex")
+    const overIdStr = over.id as string;
+    if (!overIdStr.startsWith('droppable-')) return;
+
+    const parts = overIdStr.split('-');
+    if (parts.length !== 3) return;
+
+    const targetTimeIndex = parseInt(parts[1]);
+    const targetPilotIndex = parseInt(parts[2]);
+
+    if (isNaN(targetTimeIndex) || isNaN(targetPilotIndex)) return;
+
+    const targetDate = format(selectedDate, 'yyyy-MM-dd');
+
+    // Handle booking being moved
+    if (typeof active.id === 'string' && active.id.startsWith('booking-')) {
+      const bookingId = active.id.replace('booking-', '');
+      const booking = bookings.find(b => b.id === bookingId);
+
+      if (!booking || !onUpdateBooking) return;
+
+      // Only admins can move bookings
+      if (role !== 'admin') {
+        alert('Only administrators can move bookings');
+        return;
+      }
+
+      // Don't update if dropping on the same time
+      if (booking.timeIndex === targetTimeIndex && booking.date === targetDate) {
+        return;
+      }
+
+      // Show confirmation dialog
+      const targetTimeSlot = timeSlots[targetTimeIndex];
+      const confirmMessage = `Are you sure you want to move this booking to ${targetTimeSlot}?`;
+      if (!confirm(confirmMessage)) {
+        return;
+      }
+
+      // Update the booking with new time/date and clear assigned pilots
+      try {
+        await onUpdateBooking(booking.id!, {
+          timeIndex: targetTimeIndex,
+          date: targetDate,
+          assignedPilots: [], // Clear all pilot assignments
+        });
+      } catch (error) {
+        console.error('Error moving booking:', error);
+        alert('Failed to move booking. Please try again.');
+      }
+    }
+    // Handle booking request being dropped
+    else if (typeof active.id === 'string' && active.id.startsWith('request-')) {
+      const requestId = active.id.replace('request-', '');
+      const request = bookingRequests.find(r => r.id === requestId);
+
+      if (!request || !onAddBooking) return;
+
+      // Only admins can create bookings from requests
+      if (role !== 'admin') {
+        alert('Only administrators can create bookings');
+        return;
+      }
+
+      // Show confirmation dialog
+      const targetTimeSlot = timeSlots[targetTimeIndex];
+      const confirmMessage = `Are you sure you want to create a booking for ${request.customerName} (${request.numberOfPeople} pax) at ${targetTimeSlot}?`;
+      if (!confirm(confirmMessage)) {
+        return;
+      }
+
+      // Create a booking from the request at the dropped location
+      try {
+        await onAddBooking({
+          date: targetDate,
+          pilotIndex: targetPilotIndex,
+          timeIndex: targetTimeIndex,
+          customerName: request.customerName,
+          numberOfPeople: request.numberOfPeople,
+          pickupLocation: "",
+          bookingSource: "twin",
+          phoneNumber: request.phone || "",
+          email: request.email,
+          notes: request.notes || "",
+          flightType: request.flightType,
+          assignedPilots: [],
+          bookingStatus: "pending",
+          span: request.numberOfPeople,
+        });
+
+        // Mark request as approved
+        await updateDoc(doc(db, "bookingRequests", requestId), {
+          status: "approved",
+        });
+      } catch (error) {
+        console.error('Error creating booking from request:', error);
+        alert('Failed to create booking. Please try again.');
+      }
+    }
+  };
+
   // Add touch event listeners
   useEffect(() => {
     const container = containerRef.current;
@@ -706,6 +877,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                       <BookingRequestItem
                         key={request.id}
                         request={request}
+                        canDrag={role === 'admin'}
                         onContextMenu={(req, position) => {
                           setBookingRequestContextMenu({
                             isOpen: true,
@@ -737,6 +909,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                       <BookingRequestItem
                         key={request.id}
                         request={request}
+                        canDrag={role === 'admin'}
                         onContextMenu={(req, position) => {
                           setBookingRequestContextMenu({
                             isOpen: true,
@@ -879,13 +1052,18 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
   }
 
   return (
-    <div
-      ref={containerRef}
-      className="flex-1 overflow-auto p-4 bg-zinc-950"
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
+    <DndContext
+      sensors={sensors}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
     >
+      <div
+        ref={containerRef}
+        className="flex-1 overflow-auto p-4 bg-zinc-950"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
       <div
         ref={gridRef}
         className={`inline-block origin-top-left ${!isPinching ? 'transition-transform duration-100' : ''}`}
@@ -1024,6 +1202,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                         onContextMenu={canViewBooking(cell.booking) && (canManagePilots() || role === "pilot") ? handleBookingContextMenu(cell.booking, timeSlot) : undefined}
                         onPilotNameClick={role === "pilot" ? handlePilotNameClick(cell.booking, timeSlot) : undefined}
                         currentUserDisplayName={currentUserDisplayName}
+                        bookingId={cell.booking.id}
+                        canDrag={role === 'admin'}
                       />
                     </div>
                   );
@@ -1094,6 +1274,13 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                           cell.status === "available" && isCurrentUserAvailableAtThisTime
                             ? handleNoPilotContextMenu(currentUserPilotIndex, timeIndex)
                             : undefined
+                        }
+                        droppableId={cell.status === "available" ? `droppable-${timeIndex}-${cell.pilotIndex}` : undefined}
+                        draggedItemPax={draggedBooking ? (draggedBooking.numberOfPeople || draggedBooking.span || 1) : (draggedRequest ? draggedRequest.numberOfPeople : undefined)}
+                        hasEnoughSpace={
+                          (draggedBooking || draggedRequest) && cell.status === "available"
+                            ? hasEnoughSpaceAtTime(timeIndex, cell.pilotIndex!, draggedBooking ? (draggedBooking.numberOfPeople || draggedBooking.span || 1) : draggedRequest!.numberOfPeople)
+                            : true
                         }
                       />
                     </div>
@@ -1189,6 +1376,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                     <BookingRequestItem
                       key={request.id}
                       request={request}
+                      canDrag={role === 'admin'}
                       onContextMenu={(req, position) => {
                         setBookingRequestContextMenu({
                           isOpen: true,
@@ -1220,6 +1408,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                     <BookingRequestItem
                       key={request.id}
                       request={request}
+                      canDrag={role === 'admin'}
                       onContextMenu={(req, position) => {
                         setBookingRequestContextMenu({
                           isOpen: true,
@@ -1501,5 +1690,6 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
         />
       )}
     </div>
+    </DndContext>
   );
 }
