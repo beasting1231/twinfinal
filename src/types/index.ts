@@ -79,6 +79,7 @@ export interface BookingRequest {
   time: string; // Time string (HH:mm)
   timeIndex: number; // Index of the time slot
   numberOfPeople: number;
+  flightType?: "sensational" | "classic" | "early bird";
   notes?: string;
   status: "pending" | "approved" | "rejected" | "waitlist";
   createdAt: Date;

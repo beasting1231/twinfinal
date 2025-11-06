@@ -784,6 +784,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
               phoneNumber: bookingRequestToBook.phone,
               email: bookingRequestToBook.email,
               notes: bookingRequestToBook.notes,
+              flightType: bookingRequestToBook.flightType,
             } : undefined}
           />
         )}
@@ -818,6 +819,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                   phoneNumber: request.phone || "",
                   email: request.email,
                   notes: request.notes || "",
+                  flightType: request.flightType,
                   assignedPilots: [],
                   bookingStatus: "pending",
                   span: request.numberOfPeople,
@@ -1265,6 +1267,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
             phoneNumber: bookingRequestToBook.phone,
             email: bookingRequestToBook.email,
             notes: bookingRequestToBook.notes,
+            flightType: bookingRequestToBook.flightType,
           } : undefined}
         />
       )}
@@ -1441,6 +1444,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                 phoneNumber: request.phone || "",
                 email: request.email,
                 notes: request.notes || "",
+                flightType: request.flightType,
                 assignedPilots: [],
                 bookingStatus: "pending",
                 span: request.numberOfPeople,

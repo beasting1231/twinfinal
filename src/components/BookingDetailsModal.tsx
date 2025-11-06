@@ -771,6 +771,7 @@ export function BookingDetailsModal({
                   <Input
                     value={editedBooking.customerName}
                     onChange={(e) => setEditedBooking({ ...editedBooking, customerName: e.target.value })}
+                    autoComplete="off"
                   />
                 </div>
 
@@ -788,6 +789,7 @@ export function BookingDetailsModal({
                         });
                       }}
                       className="pr-10"
+                      autoComplete="off"
                     />
                     <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white pointer-events-none" />
                   </div>
@@ -895,6 +897,7 @@ export function BookingDetailsModal({
                   <Input
                     value={editedBooking.pickupLocation}
                     onChange={(e) => setEditedBooking({ ...editedBooking, pickupLocation: e.target.value })}
+                    autoComplete="off"
                   />
                 </div>
 
@@ -912,6 +915,7 @@ export function BookingDetailsModal({
                     type="tel"
                     value={editedBooking.phoneNumber || ""}
                     onChange={(e) => setEditedBooking({ ...editedBooking, phoneNumber: e.target.value })}
+                    autoComplete="off"
                   />
                 </div>
 
@@ -922,6 +926,7 @@ export function BookingDetailsModal({
                     type="email"
                     value={editedBooking.email || ""}
                     onChange={(e) => setEditedBooking({ ...editedBooking, email: e.target.value })}
+                    autoComplete="off"
                   />
                 </div>
 
@@ -953,6 +958,7 @@ export function BookingDetailsModal({
                           value={editedBooking.commission ?? ""}
                           onChange={(e) => setEditedBooking({ ...editedBooking, commission: e.target.value ? parseFloat(e.target.value) : null })}
                           placeholder="0.00"
+                          autoComplete="off"
                         />
                       </div>
 
@@ -1140,6 +1146,7 @@ export function BookingDetailsModal({
                           }
                         }}
                         placeholder="0.00"
+                        autoComplete="off"
                       />
                     </div>
 

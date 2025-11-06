@@ -41,6 +41,7 @@ interface NewBookingModalProps {
     phoneNumber?: string;
     email?: string;
     notes?: string;
+    flightType?: "sensational" | "classic" | "early bird";
   };
 }
 
@@ -71,14 +72,39 @@ export function NewBookingModal({
   const [flightType, setFlightType] = useState<"sensational" | "classic" | "early bird">("sensational");
   const [showAdditionalOptions, setShowAdditionalOptions] = useState(false);
 
-  // Initialize form with initialData if provided
+  // Initialize form with initialData if provided, or reset to defaults
   useEffect(() => {
-    if (open && initialData) {
-      if (initialData.customerName) setCustomerName(initialData.customerName);
-      if (initialData.numberOfPeople) setNumberOfPeople(String(initialData.numberOfPeople));
-      if (initialData.phoneNumber) setPhoneNumber(initialData.phoneNumber);
-      if (initialData.email) setEmail(initialData.email);
-      if (initialData.notes) setNotes(initialData.notes);
+    if (open) {
+      if (initialData) {
+        // Set from initialData, using defaults for missing fields
+        setCustomerName(initialData.customerName || "");
+        setNumberOfPeople(initialData.numberOfPeople ? String(initialData.numberOfPeople) : "");
+        setPhoneNumber(initialData.phoneNumber || "");
+        setEmail(initialData.email || "");
+        setNotes(initialData.notes || "");
+        setFlightType(initialData.flightType || "sensational");
+        // Keep defaults for fields not in initialData
+        setPickupLocation("HW");
+        setBookingSource("twin");
+        setCommission("");
+        setCommissionStatus("unpaid");
+        setFemalePilotsRequired(0);
+        setShowAdditionalOptions(false);
+      } else {
+        // Reset to defaults when opening without initialData
+        setCustomerName("");
+        setNumberOfPeople("");
+        setPickupLocation("HW");
+        setBookingSource("twin");
+        setPhoneNumber("");
+        setEmail("");
+        setNotes("");
+        setCommission("");
+        setCommissionStatus("unpaid");
+        setFemalePilotsRequired(0);
+        setFlightType("sensational");
+        setShowAdditionalOptions(false);
+      }
     }
   }, [open, initialData]);
 
@@ -288,6 +314,7 @@ export function NewBookingModal({
               id="customerName"
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
+              autoComplete="off"
             />
           </div>
 
@@ -331,6 +358,7 @@ export function NewBookingModal({
               id="pickupLocation"
               value={pickupLocation}
               onChange={(e) => setPickupLocation(e.target.value)}
+              autoComplete="off"
             />
           </div>
 
@@ -351,6 +379,7 @@ export function NewBookingModal({
               type="tel"
               value={phoneNumber}
               onChange={(e) => setPhoneNumber(e.target.value)}
+              autoComplete="off"
             />
           </div>
 
@@ -364,6 +393,7 @@ export function NewBookingModal({
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              autoComplete="off"
             />
           </div>
 
@@ -396,6 +426,7 @@ export function NewBookingModal({
                     value={commission}
                     onChange={(e) => setCommission(e.target.value)}
                     placeholder="0.00"
+                    autoComplete="off"
                   />
                 </div>
 

@@ -39,13 +39,18 @@ export function BookingRequestItem({ request, onContextMenu, onDateClick }: Book
       className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 hover:bg-zinc-800 transition-colors select-none"
     >
       <div className="flex items-center justify-between gap-3">
-        {/* Left side: Customer name and badge */}
-        <div className="flex items-center gap-2">
+        {/* Left side: Customer name and badges */}
+        <div className="flex items-center gap-2 flex-wrap">
           <p className="text-white font-medium">{request.customerName}</p>
           <span className="px-2 py-0.5 bg-white text-black text-xs font-medium rounded-full flex items-center gap-1">
             <Users className="w-3 h-3" />
             {request.numberOfPeople}
           </span>
+          {request.flightType && request.flightType !== "sensational" && (
+            <span className="px-2 py-0.5 bg-blue-600 text-white text-xs font-medium rounded-full capitalize">
+              {request.flightType}
+            </span>
+          )}
         </div>
 
         {/* Right side: Date and time */}

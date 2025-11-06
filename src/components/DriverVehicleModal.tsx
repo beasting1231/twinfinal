@@ -99,6 +99,7 @@ function AutocompleteField({
           onClick={handleInputClick}
           className="pr-8"
           placeholder={placeholder}
+          autoComplete="off"
         />
         <button
           type="button"

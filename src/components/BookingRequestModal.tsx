@@ -106,6 +106,14 @@ export function BookingRequestModal({
             <p className="text-white">{request.numberOfPeople}</p>
           </div>
 
+          {/* Flight Type */}
+          {request.flightType && (
+            <div>
+              <label className="text-sm font-medium text-zinc-400">Flight Type</label>
+              <p className="text-white capitalize">{request.flightType}</p>
+            </div>
+          )}
+
           {/* Notes */}
           {request.notes && (
             <div>

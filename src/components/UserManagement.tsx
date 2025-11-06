@@ -127,7 +127,7 @@ export function UserManagement() {
 
   return (
     <div className="flex-1 overflow-auto p-3 sm:p-6">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-4xl mx-auto overflow-visible">
         <div className="flex items-center justify-between mb-4 sm:mb-6">
           <h1 className="text-xl sm:text-2xl font-bold text-white">User Management</h1>
           {hasChanges && (
@@ -140,7 +140,7 @@ export function UserManagement() {
             </button>
           )}
         </div>
-        <div className="bg-zinc-900 rounded-lg border border-zinc-800 overflow-x-auto">
+        <div className="bg-zinc-900 rounded-lg border border-zinc-800 overflow-visible">
           <table className="w-full table-fixed">
             <thead>
               <tr className="border-b border-zinc-800">
@@ -149,7 +149,7 @@ export function UserManagement() {
                 <th className="text-left p-2 sm:p-4 text-zinc-400 font-medium w-[35%] sm:w-[35%]">Role</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="overflow-visible">
               {users.map((user) => {
                 const currentRole = getCurrentRole(user);
                 const isOpen = openDropdownId === user.uid;
@@ -157,11 +157,11 @@ export function UserManagement() {
                 return (
                   <tr
                     key={user.uid}
-                    className="border-b border-zinc-800 last:border-0 hover:bg-zinc-800/50 transition-colors"
+                    className="border-b border-zinc-800 last:border-0 hover:bg-zinc-800/50 transition-colors overflow-visible"
                   >
                     <td className="p-2 sm:p-4 text-white truncate">{user.displayName}</td>
                     <td className="p-2 sm:p-4 text-zinc-400 truncate" title={user.email}>{user.email}</td>
-                    <td className="p-2 sm:p-4">
+                    <td className="p-2 sm:p-4 overflow-visible">
                       <div className="relative">
                         <button
                           onClick={() =>
@@ -193,7 +193,7 @@ export function UserManagement() {
                               className="fixed inset-0 z-10"
                               onClick={() => setOpenDropdownId(null)}
                             />
-                            <div className="absolute z-20 mt-2 py-2 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg min-w-[160px]">
+                            <div className="absolute z-20 mt-2 py-2 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg min-w-[160px] left-0">
                               {roles.map((roleOption) => (
                                 <button
                                   key={roleOption.label}

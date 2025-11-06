@@ -93,6 +93,7 @@ export function BookingSourceAutocomplete({
           required={required}
           className="pr-8"
           placeholder="Type to search or create new..."
+          autoComplete="off"
         />
         <button
           type="button"
