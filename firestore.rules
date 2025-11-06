@@ -17,6 +17,29 @@ service cloud.firestore {
       return request.auth != null && getUserRole() in roles;
     }
 
+    // Helper function to get user's display name
+    function getUserDisplayName() {
+      return get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data.displayName;
+    }
+
+    // Helper function to check if pilot is only removing themselves from assignedPilots
+    function isPilotSelfUnassign() {
+      let userDisplayName = getUserDisplayName();
+      let oldPilots = resource.data.assignedPilots;
+      let newPilots = request.resource.data.assignedPilots;
+
+      // Check that only assignedPilots field is being changed
+      let onlyPilotsChanged = request.resource.data.diff(resource.data).affectedKeys().hasOnly(['assignedPilots']);
+
+      // Check that the user's name was in the old array
+      let wasAssigned = userDisplayName in oldPilots;
+
+      // Check that the arrays are same length
+      let sameLengthArrays = oldPilots.size() == newPilots.size();
+
+      return onlyPilotsChanged && wasAssigned && sameLengthArrays;
+    }
+
     // Bookings collection
     match /bookings/{bookingId} {
       // Allow public read for booking form availability check
@@ -29,12 +52,14 @@ service cloud.firestore {
       allow create: if request.auth != null && hasAnyRole(['pilot', 'agency', 'driver', 'admin']);
 
       // Pilot: can update only their own bookings (check createdBy)
+      //        OR can update any booking to remove themselves from assignedPilots
       // Agency: can update only their own bookings (check createdBy)
       // Driver: can update all bookings
       // Admin: can update all bookings
       // Note: Allow updates to bookings without createdBy field (legacy bookings)
       allow update: if request.auth != null && (
         hasAnyRole(['driver', 'admin']) ||
+        (hasRole('pilot') && isPilotSelfUnassign()) ||
         (hasAnyRole(['pilot', 'agency']) && (
           !('createdBy' in resource.data) ||
           resource.data.createdBy == request.auth.uid

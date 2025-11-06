@@ -126,27 +126,27 @@ export function UserManagement() {
   ];
 
   return (
-    <div className="flex-1 overflow-auto p-6">
+    <div className="flex-1 overflow-auto p-3 sm:p-6">
       <div className="max-w-4xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold text-white">User Management</h1>
+        <div className="flex items-center justify-between mb-4 sm:mb-6">
+          <h1 className="text-xl sm:text-2xl font-bold text-white">User Management</h1>
           {hasChanges && (
             <button
               onClick={saveChanges}
               disabled={saving}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors"
+              className="px-3 sm:px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors text-sm sm:text-base"
             >
               {saving ? "Saving..." : "Save Changes"}
             </button>
           )}
         </div>
-        <div className="bg-zinc-900 rounded-lg border border-zinc-800">
-          <table className="w-full">
+        <div className="bg-zinc-900 rounded-lg border border-zinc-800 overflow-x-auto">
+          <table className="w-full table-fixed">
             <thead>
               <tr className="border-b border-zinc-800">
-                <th className="text-left p-4 text-zinc-400 font-medium">Name</th>
-                <th className="text-left p-4 text-zinc-400 font-medium">Email</th>
-                <th className="text-left p-4 text-zinc-400 font-medium">Role</th>
+                <th className="text-left p-2 sm:p-4 text-zinc-400 font-medium w-[25%] sm:w-[30%]">Name</th>
+                <th className="text-left p-2 sm:p-4 text-zinc-400 font-medium w-[40%] sm:w-[35%]">Email</th>
+                <th className="text-left p-2 sm:p-4 text-zinc-400 font-medium w-[35%] sm:w-[35%]">Role</th>
               </tr>
             </thead>
             <tbody>
@@ -159,21 +159,21 @@ export function UserManagement() {
                     key={user.uid}
                     className="border-b border-zinc-800 last:border-0 hover:bg-zinc-800/50 transition-colors"
                   >
-                    <td className="p-4 text-white">{user.displayName}</td>
-                    <td className="p-4 text-zinc-400">{user.email}</td>
-                    <td className="p-4">
+                    <td className="p-2 sm:p-4 text-white truncate">{user.displayName}</td>
+                    <td className="p-2 sm:p-4 text-zinc-400 truncate" title={user.email}>{user.email}</td>
+                    <td className="p-2 sm:p-4">
                       <div className="relative">
                         <button
                           onClick={() =>
                             setOpenDropdownId(isOpen ? null : user.uid)
                           }
-                          className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium cursor-pointer hover:opacity-80 transition-opacity ${getRoleBadgeColor(
+                          className={`inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium cursor-pointer hover:opacity-80 transition-opacity ${getRoleBadgeColor(
                             currentRole
                           )}`}
                         >
-                          {getRoleDisplayName(currentRole)}
+                          <span className="truncate max-w-[80px] sm:max-w-none">{getRoleDisplayName(currentRole)}</span>
                           <svg
-                            className="w-4 h-4"
+                            className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0"
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"

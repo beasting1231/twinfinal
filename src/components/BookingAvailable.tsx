@@ -20,9 +20,10 @@ interface BookingAvailableProps {
   onAvailableClick?: () => void;
   onBookedClick?: () => void;
   onContextMenu?: (slotIndex: number, position: { x: number; y: number }) => void;
+  onNoPilotClick?: () => void; // Handler for left-clicking on "no pilot" cell (admin sign-in)
   onNoPilotContextMenu?: (position: { x: number; y: number }) => void;
   onAvailableContextMenu?: (position: { x: number; y: number }) => void;
-  onPilotNameClick?: (slotIndex: number, pilotName: string) => void; // Handler for clicking on a pilot name
+  onPilotNameClick?: (slotIndex: number, pilotName: string, position: { x: number; y: number }) => void; // Handler for clicking on a pilot name
   isCurrentUserPilot?: boolean; // Whether this cell is for the current user
   isFemalePilot?: boolean; // Whether this pilot is a female pilot
   currentUserDisplayName?: string; // Current user's display name to check if they're clicking their own name
@@ -45,6 +46,7 @@ export const BookingAvailable = memo(function BookingAvailable({
   onAvailableClick,
   onBookedClick,
   onContextMenu,
+  onNoPilotClick,
   onNoPilotContextMenu,
   onAvailableContextMenu,
   onPilotNameClick,
@@ -259,7 +261,7 @@ export const BookingAvailable = memo(function BookingAvailable({
                   onClick={(e) => {
                     if (canClickToUnassign) {
                       e.stopPropagation(); // Prevent triggering onBookedClick
-                      onPilotNameClick(index, pilot);
+                      onPilotNameClick(index, pilot, { x: e.clientX, y: e.clientY });
                     }
                   }}
                 >
@@ -330,13 +332,15 @@ export const BookingAvailable = memo(function BookingAvailable({
   };
 
   if (status === "noPilot") {
+    const hasClickHandler = isCurrentUserPilot || onNoPilotClick;
     return (
       <div
         className={`w-full h-full rounded-lg flex items-center justify-center ${
           isFemalePilot
-            ? (isCurrentUserPilot ? 'bg-red-600/80 cursor-pointer hover:bg-red-700/80' : 'bg-red-600/80 cursor-not-allowed')
-            : (isCurrentUserPilot ? 'bg-zinc-900 cursor-pointer hover:bg-zinc-800' : 'bg-zinc-900 cursor-not-allowed')
+            ? (hasClickHandler ? 'bg-red-600/80 cursor-pointer hover:bg-red-700/80' : 'bg-red-600/80 cursor-not-allowed')
+            : (hasClickHandler ? 'bg-zinc-900 cursor-pointer hover:bg-zinc-800' : 'bg-zinc-900 cursor-not-allowed')
         }`}
+        onClick={onNoPilotClick}
         onContextMenu={handleNoPilotContextMenu}
         onTouchStart={handleNoPilotTouchStart}
         onTouchMove={handleTouchMove}

@@ -6,6 +6,7 @@ interface AvailabilityContextMenuProps {
   position: { x: number; y: number };
   isSignedOut: boolean;
   canSignOut: boolean; // Can't sign out if already assigned to a booking
+  pilotName?: string; // Optional pilot name to show in menu
   onSignIn: () => void;
   onSignOut: () => void;
   onClose: () => void;
@@ -16,6 +17,7 @@ export function AvailabilityContextMenu({
   position,
   isSignedOut,
   canSignOut,
+  pilotName,
   onSignIn,
   onSignOut,
   onClose,
@@ -124,36 +126,21 @@ export function AvailabilityContextMenu({
               className="w-full px-3 py-2 text-left text-sm text-green-400 hover:bg-zinc-700 transition-colors flex items-center gap-2"
             >
               <LogIn className="w-4 h-4" />
-              <span>Sign In</span>
+              <span>Sign {pilotName ? `${pilotName} ` : ''}In</span>
             </button>
           ) : (
             <button
               onClick={() => {
-                if (canSignOut) {
-                  onSignOut();
-                  onClose();
-                }
+                onSignOut();
+                onClose();
               }}
-              disabled={!canSignOut}
-              className={`w-full px-3 py-2 text-left text-sm transition-colors flex items-center gap-2 ${
-                canSignOut
-                  ? "text-red-400 hover:bg-zinc-700 cursor-pointer"
-                  : "text-zinc-600 cursor-not-allowed"
-              }`}
-              title={!canSignOut ? "Cannot sign out - already assigned to a booking" : ""}
+              className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-zinc-700 transition-colors flex items-center gap-2 cursor-pointer"
             >
               <LogOut className="w-4 h-4" />
-              <span>Sign Out</span>
+              <span>Sign {pilotName ? `${pilotName} ` : ''}Out</span>
             </button>
           )}
         </div>
-
-        {/* Info message if can't sign out */}
-        {!isSignedOut && !canSignOut && (
-          <div className="px-3 py-2 text-xs text-zinc-500 border-t border-zinc-700">
-            You're assigned to a booking
-          </div>
-        )}
       </div>
     </>
   );

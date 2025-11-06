@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Menu } from "lucide-react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -13,26 +14,22 @@ import { WeekPicker } from "./WeekPicker";
 import { useAuth } from "../contexts/AuthContext";
 import { useRole } from "../hooks/useRole";
 
-type View = "daily-plan" | "availability" | "account" | "booking-sources" | "accounting" | "priority" | "forms" | "user-management";
-
 interface HeaderProps {
   date?: Date;
   onDateChange?: (date: Date) => void;
   weekStartDate?: Date;
   onWeekChange?: (date: Date) => void;
-  currentView: View;
-  onViewChange: (view: View) => void;
 }
 
 export function Header({
   date,
   onDateChange,
   weekStartDate,
-  onWeekChange,
-  currentView,
-  onViewChange
+  onWeekChange
 }: HeaderProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
   const { currentUser, logout } = useAuth();
   const { permissions } = useRole();
 
@@ -40,15 +37,18 @@ export function Header({
     try {
       await logout();
       setSheetOpen(false);
+      navigate("/login");
     } catch (error) {
       console.error("Failed to log out:", error);
     }
   };
 
-  const handleViewChange = (view: View) => {
-    onViewChange(view);
+  const handleNavigate = (path: string) => {
+    navigate(path);
     setSheetOpen(false);
   };
+
+  const isActive = (path: string) => location.pathname === path;
 
   return (
     <header className="bg-zinc-950 border-b border-zinc-800 pt-[env(safe-area-inset-top)]">
@@ -67,9 +67,9 @@ export function Header({
             <div className="flex flex-col gap-2 mt-6">
               {permissions.canViewAllBookings && (
                 <button
-                  onClick={() => handleViewChange("daily-plan")}
+                  onClick={() => handleNavigate("/")}
                   className={`w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white ${
-                    currentView === "daily-plan" ? "bg-zinc-800" : ""
+                    isActive("/") ? "bg-zinc-800" : ""
                   }`}
                 >
                   Daily Plan
@@ -77,9 +77,9 @@ export function Header({
               )}
               {permissions.canManageOwnAvailability && (
                 <button
-                  onClick={() => handleViewChange("availability")}
+                  onClick={() => handleNavigate("/availability")}
                   className={`w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white ${
-                    currentView === "availability" ? "bg-zinc-800" : ""
+                    isActive("/availability") ? "bg-zinc-800" : ""
                   }`}
                 >
                   Availability
@@ -87,9 +87,9 @@ export function Header({
               )}
               {permissions.canManageDriversAndSources && (
                 <button
-                  onClick={() => handleViewChange("booking-sources")}
+                  onClick={() => handleNavigate("/booking-sources")}
                   className={`w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white ${
-                    currentView === "booking-sources" ? "bg-zinc-800" : ""
+                    isActive("/booking-sources") ? "bg-zinc-800" : ""
                   }`}
                 >
                   Booking Sources
@@ -97,9 +97,9 @@ export function Header({
               )}
               {permissions.canAccessAccounting && (
                 <button
-                  onClick={() => handleViewChange("accounting")}
+                  onClick={() => handleNavigate("/accounting")}
                   className={`w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white ${
-                    currentView === "accounting" ? "bg-zinc-800" : ""
+                    isActive("/accounting") ? "bg-zinc-800" : ""
                   }`}
                 >
                   Accounting
@@ -107,9 +107,9 @@ export function Header({
               )}
               {permissions.canManageDriversAndSources && (
                 <button
-                  onClick={() => handleViewChange("priority")}
+                  onClick={() => handleNavigate("/priority")}
                   className={`w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white ${
-                    currentView === "priority" ? "bg-zinc-800" : ""
+                    isActive("/priority") ? "bg-zinc-800" : ""
                   }`}
                 >
                   Priority
@@ -117,27 +117,27 @@ export function Header({
               )}
               {permissions.canManageBookingRequests && (
                 <button
-                  onClick={() => handleViewChange("forms")}
+                  onClick={() => handleNavigate("/forms")}
                   className={`w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white ${
-                    currentView === "forms" ? "bg-zinc-800" : ""
+                    isActive("/forms") ? "bg-zinc-800" : ""
                   }`}
                 >
                   Forms
                 </button>
               )}
               <button
-                onClick={() => handleViewChange("account")}
+                onClick={() => handleNavigate("/account")}
                 className={`w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white ${
-                  currentView === "account" ? "bg-zinc-800" : ""
+                  isActive("/account") ? "bg-zinc-800" : ""
                 }`}
               >
                 Account
               </button>
               {permissions.canManageRoles && (
                 <button
-                  onClick={() => handleViewChange("user-management")}
+                  onClick={() => handleNavigate("/user-management")}
                   className={`w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white ${
-                    currentView === "user-management" ? "bg-zinc-800" : ""
+                    isActive("/user-management") ? "bg-zinc-800" : ""
                   }`}
                 >
                   User Management
@@ -156,9 +156,9 @@ export function Header({
 
         {/* Center: Date/Week Picker */}
         <div className="flex-1 flex justify-center">
-          {currentView === "daily-plan" && date && onDateChange ? (
+          {location.pathname === "/" && date && onDateChange ? (
             <DatePicker date={date} onDateChange={onDateChange} />
-          ) : currentView === "availability" && weekStartDate && onWeekChange ? (
+          ) : location.pathname === "/availability" && weekStartDate && onWeekChange ? (
             <WeekPicker weekStartDate={weekStartDate} onWeekChange={onWeekChange} />
           ) : null}
         </div>

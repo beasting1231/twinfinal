@@ -1,29 +1,60 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 
 export function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const { loginWithGoogle } = useAuth();
+  const navigate = useNavigate();
+  const { currentUser, loginWithGoogle, loading: authLoading } = useAuth();
+
+  // Redirect to home if already authenticated
+  useEffect(() => {
+    if (currentUser && !authLoading) {
+      console.log("🔀 User is authenticated, redirecting to home...");
+      navigate("/", { replace: true });
+    }
+  }, [currentUser, authLoading, navigate]);
 
   async function handleGoogleSignIn() {
     try {
       setError("");
       setLoading(true);
       await loginWithGoogle();
+      // Don't set loading to false - the redirect will happen via useEffect
     } catch (err: any) {
       setError(err.message || "Failed to sign in with Google");
-    } finally {
       setLoading(false);
     }
+  }
+
+  // Show loading state while AuthContext is processing initial auth check
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-zinc-950">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-8 h-8 border-4 border-zinc-700 border-t-white rounded-full animate-spin"></div>
+          <p className="text-zinc-400 text-sm">Loading...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-zinc-950">
       <div className="w-full max-w-md p-8 bg-zinc-900 rounded-lg border border-zinc-800">
-        <h2 className="text-2xl font-bold text-white mb-6 text-center">
-          Sign In
-        </h2>
+        {/* Logo */}
+        <div className="flex justify-center mb-6">
+          <img
+            src="/logo.png"
+            alt="Logo"
+            className="h-40 w-auto"
+            onError={(e) => {
+              // Hide image if it fails to load
+              e.currentTarget.style.display = 'none';
+            }}
+          />
+        </div>
 
         {error && (
           <div className="mb-4 p-3 bg-red-500/10 border border-red-500/50 rounded text-red-400 text-sm">

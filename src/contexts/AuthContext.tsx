@@ -58,11 +58,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
   async function loginWithGoogle() {
     const provider = new GoogleAuthProvider();
     try {
+      console.log("🔐 Starting Google sign-in with popup...");
       await signInWithPopup(auth, provider);
+      console.log("✅ Sign-in successful");
     } catch (error: any) {
+      console.error("❌ Sign-in error:", error);
       // Handle popup closed error gracefully
       if (error.code === 'auth/popup-closed-by-user') {
         console.log("Sign-in popup was closed");
+      } else if (error.code === 'auth/popup-blocked') {
+        console.error("🚨 Popup was blocked - please allow popups for this site");
+        alert("Please allow popups for this site and try again.");
+      } else if (error.code === 'auth/unauthorized-domain') {
+        console.error("🚨 UNAUTHORIZED DOMAIN - Add this domain to Firebase Console > Authentication > Settings > Authorized domains");
       } else {
         throw error;
       }
@@ -74,7 +82,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }
 
   useEffect(() => {
+    console.log("🔄 Setting up auth state listener...");
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      console.log("Auth state changed:", user ? user.email : "No user");
+
       // Keep loading true while we fetch the role
       setLoading(true);
       setCurrentUser(user);
@@ -86,12 +98,26 @@ export function AuthProvider({ children }: AuthProviderProps) {
           const userDoc = await getDoc(userDocRef);
           if (userDoc.exists()) {
             const userData = userDoc.data();
+            console.log("✅ User role found:", userData.role);
             setUserRole(userData.role || null);
           } else {
+            console.log("⚠️ No user profile found in Firestore - creating new profile");
+            // Create a new user profile with default values
+            const { setDoc } = await import("firebase/firestore");
+            await setDoc(userDocRef, {
+              uid: user.uid,
+              email: user.email,
+              displayName: user.displayName || user.email?.split('@')[0] || "User",
+              role: null, // Default to no role - admin will need to assign
+              femalePilot: false, // Default to false, user can change during onboarding
+              onboardingComplete: false, // User needs to complete onboarding
+              createdAt: new Date().toISOString(),
+            });
+            console.log("✅ User profile created successfully");
             setUserRole(null);
           }
         } catch (error) {
-          console.error("Error fetching user role:", error);
+          console.error("❌ Error fetching user role:", error);
           setUserRole(null);
         }
       } else {
@@ -101,7 +127,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setLoading(false);
     });
 
-    return unsubscribe;
+    return () => {
+      console.log("🔄 Cleaning up auth state listener");
+      unsubscribe();
+    };
   }, []);
 
   const value = {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { collection, query, where, onSnapshot, addDoc, deleteDoc, getDocs } from "firebase/firestore";
+import { collection, query, where, onSnapshot, addDoc, deleteDoc, getDocs, doc, updateDoc, getDoc } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { useAuth } from "../contexts/AuthContext";
 import { format } from "date-fns";
@@ -20,6 +20,60 @@ export function useAvailability(targetUserId?: string) {
 
   // Use targetUserId if provided (for admins viewing other users), otherwise use currentUser
   const userId = targetUserId || currentUser?.uid;
+
+  // Helper function to unassign pilot from bookings when they sign out
+  const unassignPilotFromBookings = async (dateStr: string, timeSlot: string, pilotUserId: string) => {
+    try {
+      // Get pilot's display name from userProfiles
+      const userProfileDoc = await getDoc(doc(db, "userProfiles", pilotUserId));
+      if (!userProfileDoc.exists()) {
+        console.log("User profile not found");
+        return;
+      }
+
+      const pilotDisplayName = userProfileDoc.data()?.displayName;
+      if (!pilotDisplayName) {
+        console.log("Display name not found in user profile");
+        return;
+      }
+
+      // Query all bookings for this date
+      const bookingsQuery = query(
+        collection(db, "bookings"),
+        where("date", "==", dateStr)
+      );
+
+      const bookingsSnapshot = await getDocs(bookingsQuery);
+
+      // Find bookings at this time slot where pilot is assigned
+      const updatePromises = bookingsSnapshot.docs.map(async (bookingDoc) => {
+        const bookingData = bookingDoc.data();
+
+        // Check if this booking is at the right time and has the pilot assigned
+        if (bookingData.timeSlot === timeSlot && bookingData.assignedPilots) {
+          const assignedIndex = bookingData.assignedPilots.findIndex(
+            (p: string) => p === pilotDisplayName
+          );
+
+          if (assignedIndex !== -1) {
+            // Create updated pilots array with pilot removed
+            const updatedPilots = [...bookingData.assignedPilots];
+            updatedPilots[assignedIndex] = "";
+
+            // Update the booking
+            await updateDoc(doc(db, "bookings", bookingDoc.id), {
+              assignedPilots: updatedPilots
+            });
+            console.log(`Unassigned ${pilotDisplayName} from booking ${bookingDoc.id}`);
+          }
+        }
+      });
+
+      await Promise.all(updatePromises);
+    } catch (error) {
+      console.error("Error unassigning pilot from bookings:", error);
+    }
+  };
 
   useEffect(() => {
     if (!userId) {
@@ -74,6 +128,9 @@ export function useAvailability(targetUserId?: string) {
         const snapshot = await getDocs(q);
         const deletePromises = snapshot.docs.map((doc) => deleteDoc(doc.ref));
         await Promise.all(deletePromises);
+
+        // Unassign pilot from any bookings at this time
+        await unassignPilotFromBookings(dateStr, timeSlot, userId);
       } else {
         // Add - user is marking as available (green)
         await addDoc(collection(db, "availability"), {
@@ -123,7 +180,10 @@ export function useAvailability(targetUserId?: string) {
             where("timeSlot", "==", slot)
           );
           const snapshot = await getDocs(q);
-          return Promise.all(snapshot.docs.map((doc) => deleteDoc(doc.ref)));
+          await Promise.all(snapshot.docs.map((doc) => deleteDoc(doc.ref)));
+
+          // Unassign pilot from any bookings at this time
+          await unassignPilotFromBookings(dateStr, slot, userId);
         });
         await Promise.all(deletePromises);
       } else {

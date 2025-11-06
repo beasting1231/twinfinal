@@ -38,10 +38,10 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
   const targetUserId = role === 'admin' && selectedUserId ? selectedUserId : undefined;
 
   const { isAvailable, toggleAvailability, toggleDay, loading, saving, justSaved } = useAvailability(targetUserId);
-  const { bookings } = useBookings();
+  const { bookings: _bookings } = useBookings();
 
-  // State to track all pilots' availability data
-  const [pilotsAvailabilityData, setPilotsAvailabilityData] = useState<{
+  // State to track all pilots' availability data (currently unused but kept for potential future use)
+  const [_pilotsAvailabilityData, setPilotsAvailabilityData] = useState<{
     pilotsSignedInPerDay: Map<string, Set<string>>; // date -> Set of pilot IDs
     pilotsAvailablePerTimeSlot: Map<string, Set<string>>; // date-timeSlot -> Set of pilot IDs
   }>({
@@ -167,52 +167,11 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
   }, [weekStartDate, currentUser]);
 
   // Function to check if a cell should be locked (cannot be toggled to unavailable)
-  const isCellLocked = (day: Date, timeSlot: string): boolean => {
-    if (!currentUser) return false;
-
-    const dateStr = format(day, "yyyy-MM-dd");
-    const key = `${dateStr}-${timeSlot}`;
-
-    // Only lock if user is currently available
-    if (!isAvailable(day, timeSlot)) {
-      return false;
-    }
-
-    // Get time slots for this date to match bookings
-    const timeSlotsForDate = getTimeSlotsByDate(day);
-    const timeSlotIndex = timeSlotsForDate.indexOf(timeSlot);
-
-    if (timeSlotIndex === -1) {
-      return false;
-    }
-
-    // Step 1: Count how many pilots are signed in for this day
-    const pilotsSignedInToday = pilotsAvailabilityData.pilotsSignedInPerDay.get(dateStr);
-    if (!pilotsSignedInToday || pilotsSignedInToday.size === 0) {
-      return false;
-    }
-    const totalPilotsSignedIn = pilotsSignedInToday.size;
-
-    // Step 2: Count how many of those pilots are signed OUT for this specific time slot
-    // (signed in for day but NOT available for this time)
-    const pilotsAvailableAtThisTime = pilotsAvailabilityData.pilotsAvailablePerTimeSlot.get(key);
-    const pilotsSignedOutForThisTime = totalPilotsSignedIn - (pilotsAvailableAtThisTime?.size || 0);
-
-    // Step 3: Count total pax booked at this time
-    const bookingsAtThisTime = bookings.filter(booking => {
-      return booking.date === dateStr && booking.timeIndex === timeSlotIndex;
-    });
-
-    const totalPaxBooked = bookingsAtThisTime.reduce((sum, booking) => {
-      return sum + (booking.numberOfPeople || 0);
-    }, 0);
-
-    // Step 4: Calculate available spots
-    // Available spots = (pilots signed in) - (pilots signed out for this time) - (pax booked)
-    const availableSpots = totalPilotsSignedIn - pilotsSignedOutForThisTime - totalPaxBooked;
-
-    // Step 5: If available spots = 0, lock all pilots that are currently signed in for this time
-    return availableSpots <= 0;
+  // NOTE: We no longer lock cells even if assigned to bookings, since signing out auto-unassigns
+  const isCellLocked = (_day: Date, _timeSlot: string): boolean => {
+    // Always return false - allow signing out even if assigned to bookings
+    // The useAvailability hook will automatically unassign pilots from bookings when they sign out
+    return false;
   };
 
   // Zoom state
@@ -235,19 +194,10 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
     const allAvailable = timeSlots.every((slot) => isAvailable(day, slot));
 
     if (allAvailable) {
-      // When signing out, filter out locked slots (where user is assigned to bookings)
-      const unlockedSlots = timeSlots.filter((slot) => !isCellLocked(day, slot));
-
-      // If all slots are locked, don't do anything
-      if (unlockedSlots.length === 0) {
-        console.log("Cannot sign out - all slots are locked (assigned to bookings)");
-        return;
-      }
-
-      // Only toggle unlocked slots
-      await toggleDay(day, unlockedSlots);
+      // Sign out all slots (will auto-unassign from any bookings)
+      await toggleDay(day, timeSlots);
     } else {
-      // When signing in, toggle all slots (no restriction)
+      // Sign in all slots
       await toggleDay(day, timeSlots);
     }
   };
@@ -380,17 +330,22 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
             const dayName = format(day, 'EEE').toUpperCase();
             const monthDay = format(day, 'MMM d').toUpperCase();
             const timeSlots = dailyTimeSlots[dayIndex];
+            const isToday = format(day, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
 
             return (
               <div key={dayIndex} className="flex flex-col gap-2">
                 {/* Day Header */}
                 <button
                   onClick={() => handleToggleColumn(dayIndex)}
-                  className="h-14 flex flex-col items-center justify-center bg-zinc-900 rounded-lg font-medium text-sm hover:bg-zinc-800 transition-colors cursor-pointer"
+                  className={`h-14 flex flex-col items-center justify-center rounded-lg font-medium text-sm transition-colors cursor-pointer ${
+                    isToday
+                      ? 'bg-blue-900/50 hover:bg-blue-900/70 border-2 border-blue-500'
+                      : 'bg-zinc-900 hover:bg-zinc-800'
+                  }`}
                   disabled={isInitialLoading || saving}
                 >
-                  <div className="text-xs text-zinc-400">{dayName}</div>
-                  <div>{monthDay}</div>
+                  <div className={`text-xs ${isToday ? 'text-blue-300' : 'text-zinc-400'}`}>{dayName}</div>
+                  <div className={isToday ? 'text-blue-100' : ''}>{monthDay}</div>
                 </button>
 
                 {/* Time Slots for this day */}

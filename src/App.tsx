@@ -1,4 +1,5 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { startOfWeek, format } from "date-fns";
 import { Header } from "./components/Header";
 import { ScheduleGrid } from "./components/ScheduleGrid";
@@ -15,63 +16,25 @@ import { usePilots } from "./hooks/usePilots";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { EditingProvider } from "./contexts/EditingContext";
 import { Login } from "./components/Auth/Login";
-import { NoAccess } from "./components/Auth/NoAccess";
+import { ProtectedRoute } from "./components/Auth/ProtectedRoute";
 import { getTimeSlotsByDate } from "./utils/timeSlots";
 
-type View = "daily-plan" | "availability" | "account" | "booking-sources" | "accounting" | "priority" | "forms" | "user-management";
-
-function AppContent() {
-  // Check if we're on the booking request form route
-  const [isBookingRequestRoute, setIsBookingRequestRoute] = useState(
-    window.location.pathname === "/booking-request"
-  );
-
-  useEffect(() => {
-    // Handle browser navigation
-    const handlePopState = () => {
-      setIsBookingRequestRoute(window.location.pathname === "/booking-request");
-    };
-
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
-
-  // If on booking request route, show the public form (no auth required)
-  if (isBookingRequestRoute) {
-    return <BookingRequestForm />;
-  }
-  const [currentView, setCurrentView] = useState<View>("daily-plan");
+// Component for the Daily Plan route
+function DailyPlanPage() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [weekStartDate, setWeekStartDate] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
-  const { currentUser, userRole } = useAuth();
 
-  // Fetch bookings from Firebase
+  const { currentUser } = useAuth();
   const { bookings, loading: bookingsLoading, addBooking, updateBooking, deleteBooking } = useBookings();
 
-  // Filter bookings for the selected date
   const filteredBookings = useMemo(() => {
     const selectedDateStr = format(selectedDate, "yyyy-MM-dd");
     return bookings.filter(booking => booking.date === selectedDateStr);
   }, [bookings, selectedDate]);
 
-  // Fetch available pilots for the selected date, passing bookings for sorting
   const { pilots, loading: pilotsLoading, isPilotAvailableForTimeSlot } = usePilots(selectedDate);
-
-  // Wait for both pilots and bookings to load before showing the schedule
   const isLoading = pilotsLoading || bookingsLoading;
-
-  // Time slots for the schedule - dynamically determined based on the selected date
   const timeSlots = useMemo(() => getTimeSlotsByDate(selectedDate), [selectedDate]);
-
-  // Show login if user is not authenticated
-  if (!currentUser) {
-    return <Login />;
-  }
-
-  // Show no access screen if user doesn't have a role
-  if (!userRole) {
-    return <NoAccess />;
-  }
 
   return (
     <div className="min-h-screen flex flex-col bg-zinc-950 dark">
@@ -80,49 +43,145 @@ function AppContent() {
         onDateChange={setSelectedDate}
         weekStartDate={weekStartDate}
         onWeekChange={setWeekStartDate}
-        currentView={currentView}
-        onViewChange={setCurrentView}
       />
-      {currentView === "daily-plan" ? (
-        <ScheduleGrid
-          selectedDate={selectedDate}
-          pilots={pilots}
-          timeSlots={timeSlots}
-          bookings={filteredBookings}
-          isPilotAvailableForTimeSlot={isPilotAvailableForTimeSlot}
-          loading={isLoading}
-          currentUserDisplayName={currentUser?.displayName || undefined}
-          onAddBooking={addBooking}
-          onUpdateBooking={updateBooking}
-          onDeleteBooking={deleteBooking}
-          onNavigateToDate={setSelectedDate}
-        />
-      ) : currentView === "availability" ? (
-        <AvailabilityGrid weekStartDate={weekStartDate} />
-      ) : currentView === "account" ? (
-        <Account />
-      ) : currentView === "booking-sources" ? (
-        <BookingSources />
-      ) : currentView === "accounting" ? (
-        <Accounting />
-      ) : currentView === "priority" ? (
-        <Priority />
-      ) : currentView === "forms" ? (
-        <Forms />
-      ) : currentView === "user-management" ? (
-        <UserManagement />
-      ) : null}
+      <ScheduleGrid
+        selectedDate={selectedDate}
+        pilots={pilots}
+        timeSlots={timeSlots}
+        bookings={filteredBookings}
+        isPilotAvailableForTimeSlot={isPilotAvailableForTimeSlot}
+        loading={isLoading}
+        currentUserDisplayName={currentUser?.displayName || currentUser?.email || undefined}
+        onAddBooking={addBooking}
+        onUpdateBooking={updateBooking}
+        onDeleteBooking={deleteBooking}
+        onNavigateToDate={setSelectedDate}
+      />
     </div>
+  );
+}
+
+// Component for the Availability route
+function AvailabilityPage() {
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [weekStartDate, setWeekStartDate] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
+
+  return (
+    <div className="min-h-screen flex flex-col bg-zinc-950 dark">
+      <Header
+        date={selectedDate}
+        onDateChange={setSelectedDate}
+        weekStartDate={weekStartDate}
+        onWeekChange={setWeekStartDate}
+      />
+      <AvailabilityGrid weekStartDate={weekStartDate} />
+    </div>
+  );
+}
+
+// Simple page wrapper for other routes
+function PageWrapper({ children }: { children: React.ReactNode }) {
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [weekStartDate, setWeekStartDate] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
+
+  return (
+    <div className="min-h-screen flex flex-col bg-zinc-950 dark">
+      <Header
+        date={selectedDate}
+        onDateChange={setSelectedDate}
+        weekStartDate={weekStartDate}
+        onWeekChange={setWeekStartDate}
+      />
+      {children}
+    </div>
+  );
+}
+
+function AppContent() {
+  return (
+    <Routes>
+      {/* Public route */}
+      <Route path="/booking-request" element={<BookingRequestForm />} />
+
+      {/* Login route */}
+      <Route path="/login" element={<Login />} />
+
+      {/* Protected routes */}
+      <Route path="/" element={
+        <ProtectedRoute>
+          <DailyPlanPage />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/availability" element={
+        <ProtectedRoute>
+          <AvailabilityPage />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/account" element={
+        <ProtectedRoute>
+          <PageWrapper>
+            <Account />
+          </PageWrapper>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/booking-sources" element={
+        <ProtectedRoute>
+          <PageWrapper>
+            <BookingSources />
+          </PageWrapper>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/accounting" element={
+        <ProtectedRoute>
+          <PageWrapper>
+            <Accounting />
+          </PageWrapper>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/priority" element={
+        <ProtectedRoute>
+          <PageWrapper>
+            <Priority />
+          </PageWrapper>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/forms" element={
+        <ProtectedRoute>
+          <PageWrapper>
+            <Forms />
+          </PageWrapper>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/user-management" element={
+        <ProtectedRoute>
+          <PageWrapper>
+            <UserManagement />
+          </PageWrapper>
+        </ProtectedRoute>
+      } />
+
+      {/* Catch all - redirect to home */}
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }
 
 function App() {
   return (
-    <AuthProvider>
-      <EditingProvider>
-        <AppContent />
-      </EditingProvider>
-    </AuthProvider>
+    <BrowserRouter>
+      <AuthProvider>
+        <EditingProvider>
+          <AppContent />
+        </EditingProvider>
+      </AuthProvider>
+    </BrowserRouter>
   );
 }
 
