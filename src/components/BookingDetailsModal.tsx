@@ -12,7 +12,8 @@ import { useEditing } from "../contexts/EditingContext";
 import { useRole } from "../hooks/useRole";
 import { Camera, Upload, Eye, Trash2, Calendar, Clock, MapPin, Users, Phone, Mail, FileText, User, PhoneCall, Send, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { collection, query, where, getDocs } from "firebase/firestore";
-import { db } from "../firebase/config";
+import { db, storage } from "../firebase/config";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { BookingSourceAutocomplete } from "./BookingSourceAutocomplete";
 
 interface BookingDetailsModalProps {
@@ -62,6 +63,7 @@ export function BookingDetailsModal({
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [showAdditionalOptions, setShowAdditionalOptions] = useState(false);
   const [isSavingPayments, setIsSavingPayments] = useState(false);
+  const [uploadingReceipt, setUploadingReceipt] = useState<string | null>(null);
 
 
   // Create an availability check function that uses edited date data when in edit mode
@@ -441,33 +443,96 @@ export function BookingDetailsModal({
     );
   };
 
-  const handleImageUpload = (pilotName: string, file: File) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64String = reader.result as string;
+  const handleImageUpload = async (pilotName: string, file: File) => {
+    if (!booking?.id || !onUpdate) {
+      alert("Cannot upload receipt: Booking ID not found");
+      return;
+    }
+
+    setUploadingReceipt(pilotName);
+
+    try {
+      // Create a unique filename with timestamp
+      const timestamp = Date.now();
+      const sanitizedFilename = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const storagePath = `receipts/${booking.id}/${pilotName}/${timestamp}_${sanitizedFilename}`;
+
+      // Upload to Firebase Storage
+      const storageRef = ref(storage, storagePath);
+      await uploadBytes(storageRef, file);
+
+      // Get download URL
+      const downloadURL = await getDownloadURL(storageRef);
+
+      // Create receipt file object with URL
       const receiptFile: ReceiptFile = {
-        data: base64String,
+        url: downloadURL,
         filename: file.name
       };
-      setPilotPayments(prev =>
-        prev.map(payment =>
-          payment.pilotName === pilotName
-            ? { ...payment, receiptFiles: [...(payment.receiptFiles || []), receiptFile] }
-            : payment
-        )
+
+      // Update pilot payments with new receipt
+      const updatedPayments = pilotPayments.map(payment =>
+        payment.pilotName === pilotName
+          ? { ...payment, receiptFiles: [...(payment.receiptFiles || []), receiptFile] }
+          : payment
       );
-    };
-    reader.readAsDataURL(file);
+
+      // Convert to Firestore-compatible format
+      const firestoreCompatiblePayments = JSON.parse(JSON.stringify(updatedPayments.map(payment => ({
+        pilotName: payment.pilotName,
+        amount: typeof payment.amount === 'string'
+          ? (payment.amount === '' || payment.amount === '-' ? 0 : parseFloat(payment.amount))
+          : payment.amount,
+        paymentMethod: payment.paymentMethod,
+        receiptFiles: payment.receiptFiles || []
+      }))));
+
+      // Save to database immediately
+      await onUpdate(booking.id, { pilotPayments: firestoreCompatiblePayments });
+
+      // Update local state
+      setPilotPayments(updatedPayments);
+    } catch (error) {
+      console.error("Error uploading receipt:", error);
+      alert("Failed to upload receipt. Please try again.");
+    } finally {
+      setUploadingReceipt(null);
+    }
   };
 
-  const handleRemoveReceipt = (pilotName: string, index: number) => {
-    setPilotPayments(prev =>
-      prev.map(payment =>
+  const handleRemoveReceipt = async (pilotName: string, index: number) => {
+    if (!booking?.id || !onUpdate) {
+      alert("Cannot remove receipt: Booking ID not found");
+      return;
+    }
+
+    try {
+      // Update pilot payments with receipt removed
+      const updatedPayments = pilotPayments.map(payment =>
         payment.pilotName === pilotName
           ? { ...payment, receiptFiles: payment.receiptFiles?.filter((_, i) => i !== index) }
           : payment
-      )
-    );
+      );
+
+      // Convert to Firestore-compatible format
+      const firestoreCompatiblePayments = JSON.parse(JSON.stringify(updatedPayments.map(payment => ({
+        pilotName: payment.pilotName,
+        amount: typeof payment.amount === 'string'
+          ? (payment.amount === '' || payment.amount === '-' ? 0 : parseFloat(payment.amount))
+          : payment.amount,
+        paymentMethod: payment.paymentMethod,
+        receiptFiles: payment.receiptFiles || []
+      }))));
+
+      // Save to database immediately
+      await onUpdate(booking.id, { pilotPayments: firestoreCompatiblePayments });
+
+      // Update local state
+      setPilotPayments(updatedPayments);
+    } catch (error) {
+      console.error("Error removing receipt:", error);
+      alert("Failed to remove receipt. Please try again.");
+    }
   };
 
   const handleSavePayments = async () => {
@@ -1198,7 +1263,7 @@ export function BookingDetailsModal({
                         {/* Upload Buttons */}
                         <div className="flex gap-2">
                           {/* Camera Button */}
-                          <label className="flex-1">
+                          <label className={`flex-1 ${uploadingReceipt === payment.pilotName ? 'opacity-50 cursor-not-allowed' : ''}`}>
                             <input
                               type="file"
                               accept="image/*"
@@ -1211,15 +1276,29 @@ export function BookingDetailsModal({
                                 }
                               }}
                               className="hidden"
+                              disabled={uploadingReceipt === payment.pilotName}
                             />
-                            <div className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-colors bg-zinc-800 text-white hover:bg-zinc-700 cursor-pointer">
-                              <Camera className="w-5 h-5" />
-                              <span>Camera</span>
+                            <div className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-colors ${
+                              uploadingReceipt === payment.pilotName
+                                ? 'bg-zinc-800 text-white cursor-not-allowed'
+                                : 'bg-zinc-800 text-white hover:bg-zinc-700 cursor-pointer'
+                            }`}>
+                              {uploadingReceipt === payment.pilotName ? (
+                                <>
+                                  <Loader2 className="w-5 h-5 animate-spin" />
+                                  <span>Uploading...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Camera className="w-5 h-5" />
+                                  <span>Camera</span>
+                                </>
+                              )}
                             </div>
                           </label>
 
                           {/* Upload Button */}
-                          <label className="flex-1">
+                          <label className={`flex-1 ${uploadingReceipt === payment.pilotName ? 'opacity-50 cursor-not-allowed' : ''}`}>
                             <input
                               type="file"
                               accept="image/*"
@@ -1231,10 +1310,24 @@ export function BookingDetailsModal({
                                 }
                               }}
                               className="hidden"
+                              disabled={uploadingReceipt === payment.pilotName}
                             />
-                            <div className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-colors bg-zinc-800 text-white hover:bg-zinc-700 cursor-pointer">
-                              <Upload className="w-5 h-5" />
-                              <span>Upload</span>
+                            <div className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-colors ${
+                              uploadingReceipt === payment.pilotName
+                                ? 'bg-zinc-800 text-white cursor-not-allowed'
+                                : 'bg-zinc-800 text-white hover:bg-zinc-700 cursor-pointer'
+                            }`}>
+                              {uploadingReceipt === payment.pilotName ? (
+                                <>
+                                  <Loader2 className="w-5 h-5 animate-spin" />
+                                  <span>Uploading...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Upload className="w-5 h-5" />
+                                  <span>Upload</span>
+                                </>
+                              )}
                             </div>
                           </label>
                         </div>
@@ -1253,7 +1346,7 @@ export function BookingDetailsModal({
                                 <div className="flex gap-2">
                                   <button
                                     type="button"
-                                    onClick={() => setPreviewImage(file.data)}
+                                    onClick={() => setPreviewImage(file.url || file.data || "")}
                                     className="p-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors"
                                     title="Preview"
                                   >

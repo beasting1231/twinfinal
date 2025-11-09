@@ -4,7 +4,7 @@ import { useBookings } from "../hooks/useBookings";
 import { useDriverAssignments } from "../hooks/useDriverAssignments";
 import { useAuth } from "../contexts/AuthContext";
 import { useRole } from "../hooks/useRole";
-import { Download, Filter } from "lucide-react";
+import { Download, Filter, Receipt } from "lucide-react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { getTimeSlotsByDate } from "../utils/timeSlots";
@@ -27,6 +27,7 @@ interface AccountingRow {
   commissionStatus: "paid" | "unpaid";
   bookingId: string | undefined;
   bookingIds: string[];
+  receiptUrls: string[];
 }
 
 export function Accounting() {
@@ -123,6 +124,11 @@ export function Accounting() {
         // Try to find payment info for this pilot
         const pilotPayment = booking.pilotPayments?.find(p => p.pilotName === pilotName);
 
+        // Extract receipt URLs from this pilot's payment data
+        const receiptUrls = pilotPayment?.receiptFiles
+          ?.map(file => file.url || file.data)
+          .filter((url): url is string => !!url) || [];
+
         rows.push({
           date: booking.date,
           time: timeSlot,
@@ -138,6 +144,7 @@ export function Accounting() {
           commissionStatus: booking.commissionStatus || "unpaid",
           bookingId: booking.id,
           bookingIds: booking.id ? [booking.id] : [],
+          receiptUrls,
         });
       });
     });
@@ -436,12 +443,13 @@ export function Accounting() {
                 </th>
                 <th className="text-right px-4 py-3 text-zinc-300 font-medium whitespace-nowrap">Commission</th>
                 <th className="text-left px-4 py-3 text-zinc-300 font-medium whitespace-nowrap">Comm. Status</th>
+                <th className="text-center px-4 py-3 text-zinc-300 font-medium whitespace-nowrap">Receipt</th>
               </tr>
             </thead>
             <tbody>
               {filteredData.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="px-4 py-12 text-center text-zinc-500">
+                  <td colSpan={13} className="px-4 py-12 text-center text-zinc-500">
                     <p>No records found matching your filters</p>
                   </td>
                 </tr>
@@ -514,6 +522,26 @@ export function Accounting() {
                               {row.commissionStatus === "paid" ? "Paid" : "Unpaid"}
                             </span>
                           )
+                        ) : (
+                          <span className="text-zinc-500">-</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center whitespace-nowrap">
+                        {row.receiptUrls && row.receiptUrls.length > 0 ? (
+                          <div className="flex gap-1 justify-center">
+                            {row.receiptUrls.map((url, idx) => (
+                              <a
+                                key={idx}
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                                title={`View receipt ${idx + 1}`}
+                              >
+                                <Receipt className="w-3.5 h-3.5" />
+                              </a>
+                            ))}
+                          </div>
                         ) : (
                           <span className="text-zinc-500">-</span>
                         )}

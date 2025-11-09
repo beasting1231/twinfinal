@@ -10,6 +10,8 @@ import { DriverVehicleModal } from "./DriverVehicleModal";
 import { DriverVehicleContextMenu } from "./DriverVehicleContextMenu";
 import { ScheduleBookingRequestContextMenu } from "./ScheduleBookingRequestContextMenu";
 import { BookingRequestItem } from "./BookingRequestItem";
+import { TimeSlotContextMenu } from "./TimeSlotContextMenu";
+import { AddPilotModal } from "./AddPilotModal";
 import { useBookingSourceColors } from "../hooks/useBookingSourceColors";
 import { useDriverAssignments } from "../hooks/useDriverAssignments";
 import { useBookingRequests } from "../hooks/useBookingRequests";
@@ -17,7 +19,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useRole } from "../hooks/useRole";
 import type { Booking, Pilot, BookingRequest } from "../types/index";
 import { format } from "date-fns";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc, collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { DndContext, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
 import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
@@ -124,6 +126,59 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
   // Drag and drop state - track active drag for validation and multi-column highlighting
   const [draggedBooking, setDraggedBooking] = useState<Booking | null>(null);
   const [draggedRequest, setDraggedRequest] = useState<BookingRequest | null>(null);
+
+  // Time slot context menu state
+  const [timeSlotContextMenu, setTimeSlotContextMenu] = useState<{
+    isOpen: boolean;
+    position: { x: number; y: number };
+    timeIndex: number;
+    timeSlot: string;
+  } | null>(null);
+
+  // Add pilot modal state
+  const [addPilotModal, setAddPilotModal] = useState<{
+    isOpen: boolean;
+    timeIndex: number;
+    timeSlot: string;
+  } | null>(null);
+
+  // State for all pilots (not just those available on the selected date)
+  const [allPilots, setAllPilots] = useState<Pilot[]>([]);
+
+  // Fetch all pilots from userProfiles (for Add Pilot modal)
+  useEffect(() => {
+    const pilotsQuery = query(
+      collection(db, "userProfiles"),
+      where("role", "in", ["pilot", "admin"])
+    );
+
+    const unsubscribe = onSnapshot(pilotsQuery, (snapshot) => {
+      const pilotsData: Pilot[] = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          uid: data.uid,
+          displayName: data.displayName || "Unknown Pilot",
+          email: data.email || "",
+          femalePilot: data.femalePilot || false,
+          priority: data.priority || undefined,
+        };
+      });
+
+      // Sort by priority and name
+      pilotsData.sort((a, b) => {
+        const aPriority = a.priority ?? 999999;
+        const bPriority = b.priority ?? 999999;
+        if (aPriority !== bPriority) {
+          return aPriority - bPriority;
+        }
+        return a.displayName.localeCompare(b.displayName);
+      });
+
+      setAllPilots(pilotsData);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   // Configure drag sensors for better interaction
   const sensors = useSensors(
@@ -650,6 +705,64 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
     }
   };
 
+  // Handle time slot context menu (admin only)
+  const handleTimeSlotContextMenu = (timeIndex: number, timeSlot: string) => (e: React.MouseEvent) => {
+    if (role !== 'admin') return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    setTimeSlotContextMenu({
+      isOpen: true,
+      position: { x: e.clientX, y: e.clientY },
+      timeIndex,
+      timeSlot,
+    });
+  };
+
+  // Handle adding a pilot to a time slot
+  const handleAddPilot = async (pilotUid: string) => {
+    if (!addPilotModal) return;
+
+    const { timeSlot } = addPilotModal;
+    const dateString = format(selectedDate, 'yyyy-MM-dd');
+
+    try {
+      // Find the pilot in allPilots
+      const pilot = allPilots.find(p => p.uid === pilotUid);
+      if (!pilot) {
+        alert('Pilot not found');
+        return;
+      }
+
+      // Check if this availability already exists
+      const { getDocs, addDoc } = await import('firebase/firestore');
+      const availabilityQuery = query(
+        collection(db, 'availability'),
+        where('userId', '==', pilotUid),
+        where('date', '==', dateString),
+        where('timeSlot', '==', timeSlot)
+      );
+
+      const existingDocs = await getDocs(availabilityQuery);
+
+      // Only add if it doesn't already exist
+      if (existingDocs.empty) {
+        await addDoc(collection(db, 'availability'), {
+          userId: pilotUid,
+          date: dateString,
+          timeSlot: timeSlot,
+        });
+      }
+
+      // Close modal
+      setAddPilotModal(null);
+    } catch (error) {
+      console.error('Error adding pilot availability:', error);
+      alert('Failed to add pilot. Please try again.');
+    }
+  };
+
   // Handle drag start - track what's being dragged for validation
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event;
@@ -1168,7 +1281,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
               // Time Slot Label
               <div
                 key={`time-${timeIndex}`}
-                className="h-14 flex items-center justify-center bg-zinc-900 rounded-lg font-medium text-sm"
+                className={`h-14 flex items-center justify-center bg-zinc-900 rounded-lg font-medium text-sm ${role === 'admin' ? 'cursor-context-menu' : ''}`}
+                onContextMenu={role === 'admin' ? handleTimeSlotContextMenu(timeIndex, timeSlot) : undefined}
               >
                 {timeSlot}
               </div>,
@@ -1687,6 +1801,38 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
             }
           }}
           onClose={() => setBookingRequestContextMenu(null)}
+        />
+      )}
+
+      {/* Time Slot Context Menu */}
+      {timeSlotContextMenu && (
+        <TimeSlotContextMenu
+          isOpen={timeSlotContextMenu.isOpen}
+          position={timeSlotContextMenu.position}
+          onAddPilot={() => {
+            setAddPilotModal({
+              isOpen: true,
+              timeIndex: timeSlotContextMenu.timeIndex,
+              timeSlot: timeSlotContextMenu.timeSlot,
+            });
+            setTimeSlotContextMenu(null);
+          }}
+          onClose={() => setTimeSlotContextMenu(null)}
+        />
+      )}
+
+      {/* Add Pilot Modal */}
+      {addPilotModal && (
+        <AddPilotModal
+          open={addPilotModal.isOpen}
+          onOpenChange={(open) => {
+            if (!open) {
+              setAddPilotModal(null);
+            }
+          }}
+          pilots={allPilots}
+          timeSlot={addPilotModal.timeSlot}
+          onAddPilot={handleAddPilot}
         />
       )}
     </div>

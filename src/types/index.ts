@@ -1,5 +1,6 @@
 export interface ReceiptFile {
-  data: string; // base64 encoded image
+  data?: string; // base64 encoded image (legacy)
+  url?: string; // Firebase Storage URL
   filename: string;
 }
 
