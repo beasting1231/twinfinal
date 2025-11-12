@@ -4,6 +4,7 @@ import { BookingAvailable } from "./BookingAvailable";
 import { NewBookingModal } from "./NewBookingModal";
 import { BookingDetailsModal } from "./BookingDetailsModal";
 import { PilotContextMenu } from "./PilotContextMenu";
+import { OverbookedPilotContextMenu } from "./OverbookedPilotContextMenu";
 import { AvailabilityContextMenu } from "./AvailabilityContextMenu";
 import { DriverVehicleCell } from "./DriverVehicleCell";
 import { DriverVehicleModal } from "./DriverVehicleModal";
@@ -15,6 +16,7 @@ import { AddPilotModal } from "./AddPilotModal";
 import { useBookingSourceColors } from "../hooks/useBookingSourceColors";
 import { useDriverAssignments } from "../hooks/useDriverAssignments";
 import { useBookingRequests } from "../hooks/useBookingRequests";
+import { useAllPilots } from "../hooks/useAllPilots";
 import { useAuth } from "../contexts/AuthContext";
 import { useRole } from "../hooks/useRole";
 import type { Booking, Pilot, BookingRequest } from "../types/index";
@@ -46,7 +48,35 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
 
   // Get current user and role for permission checks
   const { currentUser } = useAuth();
-  const { role } = useRole();
+  const { role} = useRole();
+
+  // Get all pilots from system (for overbooked assignments)
+  const { allPilots: systemPilots } = useAllPilots();
+
+  // Calculate max columns needed (for overbooking support)
+  const maxColumnsNeeded = useMemo(() => {
+    let maxCols = pilots.length;
+
+    // Check each time slot for overbookings
+    timeSlots.forEach((timeSlot, timeIndex) => {
+      const bookingsAtTime = bookings.filter(b => b.timeIndex === timeIndex);
+      const bookingSlots = bookingsAtTime.reduce((total, booking) => {
+        return total + (booking.numberOfPeople || booking.span || 1);
+      }, 0);
+
+      // Count unavailable pilots at this time
+      const unavailableCount = pilots.filter(p => !isPilotAvailableForTimeSlot(p.uid, timeSlot)).length;
+
+      // Total cells needed = bookings + unavailable pilots
+      const cellsNeeded = bookingSlots + unavailableCount;
+
+      if (cellsNeeded > maxCols) {
+        maxCols = cellsNeeded;
+      }
+    });
+
+    return maxCols;
+  }, [pilots, timeSlots, bookings, isPilotAvailableForTimeSlot]);
 
   // Fetch booking source colors
   const { getSourceColor } = useBookingSourceColors();
@@ -73,6 +103,27 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
     return bookingRequests.filter(req => req.status === "waitlist" && req.date === dateString);
   }, [bookingRequests, dateString]);
 
+  // Helper function to calculate available spots for a booking request
+  const getAvailableSpotsForRequest = (request: BookingRequest): number => {
+    // Find the time slot for this request
+    const timeSlot = timeSlots[request.timeIndex];
+    if (!timeSlot) return 0;
+
+    // Count available pilots at this time
+    const availablePilotsCount = pilots.filter(p => isPilotAvailableForTimeSlot(p.uid, timeSlot)).length;
+
+    // Get bookings at this time slot on the requested date
+    const bookingsAtTime = bookings.filter(b => b.timeIndex === request.timeIndex && b.date === request.date);
+
+    // Calculate total spots already booked
+    const spotsBooked = bookingsAtTime.reduce((total, booking) => {
+      return total + (booking.numberOfPeople || booking.span || 1);
+    }, 0);
+
+    // Available spots = available pilots - spots already booked
+    return Math.max(0, availablePilotsCount - spotsBooked);
+  };
+
   // Booking request context menu state
   const [bookingRequestContextMenu, setBookingRequestContextMenu] = useState<{
     isOpen: boolean;
@@ -91,6 +142,15 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
     slotIndex: number;
     timeSlot: string;
     isPilotSelfUnassign?: boolean;
+  } | null>(null);
+
+  // Overbooked position context menu state
+  const [overbookedContextMenu, setOverbookedContextMenu] = useState<{
+    isOpen: boolean;
+    position: { x: number; y: number };
+    booking: Booking;
+    slotIndex: number;
+    timeSlot: string;
   } | null>(null);
 
   // Availability context menu state
@@ -504,6 +564,43 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
     if (!contextMenu || !onUpdateBooking) return;
 
     const { booking, slotIndex } = contextMenu;
+    // Ensure array has proper length to avoid undefined values
+    const requiredLength = Math.max(booking.numberOfPeople, slotIndex + 1);
+    const updatedPilots = [...booking.assignedPilots];
+    // Fill any missing positions with empty strings to prevent undefined
+    while (updatedPilots.length < requiredLength) {
+      updatedPilots.push("");
+    }
+    // Set the position to empty string instead of removing to preserve positions
+    updatedPilots[slotIndex] = "";
+
+    onUpdateBooking(booking.id!, {
+      assignedPilots: updatedPilots,
+    });
+  };
+
+  // Handle overbooked pilot selection from context menu
+  const handleSelectOverbookedPilot = (pilotName: string) => {
+    if (!overbookedContextMenu || !onUpdateBooking) return;
+
+    const { booking, slotIndex } = overbookedContextMenu;
+    // Ensure array has proper length to avoid undefined values
+    const requiredLength = Math.max(booking.numberOfPeople, slotIndex + 1);
+    const updatedPilots = [...booking.assignedPilots];
+    // Fill any missing positions with empty strings to prevent undefined
+    while (updatedPilots.length < requiredLength) {
+      updatedPilots.push("");
+    }
+    updatedPilots[slotIndex] = pilotName;
+
+    onUpdateBooking(booking.id!, { assignedPilots: updatedPilots });
+  };
+
+  // Handle overbooked pilot un-assignment from context menu
+  const handleUnassignOverbookedPilot = () => {
+    if (!overbookedContextMenu || !onUpdateBooking) return;
+
+    const { booking, slotIndex } = overbookedContextMenu;
     // Ensure array has proper length to avoid undefined values
     const requiredLength = Math.max(booking.numberOfPeople, slotIndex + 1);
     const updatedPilots = [...booking.assignedPilots];
@@ -991,6 +1088,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                         key={request.id}
                         request={request}
                         canDrag={role === 'admin'}
+                        availableSpots={getAvailableSpotsForRequest(request)}
                         onContextMenu={(req, position) => {
                           setBookingRequestContextMenu({
                             isOpen: true,
@@ -1023,6 +1121,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                         key={request.id}
                         request={request}
                         canDrag={role === 'admin'}
+                        availableSpots={getAvailableSpotsForRequest(request)}
                         onContextMenu={(req, position) => {
                           setBookingRequestContextMenu({
                             isOpen: true,
@@ -1182,18 +1281,33 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
         className={`inline-block origin-top-left ${!isPinching ? 'transition-transform duration-100' : ''}`}
         style={{ transform: `scale(${scale})` }}
       >
-        <div className="grid gap-2" style={{ gridTemplateColumns: `80px repeat(${pilots.length}, 220px) 48px 98px${showSecondDriverColumn ? ' 98px' : ''}` }}>
+        <div className="grid gap-2" style={{ gridTemplateColumns: `80px repeat(${maxColumnsNeeded}, 220px) 48px 98px${showSecondDriverColumn ? ' 98px' : ''}` }}>
           {/* Header Row - Shows pilots present today */}
           <div className="h-7" />
-          {pilots.map((p, index) => (
-            <div
-              key={p.uid}
-              className={`h-7 flex items-center justify-center ${p.femalePilot ? 'bg-red-600/80' : 'bg-zinc-900'} rounded-lg font-medium text-sm gap-2`}
-            >
-              <span className={p.femalePilot ? 'text-white' : 'text-zinc-500'}>{index + 1}</span>
-              <span>{p.displayName}</span>
-            </div>
-          ))}
+          {Array.from({ length: maxColumnsNeeded }, (_, index) => {
+            const pilot = pilots[index];
+            if (pilot) {
+              return (
+                <div
+                  key={pilot.uid}
+                  className={`h-7 flex items-center justify-center ${pilot.femalePilot ? 'bg-red-600/80' : 'bg-zinc-900'} rounded-lg font-medium text-sm gap-2`}
+                >
+                  <span className={pilot.femalePilot ? 'text-white' : 'text-zinc-500'}>{index + 1}</span>
+                  <span>{pilot.displayName}</span>
+                </div>
+              );
+            } else {
+              // Extra column header (for overbookings)
+              return (
+                <div
+                  key={`extra-${index}`}
+                  className="h-7 flex items-center justify-center bg-orange-600/80 rounded-lg font-medium text-sm text-white"
+                >
+                  <span>{index + 1}</span>
+                </div>
+              );
+            }
+          })}
           {/* Spacer between bookings and drivers */}
           <div className="h-7 w-full" />
           {/* Driver Header */}
@@ -1209,13 +1323,29 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
 
           {/* Time Slots and Booking Cells */}
           {timeSlots.map((timeSlot, timeIndex) => {
-            // Get all bookings for this time slot
-            const bookingsAtThisTime = bookings.filter(b => b.timeIndex === timeIndex);
+            // Get all bookings for this time slot and sort by creation time (oldest first, newest last/right)
+            const bookingsAtThisTime = bookings
+              .filter(b => b.timeIndex === timeIndex)
+              .sort((a, b) => {
+                // Sort by createdAt timestamp (oldest to newest)
+                const aTime = a.createdAt?.toMillis?.() || a.createdAt?.getTime?.() || 0;
+                const bTime = b.createdAt?.toMillis?.() || b.createdAt?.getTime?.() || 0;
+                return aTime - bTime;
+              });
 
             // Calculate how many pilot slots are occupied by bookings
             const slotsOccupiedByBookings = bookingsAtThisTime.reduce((total, booking) => {
               return total + (booking.numberOfPeople || booking.span || 1);
             }, 0);
+
+            // Calculate total available pilots at this time
+            const totalAvailablePilotsAtThisTime = pilots.filter((pilot) =>
+              isPilotAvailableForTimeSlot(pilot.uid, timeSlot)
+            ).length;
+
+            // Determine which booking positions are overbooked
+            // Positions beyond available pilot count are overbooked
+            const overbookedPositionStart = totalAvailablePilotsAtThisTime;
 
             // Collect all cells for this time slot
             const cellsForRow: Array<{
@@ -1258,13 +1388,20 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
               });
             });
 
-            // Calculate how many available pilot cells we can show
-            const totalCellsNeeded = pilots.length; // Total capacity
-            const cellsUsed = slotsOccupiedByBookings + unavailablePilots.length;
-            const availableSlotsToShow = totalCellsNeeded - cellsUsed;
+            // Calculate actual booking capacity remaining (not just grid space)
+            const totalAvailablePilots = availablePilots.length;
+            const actualCapacityRemaining = Math.max(0, totalAvailablePilots - slotsOccupiedByBookings);
 
-            // Add available pilot cells (only up to the available slots)
-            for (let i = 0; i < Math.min(availableSlotsToShow, availablePilots.length); i++) {
+            // Calculate how many available pilot cells we can show
+            const totalCellsNeeded = maxColumnsNeeded; // Total capacity (including overflow for overbookings)
+            const cellsUsed = slotsOccupiedByBookings + unavailablePilots.length;
+            const gridSpaceAvailable = totalCellsNeeded - cellsUsed;
+
+            // Only show available cells if there's actual booking capacity remaining
+            const availableCellsToShow = Math.min(gridSpaceAvailable, actualCapacityRemaining, availablePilots.length);
+
+            // Add available pilot cells
+            for (let i = 0; i < availableCellsToShow; i++) {
               const {pilot, pilotIndex} = availablePilots[i];
               cellsForRow.push({
                 pilot,
@@ -1274,7 +1411,24 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
               });
             }
 
-            // Sort cells: booked first, then available, then noPilot
+            // Add invisible cells to fill remaining columns (for rows without overbooking)
+            // Calculate actual grid columns occupied (bookings can span multiple columns)
+            const columnsOccupied = cellsForRow.reduce((total, cell) => {
+              if (cell.status === "booked" && cell.booking) {
+                return total + (cell.booking.numberOfPeople || cell.booking.span || 1);
+              }
+              return total + 1; // Other cells occupy 1 column each
+            }, 0);
+
+            const cellsToFill = totalCellsNeeded - columnsOccupied;
+            for (let i = 0; i < cellsToFill; i++) {
+              cellsForRow.push({
+                status: "available" as const,
+                sortOrder: 3  // Put invisible cells at the end
+              });
+            }
+
+            // Sort cells: booked first, then available, then noPilot, then invisible
             cellsForRow.sort((a, b) => a.sortOrder - b.sortOrder);
 
             return [
@@ -1288,9 +1442,40 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
               </div>,
 
               // Render sorted cells
-              ...cellsForRow.map((cell, cellIdx) => {
-                if (cell.status === "booked" && cell.booking) {
-                  const span = cell.booking.numberOfPeople || cell.booking.span || 1;
+              // Track cumulative position for overbooking calculation
+              ...(() => {
+                let cumulativePosition = 0;
+                return cellsForRow.map((cell, cellIdx) => {
+                  // Invisible cell - render empty div to maintain grid structure
+                  if (cell.sortOrder === 3) {
+                    return (
+                      <div
+                        key={`invisible-${timeIndex}-${cellIdx}`}
+                        className="h-14"
+                        style={{ gridColumn: `span 1` }}
+                      />
+                    );
+                  }
+
+                  if (cell.status === "booked" && cell.booking) {
+                    const span = cell.booking.numberOfPeople || cell.booking.span || 1;
+
+                    // Calculate how many positions in THIS booking are overbooked
+                    // based on cumulative position across all bookings
+                    const startPosition = cumulativePosition;
+                    const endPosition = cumulativePosition + span;
+
+                    // Count how many positions in this booking exceed available capacity
+                    let overbookedCount = 0;
+                    for (let pos = startPosition; pos < endPosition; pos++) {
+                      if (pos >= overbookedPositionStart) {
+                        overbookedCount++;
+                      }
+                    }
+
+                    // Update cumulative position for next booking
+                    cumulativePosition += span;
+
                   return (
                     <div
                       key={`booking-${timeIndex}-${cell.booking.id || cellIdx}`}
@@ -1318,6 +1503,16 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                         currentUserDisplayName={currentUserDisplayName}
                         bookingId={cell.booking.id}
                         canDrag={role === 'admin'}
+                        overbookedCount={overbookedCount}
+                        onOverbookedClick={role === 'admin' ? (slotIndex: number, position: { x: number; y: number }) => {
+                          setOverbookedContextMenu({
+                            isOpen: true,
+                            position,
+                            booking: cell.booking,
+                            slotIndex,
+                            timeSlot
+                          });
+                        } : undefined}
                       />
                     </div>
                   );
@@ -1401,7 +1596,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                   );
                 }
                 return null;
-              }),
+              });
+              })(),
 
               // Spacer between bookings and drivers
               <div
@@ -1491,6 +1687,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                       key={request.id}
                       request={request}
                       canDrag={role === 'admin'}
+                      availableSpots={getAvailableSpotsForRequest(request)}
                       onContextMenu={(req, position) => {
                         setBookingRequestContextMenu({
                           isOpen: true,
@@ -1523,6 +1720,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                       key={request.id}
                       request={request}
                       canDrag={role === 'admin'}
+                      availableSpots={getAvailableSpotsForRequest(request)}
                       onContextMenu={(req, position) => {
                         setBookingRequestContextMenu({
                           isOpen: true,
@@ -1668,6 +1866,42 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
           onUnassign={handleUnassignPilot}
           onClose={() => setContextMenu(null)}
           isPilotSelfUnassign={contextMenu.isPilotSelfUnassign}
+        />
+      )}
+
+      {/* Overbooked Pilot Context Menu */}
+      {overbookedContextMenu && (
+        <OverbookedPilotContextMenu
+          isOpen={overbookedContextMenu.isOpen}
+          position={overbookedContextMenu.position}
+          unavailablePilots={systemPilots.filter((pilot) => {
+            // Only show pilots who are NOT signed in at this time slot
+            if (isPilotAvailableForTimeSlot(pilot.uid, overbookedContextMenu.timeSlot)) {
+              return false;
+            }
+
+            // Check if this specific position requires a female pilot
+            if (overbookedContextMenu.booking.femalePilotsRequired && overbookedContextMenu.slotIndex < overbookedContextMenu.booking.femalePilotsRequired) {
+              if (!pilot.femalePilot) {
+                return false;
+              }
+            }
+
+            // Exclude pilots already assigned to this booking (to prevent double-assignment within same booking)
+            const alreadyAssignedToThisBooking = overbookedContextMenu.booking.assignedPilots
+              .filter((p, index) => p && p !== "" && index !== overbookedContextMenu.slotIndex)
+              .includes(pilot.displayName);
+
+            if (alreadyAssignedToThisBooking) {
+              return false;
+            }
+
+            return true;
+          })}
+          currentPilot={overbookedContextMenu.booking.assignedPilots[overbookedContextMenu.slotIndex]}
+          onSelectPilot={handleSelectOverbookedPilot}
+          onUnassign={handleUnassignOverbookedPilot}
+          onClose={() => setOverbookedContextMenu(null)}
         />
       )}
 

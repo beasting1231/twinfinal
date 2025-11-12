@@ -25,6 +25,7 @@ export function BookingRequestForm() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [initialAvailability, setInitialAvailability] = useState<{ [key: string]: number }>({});
 
   // State for real-time data
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -183,6 +184,55 @@ export function BookingRequestForm() {
       }
     }
   }, [formData.timeIndex, formData.date, timeSlotAvailability]);
+
+  // Track initial availability when time slot is selected
+  useEffect(() => {
+    if (formData.timeIndex && formData.date) {
+      const key = `${formData.date}-${formData.timeIndex}`;
+      if (!initialAvailability[key]) {
+        const selectedTimeSlot = timeSlotAvailability.find(
+          slot => slot.timeIndex.toString() === formData.timeIndex
+        );
+        if (selectedTimeSlot) {
+          setInitialAvailability(prev => ({
+            ...prev,
+            [key]: selectedTimeSlot.availableSpots
+          }));
+        }
+      }
+    }
+  }, [formData.timeIndex, formData.date, timeSlotAvailability, initialAvailability]);
+
+  // Monitor availability changes while filling form
+  useEffect(() => {
+    if (formData.timeIndex && formData.date && formData.numberOfPeople > 1) {
+      const key = `${formData.date}-${formData.timeIndex}`;
+      const initial = initialAvailability[key];
+
+      if (initial !== undefined) {
+        const selectedTimeSlot = timeSlotAvailability.find(
+          slot => slot.timeIndex.toString() === formData.timeIndex
+        );
+        const currentAvailability = selectedTimeSlot?.availableSpots ?? 0;
+
+        // Check if availability dropped below what user selected
+        if (currentAvailability < formData.numberOfPeople) {
+          setMessage({
+            type: "error",
+            text: "Oops! These spots are no longer available. Availability has changed while you were filling out the form. Please select a different time or number of people."
+          });
+          // Reset to allow re-selection
+          setFormData(prev => ({ ...prev, numberOfPeople: 1 }));
+          // Clear the initial availability to allow re-tracking
+          setInitialAvailability(prev => {
+            const newState = { ...prev };
+            delete newState[key];
+            return newState;
+          });
+        }
+      }
+    }
+  }, [formData.timeIndex, formData.date, formData.numberOfPeople, timeSlotAvailability, initialAvailability]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { Phone, Mail, Send, Users, Calendar, Clock, PhoneCall } from "lucide-react";
+import { Phone, Mail, Send, Users, Calendar, Clock, PhoneCall, AlertTriangle } from "lucide-react";
 import type { BookingRequest } from "../types/index";
 import { useDraggable } from "@dnd-kit/core";
 
@@ -8,10 +8,14 @@ interface BookingRequestItemProps {
   onContextMenu: (request: BookingRequest, position: { x: number; y: number }) => void;
   onDateClick: (date: string) => void;
   canDrag?: boolean; // Whether this request can be dragged (admin only)
+  availableSpots?: number; // Number of available spots at this time slot
 }
 
-export function BookingRequestItem({ request, onContextMenu, onDateClick, canDrag = false }: BookingRequestItemProps) {
+export function BookingRequestItem({ request, onContextMenu, onDateClick, canDrag = false, availableSpots }: BookingRequestItemProps) {
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Check if this booking would cause overbooking
+  const wouldOverbook = availableSpots !== undefined && request.numberOfPeople > availableSpots;
 
   // Set up draggable for booking requests (admin only)
   const draggableId = request.id ? `request-${request.id}` : null;
@@ -73,6 +77,14 @@ export function BookingRequestItem({ request, onContextMenu, onDateClick, canDra
 
         {/* Right side: Date and time */}
         <div className="flex items-center gap-3 text-xs text-zinc-400">
+          {wouldOverbook && (
+            <div
+              className="flex items-center gap-1 text-orange-400"
+              title={`Would overbook: ${request.numberOfPeople} requested, only ${availableSpots} available`}
+            >
+              <AlertTriangle className="w-4 h-4" />
+            </div>
+          )}
           <button
             onClick={(e) => {
               e.stopPropagation();

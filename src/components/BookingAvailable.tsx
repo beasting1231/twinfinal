@@ -25,6 +25,7 @@ interface BookingAvailableProps {
   onNoPilotContextMenu?: (position: { x: number; y: number }) => void;
   onAvailableContextMenu?: (position: { x: number; y: number }) => void;
   onPilotNameClick?: (slotIndex: number, pilotName: string, position: { x: number; y: number }) => void; // Handler for clicking on a pilot name
+  onOverbookedClick?: (slotIndex: number, position: { x: number; y: number }) => void; // Handler for context menu on overbooked position
   isCurrentUserPilot?: boolean; // Whether this cell is for the current user
   isFemalePilot?: boolean; // Whether this pilot is a female pilot
   currentUserDisplayName?: string; // Current user's display name to check if they're clicking their own name
@@ -34,6 +35,7 @@ interface BookingAvailableProps {
   canDrag?: boolean; // Whether this booking can be dragged (admin only)
   draggedItemPax?: number; // Number of passengers in the currently dragged item
   hasEnoughSpace?: boolean; // Whether there's enough space at this location for the dragged item
+  overbookedCount?: number; // Number of overbooked spots (if any)
 }
 
 export const BookingAvailable = memo(function BookingAvailable({
@@ -57,6 +59,7 @@ export const BookingAvailable = memo(function BookingAvailable({
   onNoPilotContextMenu,
   onAvailableContextMenu,
   onPilotNameClick,
+  onOverbookedClick,
   isCurrentUserPilot = false,
   isFemalePilot = false,
   currentUserDisplayName,
@@ -64,7 +67,8 @@ export const BookingAvailable = memo(function BookingAvailable({
   droppableId,
   canDrag = false,
   draggedItemPax,
-  hasEnoughSpace = true
+  hasEnoughSpace = true,
+  overbookedCount = 0
 }: BookingAvailableProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const longPressTimerRef = useRef<number | null>(null);
@@ -104,18 +108,33 @@ export const BookingAvailable = memo(function BookingAvailable({
 
   // Handle right-click (desktop)
   const handleContextMenu = (e: React.MouseEvent) => {
-    if (status !== "booked" || !onContextMenu || bookingStatus === "cancelled") return;
+    if (status !== "booked" || bookingStatus === "cancelled") return;
+    if (!onContextMenu && !onOverbookedClick) return;
 
     e.preventDefault();
     e.stopPropagation();
 
     const slotIndex = getSlotIndexFromPosition(e.clientX);
-    onContextMenu(slotIndex, { x: e.clientX, y: e.clientY });
+
+    // Check if this position is overbooked
+    const isOverbookedPosition = slotIndex >= (span - overbookedCount);
+
+    // If overbooked and handler exists, use overbooked context menu
+    if (isOverbookedPosition && onOverbookedClick) {
+      onOverbookedClick(slotIndex, { x: e.clientX, y: e.clientY });
+      return;
+    }
+
+    // Otherwise use regular context menu
+    if (onContextMenu) {
+      onContextMenu(slotIndex, { x: e.clientX, y: e.clientY });
+    }
   };
 
   // Handle touch start (mobile long-press)
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (status !== "booked" || !onContextMenu || bookingStatus === "cancelled") return;
+    if (status !== "booked" || bookingStatus === "cancelled") return;
+    if (!onContextMenu && !onOverbookedClick) return;
 
     const touch = e.touches[0];
     touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
@@ -123,7 +142,17 @@ export const BookingAvailable = memo(function BookingAvailable({
     longPressTimerRef.current = window.setTimeout(() => {
       if (touchStartPosRef.current) {
         const slotIndex = getSlotIndexFromPosition(touchStartPosRef.current.x);
-        onContextMenu(slotIndex, touchStartPosRef.current);
+
+        // Check if this position is overbooked
+        const isOverbookedPosition = slotIndex >= (span - overbookedCount);
+
+        // If overbooked and handler exists, use overbooked context menu
+        if (isOverbookedPosition && onOverbookedClick) {
+          onOverbookedClick(slotIndex, touchStartPosRef.current);
+        } else if (onContextMenu) {
+          // Otherwise use regular context menu
+          onContextMenu(slotIndex, touchStartPosRef.current);
+        }
       }
     }, 500); // 500ms long press
   };
@@ -262,7 +291,7 @@ export const BookingAvailable = memo(function BookingAvailable({
           </div>
         </div>
 
-        {/* Pilot badges grid */}
+        {/* Pilot badges grid - includes assigned pilots and overbooked indicators */}
         <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${span}, 1fr)` }}>
           {Array.from({ length: span }, (_, index) => {
             const pilot = assignedPilots[index];
@@ -275,6 +304,20 @@ export const BookingAvailable = memo(function BookingAvailable({
 
             // Check if this position requires a female pilot
             const requiresFemalePilot = index < femalePilotsRequired;
+
+            // Check if this position is overbooked (past the normal capacity)
+            const isOverbookedPosition = index >= (span - overbookedCount);
+
+            // Show orange "overbooked" box for overbooked positions without assigned pilot
+            if ((!pilot || pilot === "") && isOverbookedPosition) {
+              return (
+                <div key={index} className="flex justify-center">
+                  <div className="text-xs text-orange-200 bg-orange-600/90 rounded-t-lg px-2 py-0.5 w-[80%] text-center">
+                    overbooked
+                  </div>
+                </div>
+              );
+            }
 
             // Show red box with "lady pilot" text for unassigned positions that require female pilot
             if (!pilot || pilot === "") {
@@ -294,6 +337,21 @@ export const BookingAvailable = memo(function BookingAvailable({
             const isOwnName = currentUserDisplayName && pilot === currentUserDisplayName;
             const canClickToUnassign = isOwnName && onPilotNameClick;
 
+            // For overbooked positions with assigned pilots, show with orange background
+            if (isOverbookedPosition) {
+              return (
+                <div key={index} className="flex justify-center">
+                  <div className="text-xs text-orange-200 bg-orange-600/90 rounded-t-lg px-2 py-0.5 w-[80%] relative">
+                    <div className="text-center truncate">{pilot}</div>
+                    {numAmount !== undefined && numAmount !== 0 && !isNaN(numAmount) && (
+                      <span className="absolute right-2 top-0.5 font-medium text-white">{numAmount}</span>
+                    )}
+                  </div>
+                </div>
+              );
+            }
+
+            // Regular assigned pilot (not overbooked)
             return (
               <div key={index} className="flex justify-center">
                 <div

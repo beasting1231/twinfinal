@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, deleteField } from "firebase/firestore";
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, deleteField, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase/config";
 import type { Booking } from "../types/index";
 import { useEditing } from "../contexts/EditingContext";
@@ -104,10 +104,11 @@ export function useBookings() {
   // Add a new booking
   const addBooking = async (booking: Omit<Booking, "id">) => {
     try {
-      // Add createdBy field with current user's UID
+      // Add createdBy field with current user's UID and createdAt timestamp
       const bookingWithCreator = {
         ...booking,
         createdBy: currentUser?.uid || "",
+        createdAt: serverTimestamp(),
       };
       await addDoc(collection(db, "bookings"), bookingWithCreator);
     } catch (err: any) {
@@ -121,6 +122,10 @@ export function useBookings() {
     try {
       // Filter out undefined values from the update object (Firebase doesn't accept undefined)
       const sanitizedBooking: any = {};
+
+      // Check if this is a move operation (timeIndex or date changed)
+      const isMove = booking.hasOwnProperty('timeIndex') || booking.hasOwnProperty('date');
+
       for (const [key, value] of Object.entries(booking)) {
         if (value !== undefined) {
           // Special handling for assignedPilots array to ensure no undefined values
@@ -135,6 +140,12 @@ export function useBookings() {
           }
         }
       }
+
+      // If booking was moved, update createdAt to current time (makes it the "newest" booking)
+      if (isMove) {
+        sanitizedBooking.createdAt = serverTimestamp();
+      }
+
       await updateDoc(doc(db, "bookings", id), sanitizedBooking);
     } catch (err: any) {
       console.error("Error updating booking:", err);

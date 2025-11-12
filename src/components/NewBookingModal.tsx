@@ -5,11 +5,13 @@ import { Button } from "./ui/button";
 import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { ChevronDown, ChevronUp } from "lucide-react";
-import { format } from "date-fns";
+import { ChevronDown, ChevronUp, Calendar } from "lucide-react";
+import { format, parse } from "date-fns";
 import type { Pilot, Booking } from "../types/index";
 import { useEditing } from "../contexts/EditingContext";
+import { useRole } from "../hooks/useRole";
 import { BookingSourceAutocomplete } from "./BookingSourceAutocomplete";
+import { getTimeSlotsByDate } from "../utils/timeSlots";
 
 interface NewBookingModalProps {
   open: boolean;
@@ -72,6 +74,68 @@ export function NewBookingModal({
   const [femalePilotsRequired, setFemalePilotsRequired] = useState(0);
   const [flightType, setFlightType] = useState<"sensational" | "classic" | "early bird">("sensational");
   const [showAdditionalOptions, setShowAdditionalOptions] = useState(false);
+  const [initialAvailableSlots, setInitialAvailableSlots] = useState<number | null>(null);
+  const [availabilityError, setAvailabilityError] = useState(false);
+
+  // Modal-specific date and time selection
+  const [selectedModalDate, setSelectedModalDate] = useState<string>("");
+  const [selectedModalTimeIndex, setSelectedModalTimeIndex] = useState<number>(timeIndex);
+
+  // Initialize modal date and time when modal opens
+  useEffect(() => {
+    if (open) {
+      setSelectedModalDate(format(selectedDate, "yyyy-MM-dd"));
+      setSelectedModalTimeIndex(timeIndex);
+      setAvailabilityError(false);
+    }
+  }, [open, selectedDate, timeIndex]);
+
+  // Get time slots for the selected modal date
+  const modalTimeSlots = useMemo(() => {
+    if (!selectedModalDate) return [];
+    try {
+      const date = parse(selectedModalDate, "yyyy-MM-dd", new Date());
+      return getTimeSlotsByDate(date);
+    } catch {
+      return [];
+    }
+  }, [selectedModalDate]);
+
+  // Get the current time slot string
+  const currentTimeSlot = useMemo(() => {
+    return modalTimeSlots[selectedModalTimeIndex] || timeSlot;
+  }, [modalTimeSlots, selectedModalTimeIndex, timeSlot]);
+
+  // Calculate availability for all time slots
+  const timeSlotAvailability = useMemo(() => {
+    if (!selectedModalDate) return [];
+
+    return modalTimeSlots.map((slot, idx) => {
+      // Count total pilots available at this time slot
+      const totalAvailablePilots = pilots.filter((pilot) =>
+        isPilotAvailableForTimeSlot(pilot.uid, slot)
+      ).length;
+
+      // Get bookings at this specific time and date
+      const bookingsAtThisTime = bookings.filter(
+        b => b.timeIndex === idx && b.date === selectedModalDate
+      );
+
+      // Count total passengers booked at this time
+      const totalPassengersBooked = bookingsAtThisTime.reduce((sum, b) => {
+        return sum + (b.numberOfPeople || 0);
+      }, 0);
+
+      // Available slots = total available pilots - total passengers already booked
+      const available = Math.max(0, totalAvailablePilots - totalPassengersBooked);
+
+      return {
+        timeSlot: slot,
+        timeIndex: idx,
+        availableSpots: available,
+      };
+    });
+  }, [modalTimeSlots, pilots, bookings, selectedModalDate, isPilotAvailableForTimeSlot]);
 
   // Initialize form with initialData if provided, or reset to defaults
   useEffect(() => {
@@ -110,6 +174,7 @@ export function NewBookingModal({
   }, [open, initialData]);
 
   const { startEditing, stopEditing } = useEditing();
+  const { role } = useRole();
 
   // Pause real-time updates when modal is open
   useEffect(() => {
@@ -123,8 +188,8 @@ export function NewBookingModal({
   // Calculate occupied pilot positions at this time
   const occupiedPilotIndices = useMemo(() => {
     const bookingsAtThisTime = bookings.filter(b =>
-      b.timeIndex === timeIndex &&
-      b.date === format(selectedDate, "yyyy-MM-dd")
+      b.timeIndex === selectedModalTimeIndex &&
+      b.date === selectedModalDate
     );
     const occupied = new Set<number>();
     bookingsAtThisTime.forEach(booking => {
@@ -135,21 +200,19 @@ export function NewBookingModal({
       }
     });
     return occupied;
-  }, [bookings, timeIndex, selectedDate]);
+  }, [bookings, selectedModalTimeIndex, selectedModalDate]);
 
   // Calculate available slots at this time based on actually available pilots
   // Use the same logic as BookingDetailsModal: total available pilots - total passengers booked
   const availableSlots = useMemo(() => {
-    const dateString = format(selectedDate, "yyyy-MM-dd");
-
     // Count total pilots available at this time slot
     const totalAvailablePilots = pilots.filter((pilot) =>
-      isPilotAvailableForTimeSlot(pilot.uid, timeSlot)
+      isPilotAvailableForTimeSlot(pilot.uid, currentTimeSlot)
     ).length;
 
     // Get bookings at this specific time and date
     const bookingsAtThisTime = bookings.filter(
-      b => b.timeIndex === timeIndex && b.date === dateString
+      b => b.timeIndex === selectedModalTimeIndex && b.date === selectedModalDate
     );
 
     // Count total passengers booked at this time (sum of numberOfPeople)
@@ -161,21 +224,19 @@ export function NewBookingModal({
     const available = totalAvailablePilots - totalPassengersBooked;
 
     return Math.max(0, available);
-  }, [pilots, bookings, timeIndex, selectedDate, isPilotAvailableForTimeSlot, timeSlot]);
+  }, [pilots, bookings, selectedModalTimeIndex, selectedModalDate, isPilotAvailableForTimeSlot, currentTimeSlot]);
 
   // Calculate available female pilots at this time
   const availableFemalePilots = useMemo(() => {
-    const dateString = format(selectedDate, "yyyy-MM-dd");
-
     // Get available female pilots at this time
     const availableFemalePilotsList = pilots.filter((pilot) =>
       pilot.femalePilot &&
-      isPilotAvailableForTimeSlot(pilot.uid, timeSlot)
+      isPilotAvailableForTimeSlot(pilot.uid, currentTimeSlot)
     );
 
     // Get bookings at this specific time and date
     const bookingsAtThisTime = bookings.filter(
-      b => b.timeIndex === timeIndex && b.date === dateString
+      b => b.timeIndex === selectedModalTimeIndex && b.date === selectedModalDate
     );
 
     // Count how many female pilots are already assigned
@@ -190,7 +251,37 @@ export function NewBookingModal({
     });
 
     return Math.max(0, availableFemalePilotsList.length - assignedFemalePilots.size);
-  }, [pilots, bookings, timeIndex, selectedDate, isPilotAvailableForTimeSlot, timeSlot]);
+  }, [pilots, bookings, selectedModalTimeIndex, selectedModalDate, isPilotAvailableForTimeSlot, currentTimeSlot]);
+
+  // Track initial available slots and monitor for changes
+  useEffect(() => {
+    if (open && initialAvailableSlots === null) {
+      setInitialAvailableSlots(availableSlots);
+    }
+  }, [open, availableSlots, initialAvailableSlots]);
+
+  // Monitor availability changes while booking
+  useEffect(() => {
+    if (open && numberOfPeople && initialAvailableSlots !== null) {
+      const requestedSpots = parseInt(numberOfPeople);
+      if (!isNaN(requestedSpots) && availableSlots < requestedSpots) {
+        setAvailabilityError(true);
+        // Only reset numberOfPeople for non-admin users
+        if (role !== 'admin') {
+          setNumberOfPeople(""); // Reset to force re-selection
+        }
+      } else {
+        setAvailabilityError(false);
+      }
+    }
+  }, [open, numberOfPeople, availableSlots, initialAvailableSlots, role]);
+
+  // Reset initial availability when modal closes
+  useEffect(() => {
+    if (!open) {
+      setInitialAvailableSlots(null);
+    }
+  }, [open]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -216,7 +307,7 @@ export function NewBookingModal({
       .map((pilot, index) => ({
         index,
         pilot,
-        isAvailable: isPilotAvailableForTimeSlot(pilot.uid, timeSlot) &&
+        isAvailable: isPilotAvailableForTimeSlot(pilot.uid, currentTimeSlot) &&
                      !occupiedPilotIndices.has(index)
       }))
       .filter(p => p.isAvailable)
@@ -229,9 +320,9 @@ export function NewBookingModal({
 
     // Build booking object, only including optional fields if they have values
     const bookingData: any = {
-      date: format(selectedDate, "yyyy-MM-dd"),
+      date: selectedModalDate,
       pilotIndex: startingPilotIndex,
-      timeIndex,
+      timeIndex: selectedModalTimeIndex,
       numberOfPeople: numPeople,
       bookingSource: bookingSource.trim(),
       assignedPilots: [], // Pilots will be assigned via the schedule grid
@@ -274,7 +365,7 @@ export function NewBookingModal({
     // Reset form
     setCustomerName("");
     setNumberOfPeople("");
-    setPickupLocation("HW");
+    setPickupLocation("");
     setBookingSource("twin");
     setPhoneNumber("");
     setEmail("");
@@ -290,7 +381,7 @@ export function NewBookingModal({
     // Reset form
     setCustomerName("");
     setNumberOfPeople("");
-    setPickupLocation("HW");
+    setPickupLocation("");
     setBookingSource("twin");
     setPhoneNumber("");
     setEmail("");
@@ -306,6 +397,97 @@ export function NewBookingModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[90vw] max-w-[500px] rounded-2xl">
         <form onSubmit={handleSubmit} className="space-y-4 overflow-x-hidden px-1">
+          {/* Availability Error Message */}
+          {availabilityError && (
+            <div className={`p-3 rounded-lg border text-sm ${
+              role === 'admin'
+                ? 'bg-orange-900/30 border-orange-800 text-orange-200'
+                : 'bg-red-900/30 border-red-800 text-red-200'
+            }`}>
+              {role === 'admin' ? (
+                <>
+                  <strong>Overbooking Warning:</strong> You are booking more spots than currently available. The grid will expand to accommodate this booking.
+                </>
+              ) : (
+                <>
+                  Oops! These spots are no longer available. Availability has changed while you were creating the booking. Please select a different date/time or number of people.
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Date and Time Selection */}
+          <div className="grid grid-cols-2 gap-3 pb-2 border-b border-zinc-800">
+            {/* Date Picker */}
+            <div className="space-y-2">
+              <Label className="text-white">Date</Label>
+              <div className="relative">
+                <div
+                  className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 z-10 cursor-pointer"
+                  onClick={() => {
+                    const dateInput = document.getElementById('modal-date') as HTMLInputElement;
+                    dateInput?.showPicker?.();
+                  }}
+                >
+                  <Calendar className="w-4 h-4 text-white" />
+                </div>
+                <Input
+                  id="modal-date"
+                  type="date"
+                  value={selectedModalDate}
+                  onChange={(e) => {
+                    setSelectedModalDate(e.target.value);
+                    setInitialAvailableSlots(null); // Reset availability tracking
+                  }}
+                  className="pl-10 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:opacity-0"
+                  style={{ colorScheme: 'dark' }}
+                />
+              </div>
+            </div>
+
+            {/* Time Dropdown */}
+            <div className="space-y-2">
+              <Label className="text-white">Time</Label>
+              <Select
+                value={selectedModalTimeIndex.toString()}
+                onValueChange={(value) => {
+                  setSelectedModalTimeIndex(parseInt(value));
+                  setInitialAvailableSlots(null); // Reset availability tracking
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="min-w-[280px]">
+                  {timeSlotAvailability.map((slot) => {
+                    const availableCount = slot.availableSpots;
+                    const isDisabled = availableCount === 0;
+
+                    return (
+                      <SelectItem
+                        key={slot.timeIndex}
+                        value={slot.timeIndex.toString()}
+                        disabled={isDisabled}
+                        className={isDisabled ? "opacity-50 cursor-not-allowed" : ""}
+                      >
+                        <div className="flex items-center justify-between gap-4 w-full">
+                          <span className="flex-shrink-0">{slot.timeSlot}</span>
+                          <span className={`text-xs px-2 py-0.5 rounded flex-shrink-0 ${
+                            availableCount === 0
+                              ? 'bg-red-900/50 text-red-400'
+                              : 'bg-green-900/50 text-green-400'
+                          }`}>
+                            {availableCount} available
+                          </span>
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
           {/* Customer Name */}
           <div className="space-y-2">
             <Label htmlFor="customerName" className="text-white">
@@ -327,7 +509,8 @@ export function NewBookingModal({
             <div className="overflow-x-auto">
               <div className="flex gap-2 pb-2">
                 {Array.from({ length: 30 }, (_, i) => i + 1).map((num) => {
-                  const isDisabled = num > availableSlots;
+                  // Admins can overbook, regular users cannot
+                  const isDisabled = role !== 'admin' && num > availableSlots;
                   return (
                     <button
                       key={num}

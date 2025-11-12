@@ -360,22 +360,16 @@ export function BookingDetailsModal({
         updates.bookingSource = editedBooking.bookingSource;
       }
       if (editedBooking.phoneNumber !== booking.phoneNumber) {
-        // Only include if not empty
-        if (editedBooking.phoneNumber?.trim()) {
-          updates.phoneNumber = editedBooking.phoneNumber.trim();
-        }
+        // Include even if empty (to allow deletion)
+        updates.phoneNumber = editedBooking.phoneNumber?.trim() || "";
       }
       if (editedBooking.email !== booking.email) {
-        // Only include if not empty
-        if (editedBooking.email?.trim()) {
-          updates.email = editedBooking.email.trim();
-        }
+        // Include even if empty (to allow deletion)
+        updates.email = editedBooking.email?.trim() || "";
       }
       if (editedBooking.notes !== booking.notes) {
-        // Only include if not empty
-        if (editedBooking.notes?.trim()) {
-          updates.notes = editedBooking.notes.trim();
-        }
+        // Include even if empty (to allow deletion)
+        updates.notes = editedBooking.notes?.trim() || "";
       }
       if (editedBooking.bookingStatus !== booking.bookingStatus) {
         updates.bookingStatus = editedBooking.bookingStatus;
@@ -891,7 +885,8 @@ export function BookingDetailsModal({
                       {timeSlots.map((slot, index) => {
                         const availableCount = availableSlotsPerTime[index] ?? 0;
                         const requiredPilots = editedBooking.numberOfPeople;
-                        const isDisabled = availableCount < requiredPilots;
+                        // Admins can overbook, regular users cannot
+                        const isDisabled = role !== 'admin' && availableCount < requiredPilots;
                         return (
                           <SelectItem
                             key={index}
@@ -920,13 +915,30 @@ export function BookingDetailsModal({
 
                 {/* Available Slots Warning */}
                 {availableSlots < editedBooking.numberOfPeople && (
-                  <div className="bg-red-950 border border-red-700 text-red-200 px-4 py-3 rounded-lg">
-                    <p className="text-sm font-medium">
-                      Insufficient pilots available at this time
-                    </p>
-                    <p className="text-xs mt-1">
-                      This booking requires {editedBooking.numberOfPeople} {editedBooking.numberOfPeople === 1 ? 'pilot' : 'pilots'}, but only {availableSlots} {availableSlots === 1 ? 'is' : 'are'} available. Please select a different date or time slot.
-                    </p>
+                  <div className={`px-4 py-3 rounded-lg ${
+                    role === 'admin'
+                      ? 'bg-orange-900/30 border border-orange-800 text-orange-200'
+                      : 'bg-red-950 border border-red-700 text-red-200'
+                  }`}>
+                    {role === 'admin' ? (
+                      <>
+                        <p className="text-sm font-medium">
+                          Overbooking Warning
+                        </p>
+                        <p className="text-xs mt-1">
+                          This booking requires {editedBooking.numberOfPeople} {editedBooking.numberOfPeople === 1 ? 'pilot' : 'pilots'}, but only {availableSlots} {availableSlots === 1 ? 'is' : 'are'} available. The grid will expand to accommodate this booking.
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm font-medium">
+                          Insufficient pilots available at this time
+                        </p>
+                        <p className="text-xs mt-1">
+                          This booking requires {editedBooking.numberOfPeople} {editedBooking.numberOfPeople === 1 ? 'pilot' : 'pilots'}, but only {availableSlots} {availableSlots === 1 ? 'is' : 'are'} available. Please select a different date or time slot.
+                        </p>
+                      </>
+                    )}
                   </div>
                 )}
 
@@ -936,7 +948,8 @@ export function BookingDetailsModal({
                   <div className="overflow-x-auto">
                     <div className="flex gap-2 pb-2">
                       {Array.from({ length: 30 }, (_, i) => i + 1).map((num) => {
-                        const isDisabled = num > availableSlots;
+                        // Admins can overbook, regular users cannot
+                        const isDisabled = role !== 'admin' && num > availableSlots;
                         return (
                           <button
                             key={num}
@@ -1178,7 +1191,7 @@ export function BookingDetailsModal({
                 <>
                   <Button
                     onClick={handleSave}
-                    disabled={availableSlots < editedBooking.numberOfPeople}
+                    disabled={role !== 'admin' && availableSlots < editedBooking.numberOfPeople}
                     className="flex-1 bg-white text-black hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
                   >
                     Save
