@@ -249,10 +249,10 @@ export function BookingRequestForm() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 dark flex items-center justify-center p-4">
-      <div className="max-w-2xl w-full bg-zinc-900 rounded-lg border border-zinc-800 p-8">
-        <h1 className="text-3xl font-bold text-white mb-2">Book a Flight</h1>
-        <p className="text-zinc-400 mb-8">Fill out the form below to request a booking.</p>
+    <div className="min-h-screen bg-zinc-950 dark flex items-center justify-center px-4 py-8 sm:py-12">
+      <div className="max-w-2xl w-full">
+        <h1 className="text-3xl sm:text-4xl font-bold text-white mb-2">Book a Flight</h1>
+        <p className="text-zinc-400 mb-8 sm:mb-10">Fill out the form below to request a booking.</p>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Customer Name */}
@@ -475,7 +475,7 @@ export function BookingRequestForm() {
             <label className="text-sm font-medium text-zinc-200">
               Flight Type *
             </label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               {([
                 { type: "sensational", price: "CHF 180" },
                 { type: "classic", price: "CHF 170" },
@@ -518,7 +518,7 @@ export function BookingRequestForm() {
           <Button
             type="submit"
             disabled={submitting}
-            className="w-full bg-white text-black hover:bg-zinc-200"
+            className="w-full bg-white text-black hover:bg-zinc-200 mt-8"
           >
             {submitting ? "Submitting..." : "Submit Booking Request"}
           </Button>
