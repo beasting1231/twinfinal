@@ -26,6 +26,7 @@ export function BookingRequestForm() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [initialAvailability, setInitialAvailability] = useState<{ [key: string]: number }>({});
+  const [showTimeWarning, setShowTimeWarning] = useState(false);
 
   // State for real-time data
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -41,6 +42,14 @@ export function BookingRequestForm() {
       return new Date();
     }
   }, [formData.date]);
+
+  // Check if date is 2+ months in the future
+  const isFarFuture = useMemo(() => {
+    const today = new Date();
+    const twoMonthsFromNow = new Date(today);
+    twoMonthsFromNow.setMonth(today.getMonth() + 2);
+    return selectedDate >= twoMonthsFromNow;
+  }, [selectedDate]);
 
   // Get time slots for the selected date
   const timeSlots = useMemo(() => getTimeSlotsByDate(selectedDate), [selectedDate]);
@@ -171,7 +180,10 @@ export function BookingRequestForm() {
   }, [formData.date]);
 
   // Reset numberOfPeople if selected number is not available for current time slot
+  // Skip this for far-future bookings (2+ months in advance)
   useEffect(() => {
+    if (isFarFuture) return; // No restrictions for far-future bookings
+
     if (formData.timeIndex) {
       const selectedTimeSlot = timeSlotAvailability.find(
         slot => slot.timeIndex.toString() === formData.timeIndex
@@ -183,10 +195,13 @@ export function BookingRequestForm() {
         setFormData((prev) => ({ ...prev, numberOfPeople: 1 }));
       }
     }
-  }, [formData.timeIndex, formData.date, timeSlotAvailability]);
+  }, [formData.timeIndex, formData.date, timeSlotAvailability, isFarFuture]);
 
   // Track initial availability when time slot is selected
+  // Skip this for far-future bookings (2+ months in advance)
   useEffect(() => {
+    if (isFarFuture) return; // No availability tracking for far-future bookings
+
     if (formData.timeIndex && formData.date) {
       const key = `${formData.date}-${formData.timeIndex}`;
       if (!initialAvailability[key]) {
@@ -201,10 +216,13 @@ export function BookingRequestForm() {
         }
       }
     }
-  }, [formData.timeIndex, formData.date, timeSlotAvailability, initialAvailability]);
+  }, [formData.timeIndex, formData.date, timeSlotAvailability, initialAvailability, isFarFuture]);
 
   // Monitor availability changes while filling form
+  // Skip this for far-future bookings (2+ months in advance)
   useEffect(() => {
+    if (isFarFuture) return; // No restrictions for far-future bookings
+
     if (formData.timeIndex && formData.date && formData.numberOfPeople > 1) {
       const key = `${formData.date}-${formData.timeIndex}`;
       const initial = initialAvailability[key];
@@ -232,7 +250,7 @@ export function BookingRequestForm() {
         }
       }
     }
-  }, [formData.timeIndex, formData.date, formData.numberOfPeople, timeSlotAvailability, initialAvailability]);
+  }, [formData.timeIndex, formData.date, formData.numberOfPeople, timeSlotAvailability, initialAvailability, isFarFuture]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -367,9 +385,9 @@ export function BookingRequestForm() {
             <label htmlFor="date" className="text-sm font-medium text-zinc-200">
               Date *
             </label>
-            <div className="relative">
+            <div className="relative w-full max-w-full">
               <div
-                className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 z-10 cursor-pointer"
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 z-10 cursor-pointer pointer-events-none"
                 onClick={() => {
                   const dateInput = document.getElementById('date') as HTMLInputElement;
                   dateInput?.showPicker?.();
@@ -377,16 +395,19 @@ export function BookingRequestForm() {
               >
                 <Calendar className="w-5 h-5 text-white" />
               </div>
-              <Input
+              <input
                 id="date"
                 name="date"
                 type="date"
                 value={formData.date}
                 onChange={handleChange}
                 required
-                className="text-white pl-11 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:opacity-0"
+                className="flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white ring-offset-background placeholder:text-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 pl-11 max-w-full min-w-0 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:opacity-0 [-webkit-appearance:none] [appearance:none] [color-scheme:dark]"
                 style={{
-                  colorScheme: 'dark'
+                  WebkitAppearance: 'none',
+                  MozAppearance: 'none',
+                  appearance: 'none',
+                  fontSize: '14px'
                 }}
               />
             </div>
@@ -412,7 +433,8 @@ export function BookingRequestForm() {
                   {timeSlotAvailability.map((slot) => {
                     const availableCount = slot.availableSpots;
                     const requiredPilots = formData.numberOfPeople;
-                    const isDisabled = availableCount < requiredPilots;
+                    // For far-future bookings, don't disable any slots
+                    const isDisabled = !isFarFuture && availableCount < requiredPilots;
 
                     return (
                       <SelectItem
@@ -423,13 +445,15 @@ export function BookingRequestForm() {
                       >
                         <div className="flex items-center justify-between gap-4 w-full">
                           <span className="flex-shrink-0">{slot.timeSlot}</span>
-                          <span className={`text-xs px-2 py-0.5 rounded flex-shrink-0 ${
-                            availableCount === 0
-                              ? 'bg-red-900/50 text-red-400'
-                              : 'bg-green-900/50 text-green-400'
-                          }`}>
-                            {availableCount} available
-                          </span>
+                          {!isFarFuture && (
+                            <span className={`text-xs px-2 py-0.5 rounded flex-shrink-0 ${
+                              availableCount === 0
+                                ? 'bg-red-900/50 text-red-400'
+                                : 'bg-green-900/50 text-green-400'
+                            }`}>
+                              {availableCount} available
+                            </span>
+                          )}
                         </div>
                       </SelectItem>
                     );
@@ -444,6 +468,11 @@ export function BookingRequestForm() {
             <label className="text-sm font-medium text-zinc-200">
               Number of People *
             </label>
+            {showTimeWarning && !formData.timeIndex && (
+              <div className="text-sm text-orange-400 bg-orange-950 border border-orange-800 rounded px-3 py-2">
+                Please select a time slot first
+              </div>
+            )}
             <div className="overflow-x-auto">
               <div className="flex gap-2 pb-2">
                 {Array.from({ length: 30 }, (_, i) => i + 1).map((num) => {
@@ -453,8 +482,29 @@ export function BookingRequestForm() {
                       <button
                         key={num}
                         type="button"
-                        disabled={true}
+                        onClick={() => {
+                          setShowTimeWarning(true);
+                          setTimeout(() => setShowTimeWarning(false), 3000);
+                        }}
                         className="flex-shrink-0 w-12 h-12 rounded-lg font-medium transition-colors bg-zinc-900 text-zinc-600 cursor-not-allowed"
+                      >
+                        {num}
+                      </button>
+                    );
+                  }
+
+                  // For far-future bookings, allow all numbers
+                  if (isFarFuture) {
+                    return (
+                      <button
+                        key={num}
+                        type="button"
+                        onClick={() => setFormData((prev) => ({ ...prev, numberOfPeople: num }))}
+                        className={`flex-shrink-0 w-12 h-12 rounded-lg font-medium transition-colors ${
+                          formData.numberOfPeople === num
+                            ? "bg-white text-black"
+                            : "bg-zinc-800 text-white hover:bg-zinc-700"
+                        }`}
                       >
                         {num}
                       </button>

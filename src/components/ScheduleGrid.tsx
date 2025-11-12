@@ -75,7 +75,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
       }
     });
 
-    return maxCols;
+    // Ensure at least 1 column exists so bookings can be created even with 0 pilots
+    return Math.max(1, maxCols);
   }, [pilots, timeSlots, bookings, isPilotAvailableForTimeSlot]);
 
   // Fetch booking source colors
@@ -1052,216 +1053,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
     );
   }
 
-  // Show empty state if no pilots are available
-  if (pilots.length === 0) {
-    return (
-      <div className="flex-1 overflow-auto p-4 bg-zinc-950">
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="text-center">
-            <p className="text-zinc-400 text-lg mb-2">No pilots available for this date</p>
-            <p className="text-zinc-500 text-sm">Pilots can mark their availability in the Availability screen</p>
-          </div>
-        </div>
-
-        {/* Booking Requests Inbox - Only show to admins */}
-        {role === 'admin' && (
-        <div className="max-w-lg mx-auto mt-8 bg-zinc-900 rounded-lg border border-zinc-800">
-            <Tabs defaultValue="requests" className="flex-1 flex flex-col">
-              <TabsList className="grid w-full grid-cols-2 bg-zinc-800 border-b border-zinc-700 rounded-t-lg">
-                <TabsTrigger value="requests" className="data-[state=active]:bg-zinc-900">
-                  Booking Requests ({pendingRequests.length})
-                </TabsTrigger>
-                <TabsTrigger value="waitlist" className="data-[state=active]:bg-zinc-900">
-                  Waiting List ({waitlistRequests.length})
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="requests" className="p-4 mt-0">
-                {pendingRequests.length === 0 ? (
-                  <div className="flex items-center justify-center h-32">
-                    <p className="text-zinc-500">No new booking requests</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {pendingRequests.map((request) => (
-                      <BookingRequestItem
-                        key={request.id}
-                        request={request}
-                        canDrag={role === 'admin'}
-                        availableSpots={getAvailableSpotsForRequest(request)}
-                        onContextMenu={(req, position) => {
-                          setBookingRequestContextMenu({
-                            isOpen: true,
-                            position,
-                            request: req,
-                          });
-                        }}
-                        onDateClick={(dateString) => {
-                          if (onNavigateToDate) {
-                            const [year, month, day] = dateString.split('-').map(Number);
-                            const date = new Date(year, month - 1, day);
-                            onNavigateToDate(date);
-                          }
-                        }}
-                      />
-                    ))}
-                  </div>
-                )}
-              </TabsContent>
-
-              <TabsContent value="waitlist" className="p-4 mt-0">
-                {waitlistRequests.length === 0 ? (
-                  <div className="flex items-center justify-center h-32">
-                    <p className="text-zinc-500">No items on waiting list for this date</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {waitlistRequests.map((request) => (
-                      <BookingRequestItem
-                        key={request.id}
-                        request={request}
-                        canDrag={role === 'admin'}
-                        availableSpots={getAvailableSpotsForRequest(request)}
-                        onContextMenu={(req, position) => {
-                          setBookingRequestContextMenu({
-                            isOpen: true,
-                            position,
-                            request: req,
-                          });
-                        }}
-                        onDateClick={(dateString) => {
-                          if (onNavigateToDate) {
-                            const [year, month, day] = dateString.split('-').map(Number);
-                            const date = new Date(year, month - 1, day);
-                            onNavigateToDate(date);
-                          }
-                        }}
-                      />
-                    ))}
-                  </div>
-                )}
-              </TabsContent>
-            </Tabs>
-          </div>
-        )}
-
-        {/* New Booking Modal - for "book for another time" */}
-        {selectedCell && (
-          <NewBookingModal
-            open={isModalOpen}
-            onOpenChange={(open) => {
-              setIsModalOpen(open);
-              if (!open) {
-                setBookingRequestToBook(null);
-              }
-            }}
-            selectedDate={selectedDate}
-            pilotIndex={selectedCell.pilotIndex}
-            timeIndex={selectedCell.timeIndex}
-            timeSlot={selectedCell.timeSlot}
-            pilots={pilots}
-            bookings={bookings}
-            isPilotAvailableForTimeSlot={isPilotAvailableForTimeSlot}
-            onSubmit={handleBookingSubmit}
-            initialData={bookingRequestToBook ? {
-              customerName: bookingRequestToBook.customerName,
-              numberOfPeople: bookingRequestToBook.numberOfPeople,
-              phoneNumber: bookingRequestToBook.phone,
-              email: bookingRequestToBook.email,
-              notes: bookingRequestToBook.notes,
-              flightType: bookingRequestToBook.flightType,
-            } : undefined}
-          />
-        )}
-
-        {/* Booking Request Context Menu */}
-        {bookingRequestContextMenu && (
-          <ScheduleBookingRequestContextMenu
-            isOpen={bookingRequestContextMenu.isOpen}
-            position={bookingRequestContextMenu.position}
-            onBook={async () => {
-              const request = bookingRequestContextMenu.request;
-              if (!request.id || !onAddBooking) return;
-
-              try {
-                // Find the time index
-                const timeSlotIndex = timeSlots.findIndex(slot => slot === request.time);
-
-                if (timeSlotIndex === -1) {
-                  alert("The requested time slot is not available in the schedule.");
-                  return;
-                }
-
-                // Create the booking
-                await onAddBooking({
-                  date: request.date,
-                  pilotIndex: 0,
-                  timeIndex: timeSlotIndex,
-                  customerName: request.customerName,
-                  numberOfPeople: request.numberOfPeople,
-                  pickupLocation: "",
-                  bookingSource: "twin",
-                  phoneNumber: request.phone || "",
-                  email: request.email,
-                  notes: request.notes || "",
-                  flightType: request.flightType,
-                  assignedPilots: [],
-                  bookingStatus: "pending",
-                  span: request.numberOfPeople,
-                });
-
-                // Mark request as approved
-                await updateDoc(doc(db, "bookingRequests", request.id), {
-                  status: "approved",
-                });
-              } catch (error) {
-                console.error("Error creating booking from request:", error);
-                alert("Failed to create booking. Please try again.");
-              }
-            }}
-            onBookForAnotherTime={() => {
-              setBookingRequestToBook(bookingRequestContextMenu.request);
-              setSelectedCell({ pilotIndex: 0, timeIndex: 0, timeSlot: timeSlots[0] });
-              setIsModalOpen(true);
-            }}
-            onAddToWaitingList={bookingRequestContextMenu.request.status === "pending" ? async () => {
-              const request = bookingRequestContextMenu.request;
-              if (request.id) {
-                await updateBookingRequest(request.id, {
-                  status: "waitlist",
-                });
-              }
-              setBookingRequestContextMenu(null);
-            } : undefined}
-            onRemoveFromWaitingList={bookingRequestContextMenu.request.status === "waitlist" ? async () => {
-              const request = bookingRequestContextMenu.request;
-              if (request.id) {
-                await updateBookingRequest(request.id, {
-                  status: "pending",
-                });
-              }
-              setBookingRequestContextMenu(null);
-            } : undefined}
-            onDelete={async () => {
-              const request = bookingRequestContextMenu.request;
-              if (!request.id) return;
-
-              if (confirm(`Delete booking request from ${request.customerName}?`)) {
-                try {
-                  await deleteBookingRequest(request.id);
-                  setBookingRequestContextMenu(null);
-                } catch (error) {
-                  console.error("Error deleting booking request:", error);
-                  alert("Failed to delete booking request. Please try again.");
-                }
-              }
-            }}
-            onClose={() => setBookingRequestContextMenu(null)}
-          />
-        )}
-      </div>
-    );
-  }
+  // Grid will always render, even with 0 pilots (shows at least 1 column for overbooking)
 
   return (
     <DndContext
@@ -1297,13 +1089,14 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                 </div>
               );
             } else {
-              // Extra column header (for overbookings)
+              // Extra column header (for overbookings or when no pilots available)
               return (
                 <div
                   key={`extra-${index}`}
-                  className="h-7 flex items-center justify-center bg-orange-600/80 rounded-lg font-medium text-sm text-white"
+                  className="h-7 flex items-center justify-center bg-orange-600/80 rounded-lg font-medium text-sm text-white gap-2"
                 >
                   <span>{index + 1}</span>
+                  {pilots.length === 0 && <span>No Pilots</span>}
                 </div>
               );
             }
@@ -1398,17 +1191,29 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
             const gridSpaceAvailable = totalCellsNeeded - cellsUsed;
 
             // Only show available cells if there's actual booking capacity remaining
-            const availableCellsToShow = Math.min(gridSpaceAvailable, actualCapacityRemaining, availablePilots.length);
+            // For admins with no pilots, show at least 1 cell so they can create bookings
+            let availableCellsToShow = Math.min(gridSpaceAvailable, actualCapacityRemaining, availablePilots.length);
+            if (pilots.length === 0 && role === 'admin' && slotsOccupiedByBookings === 0) {
+              availableCellsToShow = Math.max(1, availableCellsToShow);
+            }
 
             // Add available pilot cells
             for (let i = 0; i < availableCellsToShow; i++) {
-              const {pilot, pilotIndex} = availablePilots[i];
-              cellsForRow.push({
-                pilot,
-                pilotIndex,
-                status: "available",
-                sortOrder: 1
-              });
+              // When there are no pilots but we're showing a cell for admins
+              if (i >= availablePilots.length) {
+                cellsForRow.push({
+                  status: "available",
+                  sortOrder: 1
+                });
+              } else {
+                const {pilot, pilotIndex} = availablePilots[i];
+                cellsForRow.push({
+                  pilot,
+                  pilotIndex,
+                  status: "available",
+                  sortOrder: 1
+                });
+              }
             }
 
             // Add invisible cells to fill remaining columns (for rows without overbooking)
@@ -1516,16 +1321,16 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                       />
                     </div>
                   );
-                } else if (cell.pilot) {
-                  // Available or noPilot cell
-                  const isCurrentUserPilot = currentUserDisplayName === cell.pilot.displayName;
+                } else if (cell.pilot || cell.status === "available") {
+                  // Available or noPilot cell (with or without pilot)
+                  const isCurrentUserPilot = cell.pilot ? currentUserDisplayName === cell.pilot.displayName : false;
                   const currentUserPilot = pilots.find(p => p.displayName === currentUserDisplayName);
                   const currentUserPilotIndex = currentUserPilot ? pilots.findIndex(p => p.uid === currentUserPilot.uid) : -1;
                   const isCurrentUserAvailableAtThisTime = currentUserPilot && isPilotAvailableForTimeSlot(currentUserPilot.uid, timeSlot);
 
                   // Left-click on available cell always opens new booking modal
                   const handleAvailableLeftClick = () => {
-                    handleAvailableCellClick(cell.pilotIndex!, timeIndex, timeSlot);
+                    handleAvailableCellClick(cell.pilotIndex ?? 0, timeIndex, timeSlot);
                   };
 
                   // Determine what happens on left-click of "no pilot" cell
@@ -1553,17 +1358,17 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
 
                   return (
                     <div
-                      key={`pilot-${timeIndex}-${cell.pilot.uid}`}
+                      key={`pilot-${timeIndex}-${cell.pilot?.uid || cellIdx}`}
                       className="h-14"
                       style={{ gridColumn: `span 1` }}
                     >
                       <BookingAvailable
-                        pilotId={cell.pilot.displayName}
+                        pilotId={cell.pilot?.displayName || ""}
                         timeSlot={timeSlot}
                         status={cell.status}
                         span={1}
                         isCurrentUserPilot={isCurrentUserPilot}
-                        isFemalePilot={cell.pilot.femalePilot}
+                        isFemalePilot={cell.pilot?.femalePilot}
                         onAvailableClick={
                           cell.status === "available"
                             ? handleAvailableLeftClick
@@ -1584,11 +1389,11 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                             ? handleNoPilotContextMenu(currentUserPilotIndex, timeIndex)
                             : undefined
                         }
-                        droppableId={cell.status === "available" ? `droppable-${timeIndex}-${cell.pilotIndex}` : undefined}
+                        droppableId={cell.status === "available" ? `droppable-${timeIndex}-${cell.pilotIndex ?? 0}` : undefined}
                         draggedItemPax={draggedBooking ? (draggedBooking.numberOfPeople || draggedBooking.span || 1) : (draggedRequest ? draggedRequest.numberOfPeople : undefined)}
                         hasEnoughSpace={
                           (draggedBooking || draggedRequest) && cell.status === "available"
-                            ? hasEnoughSpaceAtTime(timeIndex, cell.pilotIndex!, draggedBooking ? (draggedBooking.numberOfPeople || draggedBooking.span || 1) : draggedRequest!.numberOfPeople)
+                            ? hasEnoughSpaceAtTime(timeIndex, cell.pilotIndex ?? 0, draggedBooking ? (draggedBooking.numberOfPeople || draggedBooking.span || 1) : draggedRequest!.numberOfPeople)
                             : true
                         }
                       />

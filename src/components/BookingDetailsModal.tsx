@@ -64,6 +64,8 @@ export function BookingDetailsModal({
   const [showAdditionalOptions, setShowAdditionalOptions] = useState(false);
   const [isSavingPayments, setIsSavingPayments] = useState(false);
   const [uploadingReceipt, setUploadingReceipt] = useState<string | null>(null);
+  const [initialAvailableSlots, setInitialAvailableSlots] = useState<number | null>(null);
+  const [availabilityError, setAvailabilityError] = useState(false);
 
 
   // Create an availability check function that uses edited date data when in edit mode
@@ -310,6 +312,32 @@ export function BookingDetailsModal({
       }
     }
   }, [editedBooking?.assignedPilots]);
+
+  // Track initial available slots when starting to edit
+  useEffect(() => {
+    if (isEditing && editedBooking && initialAvailableSlots === null) {
+      setInitialAvailableSlots(availableSlots);
+      setAvailabilityError(false);
+    }
+    if (!isEditing) {
+      setInitialAvailableSlots(null);
+      setAvailabilityError(false);
+    }
+  }, [isEditing, editedBooking, availableSlots, initialAvailableSlots]);
+
+  // Monitor availability changes during editing
+  useEffect(() => {
+    if (!isEditing || !editedBooking || initialAvailableSlots === null) return;
+
+    const requestedSpots = editedBooking.numberOfPeople;
+
+    // Check if spots are no longer available
+    if (availableSlots < requestedSpots) {
+      setAvailabilityError(true);
+    } else {
+      setAvailabilityError(false);
+    }
+  }, [isEditing, editedBooking?.timeIndex, editedBooking?.date, editedBooking?.numberOfPeople, availableSlots, initialAvailableSlots, role]);
 
   // Sort pilot payments to show current user's section first
   const sortedPilotPayments = useMemo(() => {
@@ -835,6 +863,29 @@ export function BookingDetailsModal({
             ) : (
               // EDIT MODE - Form layout
               <div className="space-y-4">
+                {/* Availability Error Banner */}
+                {availabilityError && role !== 'admin' && (
+                  <div className="p-4 rounded-lg bg-red-900/30 border-2 border-red-700 text-red-200">
+                    <p className="text-sm font-semibold mb-1">
+                      ⚠️ Insufficient Availability
+                    </p>
+                    <p className="text-xs">
+                      The selected time slot does not have enough available pilots for this booking ({editedBooking.numberOfPeople} requested, only {availableSlots} available). Please select a different time slot or reduce the number of people.
+                    </p>
+                  </div>
+                )}
+
+                {availabilityError && role === 'admin' && (
+                  <div className="p-4 rounded-lg bg-orange-900/30 border-2 border-orange-700 text-orange-200">
+                    <p className="text-sm font-semibold mb-1">
+                      ⚠️ Overbooking Warning
+                    </p>
+                    <p className="text-xs">
+                      The selected time slot does not have enough available pilots ({editedBooking.numberOfPeople} requested, only {availableSlots} available). You can proceed as admin, but the grid will expand to accommodate this overbooking.
+                    </p>
+                  </div>
+                )}
+
                 {/* Customer Name */}
                 <div className="space-y-2">
                   <Label className="text-white">Customer Name</Label>
