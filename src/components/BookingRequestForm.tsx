@@ -5,6 +5,7 @@ import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { CountryCodeSelect } from "./CountryCodeSelect";
+import { Calendar } from "lucide-react";
 import { format, parse } from "date-fns";
 import { getTimeSlotsByDate } from "../utils/timeSlots";
 import type { Booking, Pilot, UserProfile } from "../types/index";
@@ -18,6 +19,7 @@ export function BookingRequestForm() {
     date: format(new Date(), "yyyy-MM-dd"),
     timeIndex: "",
     numberOfPeople: 1,
+    meetingPoint: "",
     flightType: "sensational" as "sensational" | "classic" | "early bird",
     notes: "",
   });
@@ -167,6 +169,21 @@ export function BookingRequestForm() {
     setFormData((prev) => ({ ...prev, timeIndex: "" }));
   }, [formData.date]);
 
+  // Reset numberOfPeople if selected number is not available for current time slot
+  useEffect(() => {
+    if (formData.timeIndex) {
+      const selectedTimeSlot = timeSlotAvailability.find(
+        slot => slot.timeIndex.toString() === formData.timeIndex
+      );
+      const availableCount = selectedTimeSlot?.availableSpots ?? 0;
+
+      // If the currently selected number of people exceeds available spots, reset it
+      if (formData.numberOfPeople > availableCount) {
+        setFormData((prev) => ({ ...prev, numberOfPeople: 1 }));
+      }
+    }
+  }, [formData.timeIndex, formData.date, timeSlotAvailability]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
@@ -190,6 +207,7 @@ export function BookingRequestForm() {
         time: selectedTimeSlot,
         timeIndex: parseInt(formData.timeIndex),
         numberOfPeople: Number(formData.numberOfPeople),
+        meetingPoint: formData.meetingPoint,
         flightType: formData.flightType,
         notes: formData.notes,
         status: "pending",
@@ -210,6 +228,7 @@ export function BookingRequestForm() {
         date: format(new Date(), "yyyy-MM-dd"),
         timeIndex: "",
         numberOfPeople: 1,
+        meetingPoint: "",
         flightType: "sensational",
         notes: "",
       });
@@ -298,15 +317,29 @@ export function BookingRequestForm() {
             <label htmlFor="date" className="text-sm font-medium text-zinc-200">
               Date *
             </label>
-            <Input
-              id="date"
-              name="date"
-              type="date"
-              value={formData.date}
-              onChange={handleChange}
-              required
-              className="text-white"
-            />
+            <div className="relative">
+              <div
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 z-10 cursor-pointer"
+                onClick={() => {
+                  const dateInput = document.getElementById('date') as HTMLInputElement;
+                  dateInput?.showPicker?.();
+                }}
+              >
+                <Calendar className="w-5 h-5 text-white" />
+              </div>
+              <Input
+                id="date"
+                name="date"
+                type="date"
+                value={formData.date}
+                onChange={handleChange}
+                required
+                className="text-white pl-11 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:opacity-0"
+                style={{
+                  colorScheme: 'dark'
+                }}
+              />
+            </div>
           </div>
 
           {/* Time Slot Selection */}
@@ -358,20 +391,83 @@ export function BookingRequestForm() {
 
           {/* Number of People */}
           <div className="space-y-2">
-            <label htmlFor="numberOfPeople" className="text-sm font-medium text-zinc-200">
+            <label className="text-sm font-medium text-zinc-200">
               Number of People *
             </label>
-            <Input
-              id="numberOfPeople"
-              name="numberOfPeople"
-              type="number"
-              min="1"
-              max="20"
-              value={formData.numberOfPeople}
-              onChange={handleChange}
+            <div className="overflow-x-auto">
+              <div className="flex gap-2 pb-2">
+                {Array.from({ length: 30 }, (_, i) => i + 1).map((num) => {
+                  // Disable all if no time selected
+                  if (!formData.timeIndex) {
+                    return (
+                      <button
+                        key={num}
+                        type="button"
+                        disabled={true}
+                        className="flex-shrink-0 w-12 h-12 rounded-lg font-medium transition-colors bg-zinc-900 text-zinc-600 cursor-not-allowed"
+                      >
+                        {num}
+                      </button>
+                    );
+                  }
+
+                  // Check if there's enough availability for this number
+                  const selectedTimeSlot = timeSlotAvailability.find(
+                    slot => slot.timeIndex.toString() === formData.timeIndex
+                  );
+                  const availableCount = selectedTimeSlot?.availableSpots ?? 0;
+                  const isDisabled = availableCount < num;
+
+                  return (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => !isDisabled && setFormData((prev) => ({ ...prev, numberOfPeople: num }))}
+                      disabled={isDisabled}
+                      className={`flex-shrink-0 w-12 h-12 rounded-lg font-medium transition-colors ${
+                        formData.numberOfPeople === num
+                          ? "bg-white text-black"
+                          : isDisabled
+                          ? "bg-zinc-900 text-zinc-600 cursor-not-allowed"
+                          : "bg-zinc-800 text-white hover:bg-zinc-700"
+                      }`}
+                    >
+                      {num}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Meeting Point */}
+          <div className="space-y-2">
+            <label htmlFor="meetingPoint" className="text-sm font-medium text-zinc-200">
+              Meeting Point *
+            </label>
+            <Select
+              value={formData.meetingPoint}
+              onValueChange={(value) => setFormData((prev) => ({ ...prev, meetingPoint: value }))}
               required
-              className="text-white"
-            />
+            >
+              <SelectTrigger className="bg-zinc-950 border-zinc-800 text-white">
+                <SelectValue placeholder="Select meeting point" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Meet at our base near the landing field in the centre">
+                  Meet at our base near the landing field in the centre
+                </SelectItem>
+                <SelectItem value="Train Station Interlaken Ost (Outside BIG coop supermarket)">
+                  Train Station Interlaken Ost (Outside BIG coop supermarket)
+                </SelectItem>
+                <SelectItem value="Mattenhof Resort (Free Parking)">
+                  Mattenhof Resort (Free Parking)
+                </SelectItem>
+                <SelectItem value="Other meeting point in or near Interlaken">
+                  Other meeting point in or near Interlaken
+                </SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Flight Type */}

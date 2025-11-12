@@ -4,6 +4,7 @@ import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { format } from "date-fns";
 import type { Pilot, Booking } from "../types/index";
@@ -61,7 +62,7 @@ export function NewBookingModal({
   // Modal component for creating new bookings
   const [customerName, setCustomerName] = useState("");
   const [numberOfPeople, setNumberOfPeople] = useState("");
-  const [pickupLocation, setPickupLocation] = useState("HW");
+  const [pickupLocation, setPickupLocation] = useState("");
   const [bookingSource, setBookingSource] = useState("twin");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [email, setEmail] = useState("");
@@ -84,7 +85,7 @@ export function NewBookingModal({
         setNotes(initialData.notes || "");
         setFlightType(initialData.flightType || "sensational");
         // Keep defaults for fields not in initialData
-        setPickupLocation("HW");
+        setPickupLocation("");
         setBookingSource("twin");
         setCommission("");
         setCommissionStatus("unpaid");
@@ -94,7 +95,7 @@ export function NewBookingModal({
         // Reset to defaults when opening without initialData
         setCustomerName("");
         setNumberOfPeople("");
-        setPickupLocation("HW");
+        setPickupLocation("");
         setBookingSource("twin");
         setPhoneNumber("");
         setEmail("");
@@ -349,17 +350,33 @@ export function NewBookingModal({
             </div>
           </div>
 
-          {/* Pickup Location */}
+          {/* Meeting Point */}
           <div className="space-y-2">
             <Label htmlFor="pickupLocation" className="text-white">
-              Pickup Location
+              Meeting Point
             </Label>
-            <Input
-              id="pickupLocation"
+            <Select
               value={pickupLocation}
-              onChange={(e) => setPickupLocation(e.target.value)}
-              autoComplete="off"
-            />
+              onValueChange={setPickupLocation}
+            >
+              <SelectTrigger className="bg-zinc-950 border-zinc-800 text-white">
+                <SelectValue placeholder="Select meeting point" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Meet at our base near the landing field in the centre">
+                  Meet at our base near the landing field in the centre
+                </SelectItem>
+                <SelectItem value="Train Station Interlaken Ost (Outside BIG coop supermarket)">
+                  Train Station Interlaken Ost (Outside BIG coop supermarket)
+                </SelectItem>
+                <SelectItem value="Mattenhof Resort (Free Parking)">
+                  Mattenhof Resort (Free Parking)
+                </SelectItem>
+                <SelectItem value="Other meeting point in or near Interlaken">
+                  Other meeting point in or near Interlaken
+                </SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Booking Source */}

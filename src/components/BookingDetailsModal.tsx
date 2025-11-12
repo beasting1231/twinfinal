@@ -506,6 +506,17 @@ export function BookingDetailsModal({
       return;
     }
 
+    // Check if user is authorized to delete this receipt
+    if (role !== 'admin' && currentUser?.displayName !== pilotName) {
+      alert("You can only delete receipts that you have uploaded.");
+      return;
+    }
+
+    // Confirm before deleting
+    if (!confirm("Are you sure you want to delete this receipt? This action cannot be undone.")) {
+      return;
+    }
+
     try {
       // Update pilot payments with receipt removed
       const updatedPayments = pilotPayments.map(payment =>
@@ -725,7 +736,7 @@ export function BookingDetailsModal({
                   <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
                     <div className="flex items-center gap-2 text-zinc-500 mb-2">
                       <MapPin className="w-4 h-4" />
-                      <span className="text-xs">Location</span>
+                      <span className="text-xs">Meeting Point</span>
                     </div>
                     <div className="text-white font-medium break-words">{editedBooking.pickupLocation || <span className="text-zinc-500">Not provided</span>}</div>
                   </div>
@@ -956,14 +967,31 @@ export function BookingDetailsModal({
                   </div>
                 </div>
 
-                {/* Pickup Location */}
+                {/* Meeting Point */}
                 <div className="space-y-2">
-                  <Label className="text-white">Pickup Location</Label>
-                  <Input
+                  <Label className="text-white">Meeting Point</Label>
+                  <Select
                     value={editedBooking.pickupLocation}
-                    onChange={(e) => setEditedBooking({ ...editedBooking, pickupLocation: e.target.value })}
-                    autoComplete="off"
-                  />
+                    onValueChange={(value) => setEditedBooking({ ...editedBooking, pickupLocation: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select meeting point" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Meet at our base near the landing field in the centre">
+                        Meet at our base near the landing field in the centre
+                      </SelectItem>
+                      <SelectItem value="Train Station Interlaken Ost (Outside BIG coop supermarket)">
+                        Train Station Interlaken Ost (Outside BIG coop supermarket)
+                      </SelectItem>
+                      <SelectItem value="Mattenhof Resort (Free Parking)">
+                        Mattenhof Resort (Free Parking)
+                      </SelectItem>
+                      <SelectItem value="Other meeting point in or near Interlaken">
+                        Other meeting point in or near Interlaken
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 {/* Booking Source */}
@@ -1352,14 +1380,17 @@ export function BookingDetailsModal({
                                   >
                                     <Eye className="w-4 h-4" />
                                   </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveReceipt(payment.pilotName, fileIndex)}
-                                    className="p-2 rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors"
-                                    title="Delete"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
+                                  {/* Only show delete button if user is admin or if it's their own receipt */}
+                                  {(role === 'admin' || currentUser?.displayName === payment.pilotName) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveReceipt(payment.pilotName, fileIndex)}
+                                      className="p-2 rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors"
+                                      title="Delete"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  )}
                                 </div>
                               </div>
                             ))}
