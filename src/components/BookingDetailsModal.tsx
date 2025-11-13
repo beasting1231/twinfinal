@@ -457,11 +457,16 @@ export function BookingDetailsModal({
 
   const handlePaymentUpdate = (pilotName: string, field: keyof PilotPayment, value: any) => {
     setPilotPayments(prev =>
-      prev.map(payment =>
-        payment.pilotName === pilotName
-          ? { ...payment, [field]: value }
-          : payment
-      )
+      prev.map(payment => {
+        if (payment.pilotName === pilotName) {
+          // If changing payment method to ticket or CCP, default amount to -103
+          if (field === 'paymentMethod' && (value === 'ticket' || value === 'ccp')) {
+            return { ...payment, [field]: value, amount: -103 };
+          }
+          return { ...payment, [field]: value };
+        }
+        return payment;
+      })
     );
   };
 
@@ -1293,13 +1298,13 @@ export function BookingDetailsModal({
                       <Label className="text-white">Amount</Label>
                       <Input
                         type="text"
-                        inputMode="decimal"
+                        inputMode="numeric"
                         value={payment.amount}
                         onChange={(e) => {
                           const value = e.target.value;
-                          // Allow empty string, negative sign, and valid numbers
-                          if (value === '' || value === '-' || !isNaN(parseFloat(value))) {
-                            handlePaymentUpdate(payment.pilotName, 'amount', value === '' || value === '-' ? value : parseFloat(value));
+                          // Allow empty string, negative sign, and valid numbers (including negative decimals)
+                          if (value === '' || value === '-' || /^-?\d*\.?\d*$/.test(value)) {
+                            handlePaymentUpdate(payment.pilotName, 'amount', value === '' || value === '-' ? value : (value.endsWith('.') || value === '-.' ? value : parseFloat(value) || value));
                           }
                         }}
                         placeholder="0.00"

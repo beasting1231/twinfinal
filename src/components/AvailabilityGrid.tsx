@@ -38,7 +38,7 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
   const targetUserId = role === 'admin' && selectedUserId ? selectedUserId : undefined;
 
   const { isAvailable, toggleAvailability, toggleDay, loading, saving, justSaved } = useAvailability(targetUserId);
-  const { bookings: _bookings } = useBookings();
+  const { bookings } = useBookings();
 
   // State to track all pilots' availability data (currently unused but kept for potential future use)
   const [_pilotsAvailabilityData, setPilotsAvailabilityData] = useState<{
@@ -167,11 +167,42 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
   }, [weekStartDate, currentUser]);
 
   // Function to check if a cell should be locked (cannot be toggled to unavailable)
-  // NOTE: We no longer lock cells even if assigned to bookings, since signing out auto-unassigns
-  const isCellLocked = (_day: Date, _timeSlot: string): boolean => {
-    // Always return false - allow signing out even if assigned to bookings
-    // The useAvailability hook will automatically unassign pilots from bookings when they sign out
-    return false;
+  // Locks cells when the user is available AND the time slot is fully or overbooked
+  const isCellLocked = (day: Date, timeSlot: string): boolean => {
+    const dateStr = format(day, "yyyy-MM-dd");
+
+    // Only lock if the current user is available for this time slot
+    const userIsAvailable = isAvailable(day, timeSlot);
+    if (!userIsAvailable) {
+      return false; // Not locked if user is not available
+    }
+
+    // Count how many pilots are available for this time slot
+    const key = `${dateStr}-${timeSlot}`;
+    const availablePilotsCount = _pilotsAvailabilityData.pilotsAvailablePerTimeSlot.get(key)?.size || 0;
+
+    // Count how many booking spots are taken for this time slot
+    const bookingsAtTime = bookings.filter(b => b.date === dateStr && b.timeIndex !== undefined);
+
+    // Find the time slot index from the day's time slots
+    const dayTimeSlots = getTimeSlotsByDate(day);
+    const timeSlotIndex = dayTimeSlots.indexOf(timeSlot);
+
+    if (timeSlotIndex === -1) {
+      return false; // Time slot not found, don't lock
+    }
+
+    const spotsBooked = bookingsAtTime
+      .filter(b => b.timeIndex === timeSlotIndex)
+      .reduce((total, booking) => {
+        return total + (booking.numberOfPeople || booking.span || 1);
+      }, 0);
+
+    // Calculate available spots
+    const availableSpots = availablePilotsCount - spotsBooked;
+
+    // Lock if there are 0 or fewer available spots (fully or overbooked)
+    return availableSpots <= 0;
   };
 
   // Zoom state

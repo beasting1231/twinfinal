@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { collection, query, where, onSnapshot, addDoc, deleteDoc, getDocs, doc, updateDoc, getDoc } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { useAuth } from "../contexts/AuthContext";
-import { format } from "date-fns";
+import { format, parse } from "date-fns";
+import { getTimeSlotsByDate } from "../utils/timeSlots";
 
 interface AvailabilityData {
   id?: string;
@@ -37,6 +38,16 @@ export function useAvailability(targetUserId?: string) {
         return;
       }
 
+      // Parse the date and get time slots for that date
+      const date = parse(dateStr, "yyyy-MM-dd", new Date());
+      const timeSlots = getTimeSlotsByDate(date);
+      const timeIndex = timeSlots.indexOf(timeSlot);
+
+      if (timeIndex === -1) {
+        console.log(`Time slot ${timeSlot} not found for date ${dateStr}`);
+        return;
+      }
+
       // Query all bookings for this date
       const bookingsQuery = query(
         collection(db, "bookings"),
@@ -45,12 +56,12 @@ export function useAvailability(targetUserId?: string) {
 
       const bookingsSnapshot = await getDocs(bookingsQuery);
 
-      // Find bookings at this time slot where pilot is assigned
+      // Find bookings at this time index where pilot is assigned
       const updatePromises = bookingsSnapshot.docs.map(async (bookingDoc) => {
         const bookingData = bookingDoc.data();
 
-        // Check if this booking is at the right time and has the pilot assigned
-        if (bookingData.timeSlot === timeSlot && bookingData.assignedPilots) {
+        // Check if this booking is at the right time index and has the pilot assigned
+        if (bookingData.timeIndex === timeIndex && bookingData.assignedPilots) {
           const assignedIndex = bookingData.assignedPilots.findIndex(
             (p: string) => p === pilotDisplayName
           );
@@ -60,11 +71,22 @@ export function useAvailability(targetUserId?: string) {
             const updatedPilots = [...bookingData.assignedPilots];
             updatedPilots[assignedIndex] = "";
 
-            // Update the booking
-            await updateDoc(doc(db, "bookings", bookingDoc.id), {
+            // Remove pilot's payment details if they exist
+            const updates: any = {
               assignedPilots: updatedPilots
-            });
-            console.log(`Unassigned ${pilotDisplayName} from booking ${bookingDoc.id}`);
+            };
+
+            if (bookingData.pilotPayments && Array.isArray(bookingData.pilotPayments)) {
+              // Filter out the payment for this pilot
+              const updatedPayments = bookingData.pilotPayments.filter(
+                (payment: any) => payment.pilotName !== pilotDisplayName
+              );
+              updates.pilotPayments = updatedPayments;
+            }
+
+            // Update the booking
+            await updateDoc(doc(db, "bookings", bookingDoc.id), updates);
+            console.log(`Unassigned ${pilotDisplayName} from booking ${bookingDoc.id} and removed payment details`);
           }
         }
       });

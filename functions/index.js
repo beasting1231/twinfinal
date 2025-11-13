@@ -167,8 +167,8 @@ function generateCustomerEmailHTML(bookingData) {
 
         <p style="margin-top:24px;">If this is a <strong>last-minute booking</strong>, it's best to contact us directly via WhatsApp using the button below or by scanning the QR code.</p>
         <div style="text-align:center;">
-          <a href="https://wa.me/41796225100" class="whatsapp-button">Message us on WhatsApp</a>
-          <img src="https://api.qrserver.com/v1/create-qr-code/?data=https://wa.me/41796225100&size=120x120" alt="WhatsApp QR Code" class="qr" />
+          <a href="https://wa.me/41796225100?text=${encodeURIComponent(`Hi! I just made a booking request under the name ${customerName}`)}" class="whatsapp-button">Message us on WhatsApp</a>
+          <img src="https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(`https://wa.me/41796225100?text=${encodeURIComponent(`Hi! I just made a booking request under the name ${customerName}`)}`)}&size=120x120" alt="WhatsApp QR Code" class="qr" />
         </div>
 
         <p style="margin-top:24px;">We look forward to flying with you!</p>
