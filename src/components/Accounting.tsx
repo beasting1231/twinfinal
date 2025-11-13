@@ -331,14 +331,28 @@ export function Accounting() {
             type="date"
             value={dateRange.from}
             onChange={(e) => setDateRange({ ...dateRange, from: e.target.value })}
-            className="bg-zinc-900 border-zinc-800 text-white w-40"
+            className="bg-zinc-900 border-zinc-800 text-white w-40 !h-10 !py-0 !text-sm flex items-center max-h-10 [&::-webkit-date-and-time-value]:!text-sm [&::-webkit-date-and-time-value]:leading-10"
+            style={{
+              WebkitAppearance: 'none',
+              MozAppearance: 'none',
+              appearance: 'none',
+              fontSize: '14px',
+              lineHeight: '2.5rem'
+            } as React.CSSProperties}
           />
           <span className="text-zinc-500">to</span>
           <Input
             type="date"
             value={dateRange.to}
             onChange={(e) => setDateRange({ ...dateRange, to: e.target.value })}
-            className="bg-zinc-900 border-zinc-800 text-white w-40"
+            className="bg-zinc-900 border-zinc-800 text-white w-40 !h-10 !py-0 !text-sm flex items-center max-h-10 [&::-webkit-date-and-time-value]:!text-sm [&::-webkit-date-and-time-value]:leading-10"
+            style={{
+              WebkitAppearance: 'none',
+              MozAppearance: 'none',
+              appearance: 'none',
+              fontSize: '14px',
+              lineHeight: '2.5rem'
+            } as React.CSSProperties}
           />
           <span className="text-sm text-zinc-400 ml-6">
             Total flights: <span className="text-white font-medium">{filteredData.length}</span>

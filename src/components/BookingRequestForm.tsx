@@ -454,7 +454,7 @@ export function BookingRequestForm() {
                 value={formData.date}
                 onChange={handleChange}
                 required
-                className="flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white ring-offset-background placeholder:text-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 pl-11 max-w-full min-w-0 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:opacity-0 [-webkit-appearance:none] [appearance:none] [color-scheme:dark]"
+                className="flex !h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 !py-0 !text-sm text-white ring-offset-background placeholder:text-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 pl-11 max-w-full min-w-0 items-center max-h-10 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-date-and-time-value]:!text-sm [&::-webkit-date-and-time-value]:leading-10 [-webkit-appearance:none] [appearance:none] [color-scheme:dark]"
                 style={{
                   WebkitAppearance: 'none',
                   MozAppearance: 'none',

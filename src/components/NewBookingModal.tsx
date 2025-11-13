@@ -395,7 +395,10 @@ export function NewBookingModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[90vw] max-w-[500px] rounded-2xl">
+      <DialogContent
+        className="w-[90vw] max-w-[500px] rounded-2xl"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
         <form onSubmit={handleSubmit} className="space-y-4 overflow-x-hidden px-1">
           {/* Availability Error Message */}
           {availabilityError && (
@@ -439,8 +442,15 @@ export function NewBookingModal({
                     setSelectedModalDate(e.target.value);
                     setInitialAvailableSlots(null); // Reset availability tracking
                   }}
-                  className="pl-10 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:opacity-0"
-                  style={{ colorScheme: 'dark' }}
+                  className="pl-10 !h-10 !py-0 !text-sm flex items-center max-h-10 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-date-and-time-value]:!text-sm [&::-webkit-date-and-time-value]:leading-10"
+                  style={{
+                    colorScheme: 'dark',
+                    WebkitAppearance: 'none',
+                    MozAppearance: 'none',
+                    appearance: 'none',
+                    fontSize: '14px',
+                    lineHeight: '2.5rem'
+                  } as React.CSSProperties}
                 />
               </div>
             </div>

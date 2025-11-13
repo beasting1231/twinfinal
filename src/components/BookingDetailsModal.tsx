@@ -914,7 +914,14 @@ export function BookingDetailsModal({
                           date: e.target.value
                         });
                       }}
-                      className="pr-10"
+                      className="pr-10 !h-10 !py-0 !text-sm flex items-center max-h-10 [&::-webkit-date-and-time-value]:!text-sm [&::-webkit-date-and-time-value]:leading-10"
+                      style={{
+                        WebkitAppearance: 'none',
+                        MozAppearance: 'none',
+                        appearance: 'none',
+                        fontSize: '14px',
+                        lineHeight: '2.5rem'
+                      } as React.CSSProperties}
                       autoComplete="off"
                     />
                     <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white pointer-events-none" />
