@@ -94,15 +94,15 @@ export function AddPilotModal({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        className="bg-zinc-950 border-zinc-800 text-white max-w-md"
+        className="bg-zinc-950 border-zinc-800 text-white max-w-md overflow-visible"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <DialogHeader>
           <DialogTitle>Add Pilot to {timeSlot}</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
-          <div className="space-y-2 relative">
+        <div className="space-y-4 py-4 overflow-visible">
+          <div className="space-y-2 relative overflow-visible">
             <Label htmlFor="pilot-select" className="text-white">
               Pilot
             </Label>
