@@ -1734,10 +1734,44 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {deletedBookings.map((booking) => (
+                  {deletedBookings.map((booking) => {
+                    const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+                    const [pressGlow, setPressGlow] = useState(false);
+
+                    const handleTouchStart = (e: React.TouchEvent) => {
+                      longPressTimerRef.current = setTimeout(() => {
+                        const touch = e.touches[0];
+                        setPressGlow(true);
+                        setDeletedBookingContextMenu({
+                          isOpen: true,
+                          position: { x: touch.clientX, y: touch.clientY },
+                          booking,
+                        });
+                      }, 500); // 500ms for context menu
+                    };
+
+                    const handleTouchMove = () => {
+                      if (longPressTimerRef.current) {
+                        clearTimeout(longPressTimerRef.current);
+                        longPressTimerRef.current = null;
+                      }
+                      setPressGlow(false);
+                    };
+
+                    const handleTouchEnd = () => {
+                      if (longPressTimerRef.current) {
+                        clearTimeout(longPressTimerRef.current);
+                        longPressTimerRef.current = null;
+                      }
+                      setPressGlow(false);
+                    };
+
+                    return (
                     <div
                       key={booking.id}
-                      className="p-3 bg-gray-50 dark:bg-zinc-800 rounded-lg border border-gray-200 dark:border-zinc-700 cursor-context-menu"
+                      className={`p-3 bg-gray-50 dark:bg-zinc-800 rounded-lg border border-gray-200 dark:border-zinc-700 cursor-context-menu transition-shadow ${
+                        pressGlow ? 'ring-2 ring-blue-500 shadow-lg' : ''
+                      }`}
                       onContextMenu={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
@@ -1747,6 +1781,9 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                           booking,
                         });
                       }}
+                      onTouchStart={handleTouchStart}
+                      onTouchMove={handleTouchMove}
+                      onTouchEnd={handleTouchEnd}
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
@@ -1785,7 +1822,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                         </div>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </TabsContent>
