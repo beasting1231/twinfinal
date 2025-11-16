@@ -1647,7 +1647,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
           <Tabs defaultValue="requests" className="flex-1 flex flex-col">
             <TabsList className="grid w-full grid-cols-3 bg-gray-100 dark:bg-zinc-800 border-b border-gray-300 dark:border-zinc-700 rounded-t-lg">
               <TabsTrigger value="requests" className="data-[state=active]:bg-white dark:data-[state=active]:bg-zinc-900">
-                Booking Requests ({pendingRequests.length})
+                Requests ({pendingRequests.length})
               </TabsTrigger>
               <TabsTrigger value="waitlist" className="data-[state=active]:bg-white dark:data-[state=active]:bg-zinc-900">
                 Waiting List ({waitlistRequests.length})
