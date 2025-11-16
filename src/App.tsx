@@ -13,6 +13,7 @@ import { UserManagement } from "./components/UserManagement";
 import { BookingRequestForm } from "./components/BookingRequestForm";
 import { useBookings } from "./hooks/useBookings";
 import { usePilots } from "./hooks/usePilots";
+import { useDriverLocation } from "./hooks/useDriverLocation";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { EditingProvider } from "./contexts/EditingContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -99,6 +100,9 @@ function PageWrapper({ children }: { children: React.ReactNode }) {
 }
 
 function AppContent() {
+  // Automatically track driver location for users with driver role
+  useDriverLocation();
+
   return (
     <Routes>
       {/* Public route */}

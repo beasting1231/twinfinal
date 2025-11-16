@@ -128,5 +128,20 @@ service cloud.firestore {
         hasRole('admin')
       );
     }
+
+    // Driver locations collection
+    match /driverLocations/{locationId} {
+      // Drivers can read all locations (to see other drivers)
+      // Admin can read all locations
+      allow read: if request.auth != null && hasAnyRole(['driver', 'admin']);
+
+      // Drivers can create/update only their own location (document ID must match user ID)
+      allow create, update: if request.auth != null &&
+        hasRole('driver') &&
+        locationId == request.auth.uid;
+
+      // Admin can delete any location
+      allow delete: if request.auth != null && hasRole('admin');
+    }
   }
 }

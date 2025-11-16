@@ -72,6 +72,15 @@ export interface DriverAssignment {
   vehicle2?: string;
 }
 
+export interface DriverLocation {
+  id?: string; // User ID of the driver
+  displayName: string; // Driver's name
+  latitude: number;
+  longitude: number;
+  timestamp: Date; // When the location was last updated
+  accuracy?: number; // Location accuracy in meters
+}
+
 export interface BookingRequest {
   id?: string;
   customerName: string;

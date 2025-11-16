@@ -13,6 +13,9 @@ import { ScheduleBookingRequestContextMenu } from "./ScheduleBookingRequestConte
 import { BookingRequestItem } from "./BookingRequestItem";
 import { TimeSlotContextMenu } from "./TimeSlotContextMenu";
 import { AddPilotModal } from "./AddPilotModal";
+import { CollapsibleDriverMap } from "./CollapsibleDriverMap";
+import { DriverOwnLocationMap } from "./DriverOwnLocationMap";
+import { LocationToggle } from "./LocationToggle";
 import { useBookingSourceColors } from "../hooks/useBookingSourceColors";
 import { useDriverAssignments } from "../hooks/useDriverAssignments";
 import { useBookingRequests } from "../hooks/useBookingRequests";
@@ -1596,14 +1599,16 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
         </div>
       </div>
 
-      {/* Booking Requests Inbox - Only show to admins */}
+      {/* Booking Requests Inbox and Driver Location Map - Only show to admins */}
       {role === 'admin' && (
       <div
-        className="max-w-lg bg-white dark:bg-zinc-900 rounded-lg border border-gray-300 dark:border-zinc-800"
+        className="flex flex-col gap-4 max-w-4xl"
         style={{
           marginTop: `${24 + (gridHeight * (scale - 1))}px`
         }}
       >
+        {/* Booking Requests Inbox */}
+        <div className="w-full bg-white dark:bg-zinc-900 rounded-lg border border-gray-300 dark:border-zinc-800">
           <Tabs defaultValue="requests" className="flex-1 flex flex-col">
             <TabsList className="grid w-full grid-cols-2 bg-gray-100 dark:bg-zinc-800 border-b border-gray-300 dark:border-zinc-700 rounded-t-lg">
               <TabsTrigger value="requests" className="data-[state=active]:bg-white dark:data-[state=active]:bg-zinc-900">
@@ -1685,6 +1690,34 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
             </TabsContent>
           </Tabs>
         </div>
+
+        {/* Collapsible Driver Location Map */}
+        <CollapsibleDriverMap />
+      </div>
+      )}
+
+      {/* Driver's Own Location Map - Only show to drivers */}
+      {role === 'driver' && (
+      <div
+        className="flex flex-col gap-4 max-w-4xl"
+        style={{
+          marginTop: `${24 + (gridHeight * (scale - 1))}px`
+        }}
+      >
+        {/* Location Control */}
+        <div className="flex items-center justify-between bg-white dark:bg-zinc-900 rounded-lg border border-gray-300 dark:border-zinc-800 p-4">
+          <div>
+            <h3 className="font-semibold text-gray-900 dark:text-white">Location Tracking</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400">Enable to share your location with admins</p>
+          </div>
+          <LocationToggle />
+        </div>
+
+        {/* Driver's Own Location Map */}
+        <div className="w-full h-[400px]">
+          <DriverOwnLocationMap />
+        </div>
+      </div>
       )}
 
       {selectedCell && (
