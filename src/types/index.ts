@@ -93,6 +93,6 @@ export interface BookingRequest {
   numberOfPeople: number;
   flightType?: "sensational" | "classic" | "early bird";
   notes?: string;
-  status: "pending" | "approved" | "rejected" | "waitlist";
+  status: "pending" | "approved" | "rejected" | "waitlist" | "deleted";
   createdAt: Date;
 }

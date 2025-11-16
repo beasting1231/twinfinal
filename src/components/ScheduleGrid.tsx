@@ -114,6 +114,11 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
     return bookingRequests.filter(req => req.status === "waitlist" && req.date === dateString);
   }, [bookingRequests, dateString]);
 
+  const deletedRequests = useMemo(() => {
+    // Only show deleted requests for the currently selected date
+    return bookingRequests.filter(req => req.status === "deleted" && req.date === dateString);
+  }, [bookingRequests, dateString]);
+
   // Helper function to calculate available spots for a booking request
   const getAvailableSpotsForRequest = (request: BookingRequest): number => {
     // Find the time slot for this request
@@ -1610,12 +1615,15 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
         {/* Booking Requests Inbox */}
         <div className="w-full bg-white dark:bg-zinc-900 rounded-lg border border-gray-300 dark:border-zinc-800">
           <Tabs defaultValue="requests" className="flex-1 flex flex-col">
-            <TabsList className="grid w-full grid-cols-2 bg-gray-100 dark:bg-zinc-800 border-b border-gray-300 dark:border-zinc-700 rounded-t-lg">
+            <TabsList className="grid w-full grid-cols-3 bg-gray-100 dark:bg-zinc-800 border-b border-gray-300 dark:border-zinc-700 rounded-t-lg">
               <TabsTrigger value="requests" className="data-[state=active]:bg-white dark:data-[state=active]:bg-zinc-900">
                 Booking Requests ({pendingRequests.length})
               </TabsTrigger>
               <TabsTrigger value="waitlist" className="data-[state=active]:bg-white dark:data-[state=active]:bg-zinc-900">
                 Waiting List ({waitlistRequests.length})
+              </TabsTrigger>
+              <TabsTrigger value="deleted" className="data-[state=active]:bg-white dark:data-[state=active]:bg-zinc-900">
+                Deleted ({deletedRequests.length})
               </TabsTrigger>
             </TabsList>
 
@@ -1683,6 +1691,41 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                       }}
                       onEnterMoveMode={role === 'admin' ? enterRequestMoveMode : undefined}
                       isInMoveMode={requestMoveMode.isActive && requestMoveMode.request?.id === request.id}
+                    />
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="deleted" className="p-4 mt-0">
+              {deletedRequests.length === 0 ? (
+                <div className="flex items-center justify-center h-32">
+                  <p className="text-gray-500 dark:text-zinc-500">No deleted bookings</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {deletedRequests.map((request) => (
+                    <BookingRequestItem
+                      key={request.id}
+                      request={request}
+                      canDrag={false}
+                      availableSpots={getAvailableSpotsForRequest(request)}
+                      onContextMenu={(req, position) => {
+                        setBookingRequestContextMenu({
+                          isOpen: true,
+                          position,
+                          request: req,
+                        });
+                      }}
+                      onDateClick={(dateString) => {
+                        if (onNavigateToDate) {
+                          const [year, month, day] = dateString.split('-').map(Number);
+                          const date = new Date(year, month - 1, day);
+                          onNavigateToDate(date);
+                        }
+                      }}
+                      onEnterMoveMode={undefined}
+                      isInMoveMode={false}
                     />
                   ))}
                 </div>
