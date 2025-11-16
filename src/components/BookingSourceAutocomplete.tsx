@@ -81,7 +81,7 @@ export function BookingSourceAutocomplete({
 
   return (
     <div className="space-y-2" ref={containerRef}>
-      <Label htmlFor={id} className="text-white">
+      <Label htmlFor={id} className="text-gray-900 dark:text-white">
         {label} {required && <span className="text-red-500">*</span>}
       </Label>
       <div className="relative">
@@ -98,7 +98,7 @@ export function BookingSourceAutocomplete({
         <button
           type="button"
           onClick={handleDropdownToggle}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white transition-colors"
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white transition-colors"
         >
           <ChevronDown
             className={`w-4 h-4 transition-transform ${isOpen ? "rotate-180" : ""}`}
@@ -107,7 +107,7 @@ export function BookingSourceAutocomplete({
 
         {/* Dropdown */}
         {isOpen && (
-          <div className="absolute z-50 w-full mt-1 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+          <div className="absolute z-50 w-full mt-1 bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-700 rounded-lg shadow-xl max-h-60 overflow-y-auto">
             {filteredSources.length > 0 ? (
               <div className="py-1">
                 {filteredSources.map((source) => (
@@ -115,21 +115,21 @@ export function BookingSourceAutocomplete({
                     key={source.name}
                     type="button"
                     onClick={() => handleSelectSource(source.name)}
-                    className="w-full px-4 py-2 text-left hover:bg-zinc-800 text-white flex items-center justify-between group transition-colors"
+                    className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-900 dark:text-white flex items-center justify-between group transition-colors"
                   >
                     <span>{source.name}</span>
-                    <span className="text-xs text-zinc-500 group-hover:text-zinc-400">
+                    <span className="text-xs text-gray-500 dark:text-zinc-500 group-hover:text-gray-600 dark:group-hover:text-zinc-400">
                       {source.count} {source.count === 1 ? "booking" : "bookings"}
                     </span>
                   </button>
                 ))}
               </div>
             ) : (
-              <div className="px-4 py-3 text-zinc-500 text-sm">
+              <div className="px-4 py-3 text-gray-500 dark:text-zinc-500 text-sm">
                 {searchQuery.trim() ? (
                   <>
                     No matches found. Type to create{" "}
-                    <span className="text-white font-medium">"{searchQuery}"</span>
+                    <span className="text-gray-900 dark:text-white font-medium">"{searchQuery}"</span>
                   </>
                 ) : (
                   "No booking sources yet"

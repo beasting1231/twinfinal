@@ -10,7 +10,7 @@ import type { Booking, Pilot, PilotPayment, ReceiptFile } from "../types/index";
 import { useAuth } from "../contexts/AuthContext";
 import { useEditing } from "../contexts/EditingContext";
 import { useRole } from "../hooks/useRole";
-import { Camera, Upload, Eye, Trash2, Calendar, Clock, MapPin, Users, Phone, Mail, FileText, User, PhoneCall, Send, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
+import { Camera, Upload, Eye, Trash2, Calendar, Clock, MapPin, Users, Phone, Mail, FileText, User, PhoneCall, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { db, storage } from "../firebase/config";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -163,7 +163,11 @@ export function BookingDetailsModal({
 
   useEffect(() => {
     if (booking) {
-      setEditedBooking(booking);
+      setEditedBooking({
+        ...booking,
+        // Convert empty pickupLocation to "other" for the dropdown
+        pickupLocation: booking.pickupLocation || "other"
+      });
     }
   }, [booking]);
 
@@ -382,7 +386,8 @@ export function BookingDetailsModal({
         updates.numberOfPeople = editedBooking.numberOfPeople;
       }
       if (editedBooking.pickupLocation !== booking.pickupLocation) {
-        updates.pickupLocation = editedBooking.pickupLocation;
+        // Convert "other" to empty string when saving
+        updates.pickupLocation = editedBooking.pickupLocation === "other" ? "" : editedBooking.pickupLocation;
       }
       if (editedBooking.bookingSource !== booking.bookingSource) {
         updates.bookingSource = editedBooking.bookingSource;
@@ -442,7 +447,11 @@ export function BookingDetailsModal({
   };
 
   const handleCancel = () => {
-    setEditedBooking(booking);
+    setEditedBooking({
+      ...booking,
+      // Convert empty pickupLocation to "other" for the dropdown
+      pickupLocation: booking.pickupLocation || "other"
+    });
     setIsEditing(false);
   };
 
@@ -628,9 +637,9 @@ export function BookingDetailsModal({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="w-[90vw] max-w-[600px] overflow-x-hidden allow-select rounded-2xl" hideCloseButton aria-describedby={undefined}>
+      <DialogContent className="w-[90vw] max-w-[600px] overflow-x-hidden allow-select rounded-2xl bg-white dark:bg-zinc-950 border-gray-300 dark:border-zinc-800 text-gray-900 dark:text-white" hideCloseButton aria-describedby={undefined}>
         <div className="sr-only">
-          <DialogTitle>Booking Details</DialogTitle>
+          <DialogTitle className="text-gray-900 dark:text-white">Booking Details</DialogTitle>
         </div>
         <Tabs defaultValue="details" className="w-full overflow-x-hidden">
           <TabsList className={`grid w-full ${role !== 'agency' && role !== 'driver' ? 'grid-cols-2' : 'grid-cols-1'}`}>
@@ -650,12 +659,12 @@ export function BookingDetailsModal({
                     onClick={() => setShowStatusDropdown(!showStatusDropdown)}
                     className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium cursor-pointer transition-all hover:scale-105 ${
                       editedBooking.bookingStatus === 'unconfirmed'
-                        ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-500/30'
+                        ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 border border-blue-300 dark:border-blue-500/30 hover:bg-blue-200 dark:hover:bg-blue-500/30'
                         : editedBooking.bookingStatus === 'confirmed'
-                        ? 'bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30'
+                        ? 'bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400 border border-green-300 dark:border-green-500/30 hover:bg-green-200 dark:hover:bg-green-500/30'
                         : editedBooking.bookingStatus === 'pending'
-                        ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/30'
-                        : 'bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30'
+                        ? 'bg-yellow-100 dark:bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 border border-yellow-300 dark:border-yellow-500/30 hover:bg-yellow-200 dark:hover:bg-yellow-500/30'
+                        : 'bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400 border border-red-300 dark:border-red-500/30 hover:bg-red-200 dark:hover:bg-red-500/30'
                     }`}
                   >
                     {editedBooking.bookingStatus.charAt(0).toUpperCase() + editedBooking.bookingStatus.slice(1)}
@@ -667,7 +676,7 @@ export function BookingDetailsModal({
                         className="fixed inset-0 z-10"
                         onClick={() => setShowStatusDropdown(false)}
                       />
-                      <div className="absolute top-full left-0 mt-2 flex flex-col gap-2 bg-zinc-900 border border-zinc-700 rounded-lg p-2 shadow-xl z-20">
+                      <div className="absolute top-full left-0 mt-2 flex flex-col gap-2 bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-700 rounded-lg p-2 shadow-xl z-20">
                         <button
                           onClick={() => {
                             setEditedBooking({ ...editedBooking, bookingStatus: 'unconfirmed' });
@@ -676,7 +685,7 @@ export function BookingDetailsModal({
                             }
                             setShowStatusDropdown(false);
                           }}
-                          className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium cursor-pointer transition-all hover:scale-105 bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-500/30"
+                          className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium cursor-pointer transition-all hover:scale-105 bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 border border-blue-300 dark:border-blue-500/30 hover:bg-blue-200 dark:hover:bg-blue-500/30"
                         >
                           Unconfirmed
                         </button>
@@ -688,7 +697,7 @@ export function BookingDetailsModal({
                             }
                             setShowStatusDropdown(false);
                           }}
-                          className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium cursor-pointer transition-all hover:scale-105 bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30"
+                          className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium cursor-pointer transition-all hover:scale-105 bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400 border border-green-300 dark:border-green-500/30 hover:bg-green-200 dark:hover:bg-green-500/30"
                         >
                           Confirmed
                         </button>
@@ -700,7 +709,7 @@ export function BookingDetailsModal({
                             }
                             setShowStatusDropdown(false);
                           }}
-                          className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium cursor-pointer transition-all hover:scale-105 bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/30"
+                          className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium cursor-pointer transition-all hover:scale-105 bg-yellow-100 dark:bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 border border-yellow-300 dark:border-yellow-500/30 hover:bg-yellow-200 dark:hover:bg-yellow-500/30"
                         >
                           Pending
                         </button>
@@ -712,7 +721,7 @@ export function BookingDetailsModal({
                             }
                             setShowStatusDropdown(false);
                           }}
-                          className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium cursor-pointer transition-all hover:scale-105 bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30"
+                          className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium cursor-pointer transition-all hover:scale-105 bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400 border border-red-300 dark:border-red-500/30 hover:bg-red-200 dark:hover:bg-red-500/30"
                         >
                           Cancelled
                         </button>
@@ -722,26 +731,26 @@ export function BookingDetailsModal({
                 </div>
 
                 {/* Customer Info Card */}
-                <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 space-y-3">
+                <div className="bg-gray-50 dark:bg-zinc-900/50 border border-gray-300 dark:border-zinc-800 rounded-xl p-4 space-y-3">
                   <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <User className="w-5 h-5 text-zinc-400" />
+                    <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-zinc-800 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <User className="w-5 h-5 text-gray-600 dark:text-zinc-400" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-xs text-zinc-500 mb-1">Customer</div>
-                      <div className="text-lg font-semibold text-white break-words">{editedBooking.customerName || <span className="text-zinc-500">Not provided</span>}</div>
+                      <div className="text-xs text-gray-500 dark:text-zinc-500 mb-1">Customer</div>
+                      <div className="text-lg font-semibold text-gray-900 dark:text-white break-words">{editedBooking.customerName || <span className="text-gray-500 dark:text-zinc-500">Not provided</span>}</div>
                     </div>
                   </div>
                 </div>
 
                 {/* Date & Time Card */}
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
-                    <div className="flex items-center gap-2 text-zinc-500 mb-2">
+                  <div className="bg-gray-50 dark:bg-zinc-900/50 border border-gray-300 dark:border-zinc-800 rounded-xl p-4">
+                    <div className="flex items-center gap-2 text-gray-500 dark:text-zinc-500 mb-2">
                       <Calendar className="w-4 h-4" />
                       <span className="text-xs">Date</span>
                     </div>
-                    <div className="text-white font-medium">
+                    <div className="text-gray-900 dark:text-white font-medium">
                       {new Date(editedBooking.date + 'T00:00:00').toLocaleDateString('en-US', {
                         month: 'short',
                         day: 'numeric',
@@ -749,51 +758,51 @@ export function BookingDetailsModal({
                       })}
                     </div>
                   </div>
-                  <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
-                    <div className="flex items-center gap-2 text-zinc-500 mb-2">
+                  <div className="bg-gray-50 dark:bg-zinc-900/50 border border-gray-300 dark:border-zinc-800 rounded-xl p-4">
+                    <div className="flex items-center gap-2 text-gray-500 dark:text-zinc-500 mb-2">
                       <Clock className="w-4 h-4" />
                       <span className="text-xs">Time</span>
                     </div>
-                    <div className="text-white font-medium">{timeSlots[editedBooking.timeIndex]}</div>
+                    <div className="text-gray-900 dark:text-white font-medium">{timeSlots[editedBooking.timeIndex]}</div>
                   </div>
                 </div>
 
                 {/* Location & People */}
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
-                    <div className="flex items-center gap-2 text-zinc-500 mb-2">
+                  <div className="bg-gray-50 dark:bg-zinc-900/50 border border-gray-300 dark:border-zinc-800 rounded-xl p-4">
+                    <div className="flex items-center gap-2 text-gray-500 dark:text-zinc-500 mb-2">
                       <MapPin className="w-4 h-4" />
                       <span className="text-xs">Meeting Point</span>
                     </div>
-                    <div className="text-white font-medium break-words">{editedBooking.pickupLocation || <span className="text-zinc-500">Not provided</span>}</div>
+                    <div className="text-gray-900 dark:text-white font-medium break-words">{editedBooking.pickupLocation || <span className="text-gray-500 dark:text-zinc-500">Not provided</span>}</div>
                   </div>
-                  <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
-                    <div className="flex items-center gap-2 text-zinc-500 mb-2">
+                  <div className="bg-gray-50 dark:bg-zinc-900/50 border border-gray-300 dark:border-zinc-800 rounded-xl p-4">
+                    <div className="flex items-center gap-2 text-gray-500 dark:text-zinc-500 mb-2">
                       <Users className="w-4 h-4" />
                       <span className="text-xs">Passengers</span>
                     </div>
-                    <div className="text-white font-medium">{editedBooking.numberOfPeople}</div>
+                    <div className="text-gray-900 dark:text-white font-medium">{editedBooking.numberOfPeople}</div>
                   </div>
                 </div>
 
                 {/* Source */}
-                <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
-                  <div className="flex items-center gap-2 text-zinc-500 mb-2">
+                <div className="bg-gray-50 dark:bg-zinc-900/50 border border-gray-300 dark:border-zinc-800 rounded-xl p-4">
+                  <div className="flex items-center gap-2 text-gray-500 dark:text-zinc-500 mb-2">
                     <FileText className="w-4 h-4" />
                     <span className="text-xs">Booking Source</span>
                   </div>
-                  <div className="text-white font-medium">{editedBooking.bookingSource}</div>
+                  <div className="text-gray-900 dark:text-white font-medium">{editedBooking.bookingSource}</div>
                 </div>
 
                 {/* Contact Info */}
                 {(editedBooking.phoneNumber || editedBooking.email) && (
-                  <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 space-y-3">
+                  <div className="bg-gray-50 dark:bg-zinc-900/50 border border-gray-300 dark:border-zinc-800 rounded-xl p-4 space-y-3">
                     {editedBooking.phoneNumber && (
                       <div className="flex items-center gap-3">
-                        <Phone className="w-4 h-4 text-zinc-500 flex-shrink-0" />
+                        <Phone className="w-4 h-4 text-gray-500 dark:text-zinc-500 flex-shrink-0" />
                         <div className="flex-1 min-w-0">
-                          <div className="text-xs text-zinc-500 mb-0.5">Phone</div>
-                          <div className="text-white break-words">
+                          <div className="text-xs text-gray-500 dark:text-zinc-500 mb-0.5">Phone</div>
+                          <div className="text-gray-900 dark:text-white break-words">
                             {editedBooking.phoneNumber}
                           </div>
                         </div>
@@ -802,7 +811,7 @@ export function BookingDetailsModal({
                             href={`https://wa.me/${editedBooking.phoneNumber.replace(/[^0-9]/g, '')}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="p-2 rounded-lg bg-[#25D366] hover:bg-[#20BA5A] text-white transition-colors"
+                            className="p-2 rounded-lg bg-green-100 dark:bg-[#25D366] hover:bg-green-200 dark:hover:bg-[#20BA5A] text-green-700 dark:text-white transition-colors"
                             title="WhatsApp"
                           >
                             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
@@ -811,7 +820,7 @@ export function BookingDetailsModal({
                           </a>
                           <a
                             href={`tel:${editedBooking.phoneNumber}`}
-                            className="p-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                            className="p-2 rounded-lg bg-blue-100 dark:bg-blue-600 hover:bg-blue-200 dark:hover:bg-blue-700 text-blue-700 dark:text-white transition-colors"
                             title="Call"
                           >
                             <PhoneCall className="w-4 h-4" />
@@ -821,20 +830,20 @@ export function BookingDetailsModal({
                     )}
                     {editedBooking.email && (
                       <div className="flex items-center gap-3">
-                        <Mail className="w-4 h-4 text-zinc-500 flex-shrink-0" />
+                        <Mail className="w-4 h-4 text-gray-500 dark:text-zinc-500 flex-shrink-0" />
                         <div className="flex-1 min-w-0">
-                          <div className="text-xs text-zinc-500 mb-0.5">Email</div>
-                          <div className="text-white break-words">
+                          <div className="text-xs text-gray-500 dark:text-zinc-500 mb-0.5">Email</div>
+                          <div className="text-gray-900 dark:text-white break-words">
                             {editedBooking.email}
                           </div>
                         </div>
                         <div className="flex gap-2 flex-shrink-0">
                           <a
                             href={`mailto:${editedBooking.email}`}
-                            className="p-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                            className="p-2 rounded-lg bg-blue-100 dark:bg-blue-600 hover:bg-blue-200 dark:hover:bg-blue-700 text-blue-700 dark:text-white transition-colors"
                             title="Send Email"
                           >
-                            <Send className="w-4 h-4" />
+                            <Mail className="w-4 h-4" />
                           </a>
                         </div>
                       </div>
@@ -843,25 +852,25 @@ export function BookingDetailsModal({
                 )}
 
                 {/* Assigned Pilots */}
-                <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
-                  <div className="text-xs text-zinc-500 mb-3">Assigned Pilots</div>
+                <div className="bg-gray-50 dark:bg-zinc-900/50 border border-gray-300 dark:border-zinc-800 rounded-xl p-4">
+                  <div className="text-xs text-gray-500 dark:text-zinc-500 mb-3">Assigned Pilots</div>
                   <div className="flex gap-2 flex-wrap">
                     {booking.assignedPilots.filter(pilot => pilot && pilot !== "").map((pilot, index) => (
-                      <div key={index} className="bg-zinc-800 text-white px-3 py-2 rounded-lg text-sm font-medium border border-zinc-700">
+                      <div key={index} className="bg-gray-200 dark:bg-zinc-800 text-gray-900 dark:text-white px-3 py-2 rounded-lg text-sm font-medium border border-gray-300 dark:border-zinc-700">
                         {pilot}
                       </div>
                     ))}
                     {booking.assignedPilots.filter(pilot => pilot && pilot !== "").length === 0 && (
-                      <div className="text-zinc-500 text-sm">No pilots assigned</div>
+                      <div className="text-gray-500 dark:text-zinc-500 text-sm">No pilots assigned</div>
                     )}
                   </div>
                 </div>
 
                 {/* Additional Notes */}
                 {editedBooking.notes && (
-                  <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
-                    <div className="text-xs text-zinc-500 mb-2">Notes</div>
-                    <div className="text-white text-sm leading-relaxed whitespace-pre-wrap break-words">{editedBooking.notes}</div>
+                  <div className="bg-gray-50 dark:bg-zinc-900/50 border border-gray-300 dark:border-zinc-800 rounded-xl p-4">
+                    <div className="text-xs text-gray-500 dark:text-zinc-500 mb-2">Notes</div>
+                    <div className="text-gray-900 dark:text-white text-sm leading-relaxed whitespace-pre-wrap break-words">{editedBooking.notes}</div>
                   </div>
                 )}
               </div>
@@ -870,7 +879,7 @@ export function BookingDetailsModal({
               <div className="space-y-4">
                 {/* Availability Error Banner */}
                 {availabilityError && role !== 'admin' && (
-                  <div className="p-4 rounded-lg bg-red-900/30 border-2 border-red-700 text-red-200">
+                  <div className="p-4 rounded-lg bg-red-50 dark:bg-red-900/30 border-2 border-red-300 dark:border-red-700 text-red-900 dark:text-red-200">
                     <p className="text-sm font-semibold mb-1">
                       ⚠️ Insufficient Availability
                     </p>
@@ -881,7 +890,7 @@ export function BookingDetailsModal({
                 )}
 
                 {availabilityError && role === 'admin' && (
-                  <div className="p-4 rounded-lg bg-orange-900/30 border-2 border-orange-700 text-orange-200">
+                  <div className="p-4 rounded-lg bg-orange-50 dark:bg-orange-900/30 border-2 border-orange-300 dark:border-orange-700 text-orange-900 dark:text-orange-200">
                     <p className="text-sm font-semibold mb-1">
                       ⚠️ Overbooking Warning
                     </p>
@@ -893,7 +902,7 @@ export function BookingDetailsModal({
 
                 {/* Customer Name */}
                 <div className="space-y-2">
-                  <Label className="text-white">Customer Name</Label>
+                  <Label className="text-gray-900 dark:text-white">Customer Name</Label>
                   <Input
                     value={editedBooking.customerName}
                     onChange={(e) => setEditedBooking({ ...editedBooking, customerName: e.target.value })}
@@ -903,7 +912,7 @@ export function BookingDetailsModal({
 
                 {/* Date */}
                 <div className="space-y-2">
-                  <Label className="text-white">Date</Label>
+                  <Label className="text-gray-900 dark:text-white">Date</Label>
                   <div className="relative">
                     <Input
                       type="date"
@@ -914,7 +923,7 @@ export function BookingDetailsModal({
                           date: e.target.value
                         });
                       }}
-                      className="pr-10 !h-10 !py-0 !text-sm flex items-center max-h-10 [&::-webkit-date-and-time-value]:!text-sm [&::-webkit-date-and-time-value]:leading-10"
+                      className="pr-10 !h-10 !py-0 !text-sm flex items-center max-h-10 [&::-webkit-date-and-time-value]:!text-sm [&::-webkit-date-and-time-value]:leading-10 dark:[color-scheme:dark] [color-scheme:light]"
                       style={{
                         WebkitAppearance: 'none',
                         MozAppearance: 'none',
@@ -924,13 +933,13 @@ export function BookingDetailsModal({
                       } as React.CSSProperties}
                       autoComplete="off"
                     />
-                    <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white pointer-events-none" />
+                    <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-900 dark:text-white pointer-events-none" />
                   </div>
                 </div>
 
                 {/* Time Slot */}
                 <div className="space-y-2">
-                  <Label className="text-white">Time Slot</Label>
+                  <Label className="text-gray-900 dark:text-white">Time Slot</Label>
                   <Select
                     value={editedBooking.timeIndex.toString()}
                     onValueChange={(value) => {
@@ -961,10 +970,10 @@ export function BookingDetailsModal({
                               <span className="flex-shrink-0">{slot}</span>
                               <span className={`text-xs px-2 py-0.5 rounded flex-shrink-0 ${
                                 availableCount < requiredPilots
-                                  ? 'bg-red-900/50 text-red-400'
+                                  ? 'bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-400'
                                   : availableCount <= requiredPilots + 1
-                                  ? 'bg-yellow-900/50 text-yellow-400'
-                                  : 'bg-green-900/50 text-green-400'
+                                  ? 'bg-yellow-100 dark:bg-yellow-900/50 text-yellow-700 dark:text-yellow-400'
+                                  : 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-400'
                               }`}>
                                 {availableCount} available
                               </span>
@@ -980,8 +989,8 @@ export function BookingDetailsModal({
                 {availableSlots < editedBooking.numberOfPeople && (
                   <div className={`px-4 py-3 rounded-lg ${
                     role === 'admin'
-                      ? 'bg-orange-900/30 border border-orange-800 text-orange-200'
-                      : 'bg-red-950 border border-red-700 text-red-200'
+                      ? 'bg-orange-50 dark:bg-orange-900/30 border border-orange-300 dark:border-orange-800 text-orange-900 dark:text-orange-200'
+                      : 'bg-red-50 dark:bg-red-950 border border-red-300 dark:border-red-700 text-red-900 dark:text-red-200'
                   }`}>
                     {role === 'admin' ? (
                       <>
@@ -1007,7 +1016,7 @@ export function BookingDetailsModal({
 
                 {/* Number of People */}
                 <div className="space-y-2">
-                  <Label className="text-white">Number of People</Label>
+                  <Label className="text-gray-900 dark:text-white">Number of People</Label>
                   <div className="overflow-x-auto">
                     <div className="flex gap-2 pb-2">
                       {Array.from({ length: 30 }, (_, i) => i + 1).map((num) => {
@@ -1029,10 +1038,10 @@ export function BookingDetailsModal({
                             disabled={isDisabled}
                             className={`flex-shrink-0 w-12 h-12 rounded-lg font-medium transition-colors ${
                               editedBooking.numberOfPeople === num
-                                ? "bg-white text-black"
+                                ? "bg-gray-900 dark:bg-white text-white dark:text-black"
                                 : isDisabled
-                                ? "bg-zinc-900 text-zinc-600 cursor-not-allowed"
-                                : "bg-zinc-800 text-white hover:bg-zinc-700"
+                                ? "bg-gray-200 dark:bg-zinc-900 text-gray-400 dark:text-zinc-600 cursor-not-allowed"
+                                : "bg-gray-100 dark:bg-zinc-800 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-zinc-700"
                             }`}
                           >
                             {num}
@@ -1045,7 +1054,7 @@ export function BookingDetailsModal({
 
                 {/* Meeting Point */}
                 <div className="space-y-2">
-                  <Label className="text-white">Meeting Point</Label>
+                  <Label className="text-gray-900 dark:text-white">Meeting Point</Label>
                   <Select
                     value={editedBooking.pickupLocation}
                     onValueChange={(value) => setEditedBooking({ ...editedBooking, pickupLocation: value })}
@@ -1054,17 +1063,17 @@ export function BookingDetailsModal({
                       <SelectValue placeholder="Select meeting point" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Meet at our base near the landing field in the centre">
-                        Meet at our base near the landing field in the centre
+                      <SelectItem value="HW">
+                        HW
                       </SelectItem>
-                      <SelectItem value="Train Station Interlaken Ost (Outside BIG coop supermarket)">
-                        Train Station Interlaken Ost (Outside BIG coop supermarket)
+                      <SelectItem value="OST">
+                        OST
                       </SelectItem>
-                      <SelectItem value="Mattenhof Resort (Free Parking)">
-                        Mattenhof Resort (Free Parking)
+                      <SelectItem value="mhof">
+                        mhof
                       </SelectItem>
-                      <SelectItem value="Other meeting point in or near Interlaken">
-                        Other meeting point in or near Interlaken
+                      <SelectItem value="other">
+                        (blank)
                       </SelectItem>
                     </SelectContent>
                   </Select>
@@ -1079,7 +1088,7 @@ export function BookingDetailsModal({
 
                 {/* Phone Number */}
                 <div className="space-y-2">
-                  <Label className="text-white">Phone Number</Label>
+                  <Label className="text-gray-900 dark:text-white">Phone Number</Label>
                   <Input
                     type="tel"
                     value={editedBooking.phoneNumber || ""}
@@ -1090,7 +1099,7 @@ export function BookingDetailsModal({
 
                 {/* Email */}
                 <div className="space-y-2">
-                  <Label className="text-white">Email</Label>
+                  <Label className="text-gray-900 dark:text-white">Email</Label>
                   <Input
                     type="email"
                     value={editedBooking.email || ""}
@@ -1104,21 +1113,21 @@ export function BookingDetailsModal({
                   <button
                     type="button"
                     onClick={() => setShowAdditionalOptions(!showAdditionalOptions)}
-                    className="flex items-center justify-between w-full text-white hover:text-zinc-300 transition-colors"
+                    className="flex items-center justify-between w-full text-gray-900 dark:text-white hover:text-gray-600 dark:hover:text-zinc-300 transition-colors"
                   >
                     <span className="text-sm font-medium">Additional Options</span>
                     {showAdditionalOptions ? (
-                      <ChevronUp className="w-4 h-4" />
+                      <ChevronUp className="w-4 h-4 text-gray-600 dark:text-zinc-400" />
                     ) : (
-                      <ChevronDown className="w-4 h-4" />
+                      <ChevronDown className="w-4 h-4 text-gray-600 dark:text-zinc-400" />
                     )}
                   </button>
 
                   {showAdditionalOptions && (
-                    <div className="space-y-4 pt-2 border-t border-zinc-800">
+                    <div className="space-y-4 pt-2 border-t border-gray-300 dark:border-zinc-800">
                       {/* Commission (Optional) */}
                       <div className="space-y-2">
-                        <Label className="text-white">
+                        <Label className="text-gray-900 dark:text-white">
                           Commission (per person)
                         </Label>
                         <Input
@@ -1133,13 +1142,13 @@ export function BookingDetailsModal({
 
                       {/* Commission Status */}
                       <div className="space-y-2">
-                        <Label className="text-white">
+                        <Label className="text-gray-900 dark:text-white">
                           Commission Status
                         </Label>
                         <select
                           value={editedBooking.commissionStatus || "unpaid"}
                           onChange={(e) => setEditedBooking({ ...editedBooking, commissionStatus: e.target.value as "paid" | "unpaid" })}
-                          className="flex h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-white ring-offset-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2"
+                          className="flex h-10 w-full rounded-md border border-gray-300 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-sm text-gray-900 dark:text-white ring-offset-white dark:ring-offset-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 dark:focus-visible:ring-white focus-visible:ring-offset-2"
                         >
                           <option value="unpaid">Unpaid</option>
                           <option value="paid">Paid</option>
@@ -1148,10 +1157,10 @@ export function BookingDetailsModal({
 
                       {/* Lady Pilots Required */}
                       <div className="space-y-2">
-                        <Label className="text-white">
+                        <Label className="text-gray-900 dark:text-white">
                           Lady Pilots Required
                           {availableFemalePilots > 0 && (
-                            <span className="text-xs text-zinc-400 ml-2">
+                            <span className="text-xs text-gray-600 dark:text-zinc-400 ml-2">
                               ({availableFemalePilots} available)
                             </span>
                           )}
@@ -1165,8 +1174,8 @@ export function BookingDetailsModal({
                                 onClick={() => setEditedBooking({ ...editedBooking, femalePilotsRequired: num })}
                                 className={`flex-shrink-0 w-12 h-12 rounded-lg font-medium transition-colors ${
                                   (editedBooking.femalePilotsRequired ?? 0) === num
-                                    ? "bg-white text-black"
-                                    : "bg-zinc-800 text-white hover:bg-zinc-700"
+                                    ? "bg-gray-900 dark:bg-white text-white dark:text-black"
+                                    : "bg-gray-100 dark:bg-zinc-800 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-zinc-700"
                                 }`}
                               >
                                 {num}
@@ -1178,7 +1187,7 @@ export function BookingDetailsModal({
 
                       {/* Flight Type */}
                       <div className="space-y-2">
-                        <Label className="text-white">
+                        <Label className="text-gray-900 dark:text-white">
                           Flight Type
                         </Label>
                         <div className="flex gap-2">
@@ -1193,8 +1202,8 @@ export function BookingDetailsModal({
                               onClick={() => setEditedBooking({ ...editedBooking, flightType: type })}
                               className={`flex-1 px-3 py-3 rounded-lg font-medium transition-colors ${
                                 (editedBooking.flightType || "sensational") === type
-                                  ? "bg-white text-black"
-                                  : "bg-zinc-800 text-white hover:bg-zinc-700"
+                                  ? "bg-gray-900 dark:bg-white text-white dark:text-black"
+                                  : "bg-gray-100 dark:bg-zinc-800 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-zinc-700"
                               }`}
                             >
                               <div className="capitalize text-sm">{type}</div>
@@ -1206,7 +1215,7 @@ export function BookingDetailsModal({
 
                       {/* Additional Notes (Optional) */}
                       <div className="space-y-2">
-                        <Label className="text-white">
+                        <Label className="text-gray-900 dark:text-white">
                           Additional Notes
                         </Label>
                         <Textarea
@@ -1228,7 +1237,7 @@ export function BookingDetailsModal({
                   {canEditBooking(booking?.createdBy) && (
                     <Button
                       onClick={handleEdit}
-                      className="flex-1 bg-white text-black hover:bg-zinc-200"
+                      className="flex-1 bg-gray-900 dark:bg-white text-white dark:text-black hover:bg-gray-700 dark:hover:bg-zinc-200"
                     >
                       Edit
                     </Button>
@@ -1237,7 +1246,7 @@ export function BookingDetailsModal({
                     <Button
                       onClick={handleDelete}
                       variant="outline"
-                      className="flex-1 border-red-700 text-red-500 hover:bg-red-950 hover:text-red-400"
+                      className="flex-1 border-red-600 dark:border-red-700 text-red-600 dark:text-red-500 hover:bg-red-50 dark:hover:bg-red-950 hover:text-red-700 dark:hover:text-red-400"
                     >
                       Delete
                     </Button>
@@ -1245,7 +1254,7 @@ export function BookingDetailsModal({
                   <Button
                     onClick={() => handleOpenChange(false)}
                     variant="outline"
-                    className="flex-1 border-zinc-700 text-white hover:bg-zinc-800"
+                    className="flex-1 border-gray-300 dark:border-zinc-700 text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-800"
                   >
                     Close
                   </Button>
@@ -1255,14 +1264,14 @@ export function BookingDetailsModal({
                   <Button
                     onClick={handleSave}
                     disabled={role !== 'admin' && availableSlots < editedBooking.numberOfPeople}
-                    className="flex-1 bg-white text-black hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
+                    className="flex-1 bg-gray-900 dark:bg-white text-white dark:text-black hover:bg-gray-700 dark:hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-gray-900 dark:disabled:hover:bg-white"
                   >
                     Save
                   </Button>
                   <Button
                     onClick={handleCancel}
                     variant="outline"
-                    className="flex-1 border-zinc-700 text-white hover:bg-zinc-800"
+                    className="flex-1 border-gray-300 dark:border-zinc-700 text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-800"
                   >
                     Cancel
                   </Button>
@@ -1274,7 +1283,7 @@ export function BookingDetailsModal({
           {role !== 'agency' && role !== 'driver' && (
             <TabsContent value="payment" className="space-y-4 max-h-[60vh] overflow-y-auto">
             {sortedPilotPayments.length === 0 ? (
-              <div className="text-center py-12 text-zinc-500">
+              <div className="text-center py-12 text-gray-500 dark:text-zinc-500">
                 <p>No pilots assigned to this booking</p>
               </div>
             ) : (
@@ -1285,24 +1294,24 @@ export function BookingDetailsModal({
                     key={payment.pilotName}
                     className={`border rounded-lg p-4 space-y-4 ${
                       isCurrentUser
-                        ? "border-blue-500 bg-blue-950/30"
-                        : "border-zinc-700 bg-zinc-900/50"
+                        ? "border-blue-500 bg-blue-50 dark:bg-blue-950/30"
+                        : "border-gray-300 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-900/50"
                     }`}
                   >
                     {/* Pilot Name Header */}
-                    <div className="flex items-center justify-between border-b border-zinc-700 pb-2">
-                      <h3 className="text-white font-medium">
+                    <div className="flex items-center justify-between border-b border-gray-300 dark:border-zinc-700 pb-2">
+                      <h3 className="text-gray-900 dark:text-white font-medium">
                         {payment.pilotName}
                         {isCurrentUser && (
                           <span className="ml-2 text-xs bg-blue-500 text-white px-2 py-0.5 rounded">You</span>
                         )}
                       </h3>
-                      <span className="text-xs text-zinc-500">Pilot #{index + 1}</span>
+                      <span className="text-xs text-gray-500 dark:text-zinc-500">Pilot #{index + 1}</span>
                     </div>
 
                     {/* Amount Input */}
                     <div className="space-y-2">
-                      <Label className="text-white">Amount</Label>
+                      <Label className="text-gray-900 dark:text-white">Amount</Label>
                       <Input
                         type="text"
                         inputMode="numeric"
@@ -1321,15 +1330,15 @@ export function BookingDetailsModal({
 
                     {/* Payment Method Buttons */}
                     <div className="space-y-2">
-                      <Label className="text-white">Payment Method</Label>
+                      <Label className="text-gray-900 dark:text-white">Payment Method</Label>
                       <div className="grid grid-cols-3 gap-2">
                         <button
                           type="button"
                           onClick={() => handlePaymentUpdate(payment.pilotName, 'paymentMethod', 'direkt')}
                           className={`px-4 py-3 rounded-lg font-medium transition-colors ${
                             payment.paymentMethod === 'direkt'
-                              ? "bg-white text-black"
-                              : "bg-zinc-800 text-white hover:bg-zinc-700"
+                              ? "bg-gray-900 dark:bg-white text-white dark:text-black"
+                              : "bg-gray-100 dark:bg-zinc-800 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-zinc-700"
                           }`}
                         >
                           Direkt
@@ -1339,8 +1348,8 @@ export function BookingDetailsModal({
                           onClick={() => handlePaymentUpdate(payment.pilotName, 'paymentMethod', 'ticket')}
                           className={`px-4 py-3 rounded-lg font-medium transition-colors ${
                             payment.paymentMethod === 'ticket'
-                              ? "bg-white text-black"
-                              : "bg-zinc-800 text-white hover:bg-zinc-700"
+                              ? "bg-gray-900 dark:bg-white text-white dark:text-black"
+                              : "bg-gray-100 dark:bg-zinc-800 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-zinc-700"
                           }`}
                         >
                           Ticket
@@ -1350,8 +1359,8 @@ export function BookingDetailsModal({
                           onClick={() => handlePaymentUpdate(payment.pilotName, 'paymentMethod', 'ccp')}
                           className={`px-4 py-3 rounded-lg font-medium transition-colors ${
                             payment.paymentMethod === 'ccp'
-                              ? "bg-white text-black"
-                              : "bg-zinc-800 text-white hover:bg-zinc-700"
+                              ? "bg-gray-900 dark:bg-white text-white dark:text-black"
+                              : "bg-gray-100 dark:bg-zinc-800 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-zinc-700"
                           }`}
                         >
                           CCP
@@ -1362,7 +1371,7 @@ export function BookingDetailsModal({
                     {/* Conditional Image Upload for Ticket/CCP */}
                     {(payment.paymentMethod === 'ticket' || payment.paymentMethod === 'ccp') && (
                       <div className="space-y-3">
-                        <Label className="text-white">Receipts/Tickets</Label>
+                        <Label className="text-gray-900 dark:text-white">Receipts/Tickets</Label>
 
                         {/* Upload Buttons */}
                         <div className="flex gap-2">
@@ -1384,8 +1393,8 @@ export function BookingDetailsModal({
                             />
                             <div className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-colors ${
                               uploadingReceipt === payment.pilotName
-                                ? 'bg-zinc-800 text-white cursor-not-allowed'
-                                : 'bg-zinc-800 text-white hover:bg-zinc-700 cursor-pointer'
+                                ? 'bg-gray-200 dark:bg-zinc-800 text-gray-900 dark:text-white cursor-not-allowed'
+                                : 'bg-gray-100 dark:bg-zinc-800 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-zinc-700 cursor-pointer'
                             }`}>
                               {uploadingReceipt === payment.pilotName ? (
                                 <>
@@ -1418,8 +1427,8 @@ export function BookingDetailsModal({
                             />
                             <div className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-colors ${
                               uploadingReceipt === payment.pilotName
-                                ? 'bg-zinc-800 text-white cursor-not-allowed'
-                                : 'bg-zinc-800 text-white hover:bg-zinc-700 cursor-pointer'
+                                ? 'bg-gray-200 dark:bg-zinc-800 text-gray-900 dark:text-white cursor-not-allowed'
+                                : 'bg-gray-100 dark:bg-zinc-800 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-zinc-700 cursor-pointer'
                             }`}>
                               {uploadingReceipt === payment.pilotName ? (
                                 <>
@@ -1442,9 +1451,9 @@ export function BookingDetailsModal({
                             {payment.receiptFiles.map((file, fileIndex) => (
                               <div
                                 key={fileIndex}
-                                className="flex items-center justify-between bg-zinc-800 rounded-lg p-3 border border-zinc-700"
+                                className="flex items-center justify-between bg-gray-100 dark:bg-zinc-800 rounded-lg p-3 border border-gray-300 dark:border-zinc-700"
                               >
-                                <span className="text-white text-sm truncate flex-1 mr-3">
+                                <span className="text-gray-900 dark:text-white text-sm truncate flex-1 mr-3">
                                   {file.filename}
                                 </span>
                                 <div className="flex gap-2">
@@ -1478,11 +1487,11 @@ export function BookingDetailsModal({
                 })}
 
                 {/* Save Button */}
-                <div className="pt-4 sticky bottom-0 bg-zinc-950 pb-2">
+                <div className="pt-4 sticky bottom-0 bg-white dark:bg-zinc-950 pb-2">
                   <Button
                     onClick={handleSavePayments}
                     disabled={isSavingPayments}
-                    className="w-full bg-white text-black hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full bg-gray-900 dark:bg-white text-white dark:text-black hover:bg-gray-700 dark:hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isSavingPayments ? (
                       <>
@@ -1504,9 +1513,9 @@ export function BookingDetailsModal({
       {/* Image Preview Modal */}
       {previewImage && (
         <Dialog open={!!previewImage} onOpenChange={() => setPreviewImage(null)}>
-          <DialogContent className="max-w-[90vw] max-h-[90vh]">
+          <DialogContent className="max-w-[90vw] max-h-[90vh] bg-white dark:bg-zinc-950 border-gray-300 dark:border-zinc-800 text-gray-900 dark:text-white">
             <DialogHeader>
-              <DialogTitle>Receipt Preview</DialogTitle>
+              <DialogTitle className="text-gray-900 dark:text-white">Receipt Preview</DialogTitle>
             </DialogHeader>
             <div className="flex items-center justify-center p-4">
               <img
@@ -1519,7 +1528,7 @@ export function BookingDetailsModal({
               <Button
                 onClick={() => setPreviewImage(null)}
                 variant="outline"
-                className="border-zinc-700 text-white hover:bg-zinc-800"
+                className="border-gray-300 dark:border-zinc-700 text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-800"
               >
                 Close
               </Button>

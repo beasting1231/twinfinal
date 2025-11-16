@@ -96,7 +96,7 @@ export function DriverVehicleContextMenu({
       {/* Context Menu */}
       <div
         ref={menuRef}
-        className={`fixed z-50 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl py-1 min-w-[150px] transition-opacity duration-75 ${
+        className={`fixed z-50 bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-700 rounded-lg shadow-xl py-1 min-w-[150px] transition-opacity duration-75 ${
           isPositioned ? 'opacity-100' : 'opacity-0'
         }`}
         style={{ left: position.x, top: position.y }}
@@ -108,7 +108,7 @@ export function DriverVehicleContextMenu({
           onDelete();
           onClose();
         }}
-        className="w-full px-4 py-2 text-left text-sm text-white hover:bg-zinc-800 transition-colors"
+        className="w-full px-4 py-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
       >
         Delete
       </button>
@@ -117,7 +117,7 @@ export function DriverVehicleContextMenu({
           onFill();
           onClose();
         }}
-        className="w-full px-4 py-2 text-left text-sm text-white hover:bg-zinc-800 transition-colors"
+        className="w-full px-4 py-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
       >
         Fill
       </button>
@@ -126,7 +126,7 @@ export function DriverVehicleContextMenu({
           onClearColumn();
           onClose();
         }}
-        className="w-full px-4 py-2 text-left text-sm text-white hover:bg-zinc-800 transition-colors"
+        className="w-full px-4 py-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
       >
         Clear column
       </button>
@@ -136,7 +136,7 @@ export function DriverVehicleContextMenu({
             onAddSecondDriver();
             onClose();
           }}
-          className="w-full px-4 py-2 text-left text-sm text-white hover:bg-zinc-800 transition-colors"
+          className="w-full px-4 py-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
         >
           Add second driver
         </button>
@@ -147,7 +147,7 @@ export function DriverVehicleContextMenu({
             onDeleteSecondDriver();
             onClose();
           }}
-          className="w-full px-4 py-2 text-left text-sm text-white hover:bg-zinc-800 transition-colors"
+          className="w-full px-4 py-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
         >
           Delete second driver
         </button>

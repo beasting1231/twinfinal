@@ -4,6 +4,7 @@ import { updateProfile } from "firebase/auth";
 import { db } from "../../firebase/config";
 import { useAuth } from "../../contexts/AuthContext";
 import { useRole } from "../../hooks/useRole";
+import { useTheme } from "../../contexts/ThemeContext";
 import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
 import { Button } from "../ui/button";
@@ -12,6 +13,7 @@ import type { UserProfile } from "../../types/index";
 export function Account() {
   const { currentUser } = useAuth();
   const { role } = useRole();
+  const { theme, setTheme } = useTheme();
   const [displayName, setDisplayName] = useState("");
   const [femalePilot, setFemalePilot] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -130,7 +132,7 @@ export function Account() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-zinc-400">Loading...</div>
+        <div className="text-gray-600 dark:text-zinc-400">Loading...</div>
       </div>
     );
   }
@@ -156,8 +158,8 @@ export function Account() {
 
   return (
     <div className="max-w-2xl mx-auto p-6">
-      <div className="bg-zinc-900 rounded-lg border border-zinc-800 p-8">
-        <h1 className="text-3xl font-bold text-white mb-2">Account Settings</h1>
+      <div className="bg-white dark:bg-zinc-900 rounded-lg border border-gray-200 dark:border-zinc-800 p-8">
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Account Settings</h1>
 
         {/* Role Badge */}
         <div className="mb-6">
@@ -167,9 +169,28 @@ export function Account() {
         </div>
 
         <div className="space-y-6">
+          {/* Theme Toggle Section */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-zinc-950 rounded-lg border border-gray-200 dark:border-zinc-800">
+              <div className="space-y-1">
+                <label htmlFor="theme-toggle" className="text-sm font-medium text-gray-900 dark:text-zinc-200 cursor-pointer">
+                  {theme === "light" ? "Light Theme" : "Dark Theme"}
+                </label>
+                <p className="text-xs text-gray-600 dark:text-zinc-500">
+                  Switch between light and dark appearance
+                </p>
+              </div>
+              <Switch
+                id="theme-toggle"
+                checked={theme === "light"}
+                onCheckedChange={(checked) => setTheme(checked ? "light" : "dark")}
+              />
+            </div>
+          </div>
+
           {/* Username Section */}
           <div className="space-y-2">
-            <label htmlFor="username" className="text-sm font-medium text-zinc-200">
+            <label htmlFor="username" className="text-sm font-medium text-gray-700 dark:text-zinc-200">
               Username
             </label>
             <Input
@@ -178,20 +199,20 @@ export function Account() {
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder="Enter your username"
-              className="text-white"
+              className="text-gray-900 dark:text-white"
             />
-            <p className="text-xs text-zinc-500">This is the name that will be displayed throughout the app.</p>
+            <p className="text-xs text-gray-600 dark:text-zinc-500">This is the name that will be displayed throughout the app.</p>
           </div>
 
           {/* Female Pilot Toggle Section - Only show for pilots and admin */}
           {role !== "agency" && role !== "driver" && (
             <div className="space-y-2">
-              <div className="flex items-center justify-between p-4 bg-zinc-950 rounded-lg border border-zinc-800">
+              <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-zinc-950 rounded-lg border border-gray-200 dark:border-zinc-800">
                 <div className="space-y-1">
-                  <label htmlFor="female-pilot" className="text-sm font-medium text-zinc-200 cursor-pointer">
+                  <label htmlFor="female-pilot" className="text-sm font-medium text-gray-900 dark:text-zinc-200 cursor-pointer">
                     Female Pilot
                   </label>
-                  <p className="text-xs text-zinc-500">
+                  <p className="text-xs text-gray-600 dark:text-zinc-500">
                     Enable this if you identify as a female pilot
                   </p>
                 </div>
@@ -206,7 +227,7 @@ export function Account() {
 
           {/* Email (Read-only) */}
           <div className="space-y-2">
-            <label htmlFor="email" className="text-sm font-medium text-zinc-200">
+            <label htmlFor="email" className="text-sm font-medium text-gray-700 dark:text-zinc-200">
               Email
             </label>
             <Input
@@ -214,9 +235,9 @@ export function Account() {
               type="email"
               value={currentUser?.email || ""}
               disabled
-              className="text-zinc-500 cursor-not-allowed"
+              className="text-gray-500 dark:text-zinc-500 cursor-not-allowed"
             />
-            <p className="text-xs text-zinc-500">Your email cannot be changed.</p>
+            <p className="text-xs text-gray-600 dark:text-zinc-500">Your email cannot be changed.</p>
           </div>
 
           {/* Save Button */}
@@ -224,7 +245,7 @@ export function Account() {
             <Button
               onClick={handleSave}
               disabled={saving}
-              className="w-full bg-white text-black hover:bg-zinc-200"
+              className="w-full bg-gray-900 dark:bg-white text-white dark:text-black hover:bg-gray-800 dark:hover:bg-zinc-200"
             >
               {saving ? "Saving..." : "Save Changes"}
             </Button>

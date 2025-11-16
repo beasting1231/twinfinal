@@ -53,6 +53,13 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
   // Get all pilots from system (for overbooked assignments)
   const { allPilots: systemPilots } = useAllPilots();
 
+  // Detect if user is on mobile device
+  const isMobile = useMemo(() => {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+           ('ontouchstart' in window) ||
+           (navigator.maxTouchPoints > 0);
+  }, []);
+
   // Calculate max columns needed (for overbooking support)
   const maxColumnsNeeded = useMemo(() => {
     let maxCols = pilots.length;
@@ -124,6 +131,17 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
     // Available spots = available pilots - spots already booked
     return Math.max(0, availablePilotsCount - spotsBooked);
   };
+
+  // Move mode state (admin only)
+  const [moveMode, setMoveMode] = useState<{
+    isActive: boolean;
+    booking: Booking | null;
+  }>({ isActive: false, booking: null });
+
+  const [requestMoveMode, setRequestMoveMode] = useState<{
+    isActive: boolean;
+    request: BookingRequest | null;
+  }>({ isActive: false, request: null });
 
   // Booking request context menu state
   const [bookingRequestContextMenu, setBookingRequestContextMenu] = useState<{
@@ -241,7 +259,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
     return () => unsubscribe();
   }, []);
 
-  // Configure drag sensors for better interaction
+  // Configure drag sensors for better interaction - disable on mobile
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -249,6 +267,9 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
       },
     })
   );
+
+  // Disable drag-and-drop on mobile (use long press move mode instead)
+  const isDragEnabled = !isMobile && role === 'admin';
 
   // Helper function to check if there's enough space for a booking at a given time
   const hasEnoughSpaceAtTime = useCallback((timeIndex: number, _startPilotIndex: number, requiredPax: number): boolean => {
@@ -334,6 +355,115 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
     // Only driver and admin can manage drivers
     return role === "driver" || role === "admin";
   }, [role]);
+
+  // Move mode functions (admin only)
+  const enterMoveMode = (booking: Booking) => {
+    if (role !== 'admin') return;
+    // Close all context menus when entering move mode
+    setContextMenu(null);
+    setOverbookedContextMenu(null);
+    setAvailabilityContextMenu(null);
+    setBookingRequestContextMenu(null);
+    setMoveMode({ isActive: true, booking });
+  };
+
+  const exitMoveMode = () => {
+    setMoveMode({ isActive: false, booking: null });
+  };
+
+  const enterRequestMoveMode = (request: BookingRequest) => {
+    if (role !== 'admin') return;
+    // Close all context menus when entering move mode
+    setBookingRequestContextMenu(null);
+    setRequestMoveMode({ isActive: true, request });
+  };
+
+  const exitRequestMoveMode = () => {
+    setRequestMoveMode({ isActive: false, request: null });
+  };
+
+  // Handle move mode destination - time slot click
+  const handleMoveModeDestination = async (targetTimeIndex: number) => {
+    // Handle booking request move mode
+    if (requestMoveMode.isActive && requestMoveMode.request && onAddBooking) {
+      const request = requestMoveMode.request;
+      const targetDate = format(selectedDate, 'yyyy-MM-dd');
+      const targetTimeSlot = timeSlots[targetTimeIndex];
+
+      // Show confirmation dialog
+      const confirmMessage = `Are you sure you want to create a booking for ${request.customerName} (${request.numberOfPeople} pax) at ${targetTimeSlot}?`;
+      if (!confirm(confirmMessage)) {
+        return;
+      }
+
+      try {
+        // Create booking from request
+        await onAddBooking({
+          date: targetDate,
+          pilotIndex: 0,
+          timeIndex: targetTimeIndex,
+          customerName: request.customerName,
+          numberOfPeople: request.numberOfPeople,
+          pickupLocation: "",
+          bookingSource: "twin",
+          phoneNumber: request.phone || "",
+          email: request.email,
+          notes: request.notes || "",
+          flightType: request.flightType,
+          assignedPilots: [],
+          bookingStatus: "pending",
+          span: request.numberOfPeople,
+        });
+
+        // Mark request as approved
+        if (request.id) {
+          await updateDoc(doc(db, "bookingRequests", request.id), {
+            status: "approved",
+          });
+        }
+
+        // Exit move mode
+        exitRequestMoveMode();
+      } catch (error) {
+        console.error('Error creating booking from request:', error);
+        alert('Failed to create booking. Please try again.');
+      }
+    }
+
+    // Handle booking move mode
+    if (moveMode.isActive && moveMode.booking && onUpdateBooking) {
+      const booking = moveMode.booking;
+      const targetDate = format(selectedDate, 'yyyy-MM-dd');
+      const targetTimeSlot = timeSlots[targetTimeIndex];
+
+      // Don't update if dropping on the same time
+      if (booking.timeIndex === targetTimeIndex && booking.date === targetDate) {
+        exitMoveMode();
+        return;
+      }
+
+      // Show confirmation dialog
+      const confirmMessage = `Are you sure you want to move this booking to ${targetTimeSlot}?`;
+      if (!confirm(confirmMessage)) {
+        return;
+      }
+
+      try {
+        // Move the booking to new time and clear pilots
+        await onUpdateBooking(booking.id!, {
+          timeIndex: targetTimeIndex,
+          date: targetDate,
+          assignedPilots: [],
+        });
+
+        // Exit move mode
+        exitMoveMode();
+      } catch (error) {
+        console.error('Error moving booking:', error);
+        alert('Failed to move booking. Please try again.');
+      }
+    }
+  };
 
   const handleBookedCellClick = useCallback((booking: Booking) => {
     if (!canViewBooking(booking)) {
@@ -863,6 +993,9 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
 
   // Handle drag start - track what's being dragged for validation
   const handleDragStart = (event: DragStartEvent) => {
+    // Disable drag on mobile
+    if (!isDragEnabled) return;
+
     const { active } = event;
 
     // Check if dragging a booking or a booking request
@@ -883,6 +1016,14 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
 
   // Handle drag end
   const handleDragEnd = async (event: DragEndEvent) => {
+    // Disable drag on mobile
+    if (!isDragEnabled) {
+      // Clear drag state
+      setDraggedBooking(null);
+      setDraggedRequest(null);
+      return;
+    }
+
     const { active, over } = event;
 
     // Clear drag state
@@ -1013,16 +1154,16 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
   // Show skeleton loader while loading
   if (loading) {
     return (
-      <div className="flex-1 overflow-auto p-4 bg-zinc-950">
+      <div className="flex-1 overflow-auto p-4 bg-gray-50 dark:bg-zinc-950">
         <div className="inline-block">
           <div className="grid gap-2" style={{ gridTemplateColumns: `80px repeat(5, 220px) 48px 98px 98px` }}>
             {/* Header Row Skeleton */}
             <div className="h-7" />
-            <div className="h-7 bg-zinc-900 rounded-lg animate-pulse" />
-            <div className="h-7 bg-zinc-900 rounded-lg animate-pulse" />
-            <div className="h-7 bg-zinc-900 rounded-lg animate-pulse" />
-            <div className="h-7 bg-zinc-900 rounded-lg animate-pulse" />
-            <div className="h-7 bg-zinc-900 rounded-lg animate-pulse" />
+            <div className="h-7 bg-gray-200 dark:bg-zinc-900 rounded-lg animate-pulse" />
+            <div className="h-7 bg-gray-200 dark:bg-zinc-900 rounded-lg animate-pulse" />
+            <div className="h-7 bg-gray-200 dark:bg-zinc-900 rounded-lg animate-pulse" />
+            <div className="h-7 bg-gray-200 dark:bg-zinc-900 rounded-lg animate-pulse" />
+            <div className="h-7 bg-gray-200 dark:bg-zinc-900 rounded-lg animate-pulse" />
             {/* Spacer between bookings and drivers */}
             <div className="h-7 w-full" />
             {/* Driver headers */}
@@ -1033,18 +1174,18 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
             {timeSlots.map((_timeSlot, index) => (
               <div key={index} className="contents">
                 {/* Time label skeleton */}
-                <div className="h-14 bg-zinc-900 rounded-lg animate-pulse" />
+                <div className="h-14 bg-gray-200 dark:bg-zinc-900 rounded-lg animate-pulse" />
                 {/* Skeleton cells */}
-                <div className="h-14 bg-zinc-800 rounded-lg animate-pulse" />
-                <div className="h-14 bg-zinc-800 rounded-lg animate-pulse" />
-                <div className="h-14 bg-zinc-800 rounded-lg animate-pulse" />
-                <div className="h-14 bg-zinc-800 rounded-lg animate-pulse" />
-                <div className="h-14 bg-zinc-800 rounded-lg animate-pulse" />
+                <div className="h-14 bg-gray-100 dark:bg-zinc-800 rounded-lg animate-pulse" />
+                <div className="h-14 bg-gray-100 dark:bg-zinc-800 rounded-lg animate-pulse" />
+                <div className="h-14 bg-gray-100 dark:bg-zinc-800 rounded-lg animate-pulse" />
+                <div className="h-14 bg-gray-100 dark:bg-zinc-800 rounded-lg animate-pulse" />
+                <div className="h-14 bg-gray-100 dark:bg-zinc-800 rounded-lg animate-pulse" />
                 {/* Spacer */}
                 <div className="h-14 w-full" />
                 {/* Driver cells */}
-                <div className="h-14 bg-zinc-800 rounded-lg animate-pulse" />
-                <div className="h-14 bg-zinc-800 rounded-lg animate-pulse" />
+                <div className="h-14 bg-gray-100 dark:bg-zinc-800 rounded-lg animate-pulse" />
+                <div className="h-14 bg-gray-100 dark:bg-zinc-800 rounded-lg animate-pulse" />
               </div>
             ))}
           </div>
@@ -1063,7 +1204,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
     >
       <div
         ref={containerRef}
-        className="flex-1 overflow-auto p-4 bg-zinc-950"
+        className="flex-1 overflow-auto p-4 bg-gray-50 dark:bg-zinc-950"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -1082,9 +1223,9 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
               return (
                 <div
                   key={pilot.uid}
-                  className={`h-7 flex items-center justify-center ${pilot.femalePilot ? 'bg-red-600/80' : 'bg-zinc-900'} rounded-lg font-medium text-sm gap-2`}
+                  className={`h-7 flex items-center justify-center ${pilot.femalePilot ? 'bg-red-600/80 text-white' : 'bg-gray-200 dark:bg-zinc-900 text-gray-900 dark:text-white'} rounded-lg font-medium text-sm gap-2`}
                 >
-                  <span className={pilot.femalePilot ? 'text-white' : 'text-zinc-500'}>{index + 1}</span>
+                  <span className={pilot.femalePilot ? 'text-white' : 'text-gray-600 dark:text-zinc-500'}>{index + 1}</span>
                   <span>{pilot.displayName}</span>
                 </div>
               );
@@ -1104,12 +1245,12 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
           {/* Spacer between bookings and drivers */}
           <div className="h-7 w-full" />
           {/* Driver Header */}
-          <div className="h-7 flex items-center justify-center bg-yellow-400/80 rounded-lg font-medium text-sm text-zinc-900">
+          <div className="h-7 flex items-center justify-center bg-yellow-400/80 rounded-lg font-medium text-sm text-gray-900 dark:text-zinc-900">
             Driver
           </div>
           {/* Second Driver Header */}
           {showSecondDriverColumn && (
-            <div className="h-7 flex items-center justify-center bg-yellow-400/80 rounded-lg font-medium text-sm text-zinc-900">
+            <div className="h-7 flex items-center justify-center bg-yellow-400/80 rounded-lg font-medium text-sm text-gray-900 dark:text-zinc-900">
               Driver 2
             </div>
           )}
@@ -1240,8 +1381,9 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
               // Time Slot Label
               <div
                 key={`time-${timeIndex}`}
-                className={`h-14 flex items-center justify-center bg-zinc-900 rounded-lg font-medium text-sm ${role === 'admin' ? 'cursor-context-menu' : ''}`}
+                className={`h-14 flex items-center justify-center bg-gray-200 dark:bg-zinc-900 text-gray-900 dark:text-white rounded-lg font-medium text-sm ${role === 'admin' ? 'cursor-context-menu' : ''} ${moveMode.isActive || requestMoveMode.isActive ? 'cursor-pointer hover:bg-blue-200 dark:hover:bg-blue-900/50' : ''}`}
                 onContextMenu={role === 'admin' ? handleTimeSlotContextMenu(timeIndex, timeSlot) : undefined}
+                onClick={moveMode.isActive || requestMoveMode.isActive ? () => handleMoveModeDestination(timeIndex) : undefined}
               >
                 {timeSlot}
               </div>,
@@ -1307,7 +1449,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                         onPilotNameClick={role === "pilot" ? handlePilotNameClick(cell.booking, timeSlot) : undefined}
                         currentUserDisplayName={currentUserDisplayName}
                         bookingId={cell.booking.id}
-                        canDrag={role === 'admin'}
+                        canDrag={isDragEnabled}
                         overbookedCount={overbookedCount}
                         onOverbookedClick={role === 'admin' ? (slotIndex: number, position: { x: number; y: number }) => {
                           setOverbookedContextMenu({
@@ -1318,6 +1460,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                             timeSlot
                           });
                         } : undefined}
+                        onEnterMoveMode={role === 'admin' ? enterMoveMode : undefined}
+                        isInMoveMode={moveMode.isActive && moveMode.booking?.id === cell.booking.id}
                       />
                     </div>
                   );
@@ -1328,32 +1472,21 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                   const currentUserPilotIndex = currentUserPilot ? pilots.findIndex(p => p.uid === currentUserPilot.uid) : -1;
                   const isCurrentUserAvailableAtThisTime = currentUserPilot && isPilotAvailableForTimeSlot(currentUserPilot.uid, timeSlot);
 
-                  // Left-click on available cell always opens new booking modal
+                  // Left-click on available cell - check if in move mode first
                   const handleAvailableLeftClick = () => {
+                    // If in move mode, handle destination click
+                    if (moveMode.isActive || requestMoveMode.isActive) {
+                      handleMoveModeDestination(timeIndex);
+                      return;
+                    }
+                    // Otherwise, open new booking modal
                     handleAvailableCellClick(cell.pilotIndex ?? 0, timeIndex, timeSlot);
                   };
 
                   // Determine what happens on left-click of "no pilot" cell
-                  const handleNoPilotLeftClick = role === "admin" ? async () => {
-                    // Directly sign in the pilot without showing context menu
-                    const pilot = cell.pilot;
-                    if (!pilot) return;
-
-                    try {
-                      const { addDoc, collection } = await import("firebase/firestore");
-                      const { db } = await import("../firebase/config");
-                      const { format } = await import("date-fns");
-
-                      await addDoc(collection(db, "availability"), {
-                        userId: pilot.uid,
-                        date: format(selectedDate, "yyyy-MM-dd"),
-                        timeSlot: timeSlot,
-                      });
-
-                      console.log("Signed in successfully");
-                    } catch (error) {
-                      console.error("Error signing in:", error);
-                    }
+                  // Only handle clicks when in move mode
+                  const handleNoPilotLeftClick = (role === "admin" && (moveMode.isActive || requestMoveMode.isActive)) ? async () => {
+                    handleMoveModeDestination(timeIndex);
                   } : undefined;
 
                   return (
@@ -1396,6 +1529,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                             ? hasEnoughSpaceAtTime(timeIndex, cell.pilotIndex ?? 0, draggedBooking ? (draggedBooking.numberOfPeople || draggedBooking.span || 1) : draggedRequest!.numberOfPeople)
                             : true
                         }
+                        isMoveModeActive={moveMode.isActive || requestMoveMode.isActive}
                       />
                     </div>
                   );
@@ -1465,17 +1599,17 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
       {/* Booking Requests Inbox - Only show to admins */}
       {role === 'admin' && (
       <div
-        className="max-w-lg bg-zinc-900 rounded-lg border border-zinc-800"
+        className="max-w-lg bg-white dark:bg-zinc-900 rounded-lg border border-gray-300 dark:border-zinc-800"
         style={{
           marginTop: `${24 + (gridHeight * (scale - 1))}px`
         }}
       >
           <Tabs defaultValue="requests" className="flex-1 flex flex-col">
-            <TabsList className="grid w-full grid-cols-2 bg-zinc-800 border-b border-zinc-700 rounded-t-lg">
-              <TabsTrigger value="requests" className="data-[state=active]:bg-zinc-900">
+            <TabsList className="grid w-full grid-cols-2 bg-gray-100 dark:bg-zinc-800 border-b border-gray-300 dark:border-zinc-700 rounded-t-lg">
+              <TabsTrigger value="requests" className="data-[state=active]:bg-white dark:data-[state=active]:bg-zinc-900">
                 Booking Requests ({pendingRequests.length})
               </TabsTrigger>
-              <TabsTrigger value="waitlist" className="data-[state=active]:bg-zinc-900">
+              <TabsTrigger value="waitlist" className="data-[state=active]:bg-white dark:data-[state=active]:bg-zinc-900">
                 Waiting List ({waitlistRequests.length})
               </TabsTrigger>
             </TabsList>
@@ -1483,7 +1617,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
             <TabsContent value="requests" className="p-4 mt-0">
               {pendingRequests.length === 0 ? (
                 <div className="flex items-center justify-center h-32">
-                  <p className="text-zinc-500">No booking requests</p>
+                  <p className="text-gray-500 dark:text-zinc-500">No booking requests</p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -1491,7 +1625,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                     <BookingRequestItem
                       key={request.id}
                       request={request}
-                      canDrag={role === 'admin'}
+                      canDrag={isDragEnabled}
                       availableSpots={getAvailableSpotsForRequest(request)}
                       onContextMenu={(req, position) => {
                         setBookingRequestContextMenu({
@@ -1507,6 +1641,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                           onNavigateToDate(date);
                         }
                       }}
+                      onEnterMoveMode={role === 'admin' ? enterRequestMoveMode : undefined}
+                      isInMoveMode={requestMoveMode.isActive && requestMoveMode.request?.id === request.id}
                     />
                   ))}
                 </div>
@@ -1516,7 +1652,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
             <TabsContent value="waitlist" className="p-4 mt-0">
               {waitlistRequests.length === 0 ? (
                 <div className="flex items-center justify-center h-32">
-                  <p className="text-zinc-500">No items in waiting list</p>
+                  <p className="text-gray-500 dark:text-zinc-500">No items in waiting list</p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -1524,7 +1660,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                     <BookingRequestItem
                       key={request.id}
                       request={request}
-                      canDrag={role === 'admin'}
+                      canDrag={isDragEnabled}
                       availableSpots={getAvailableSpotsForRequest(request)}
                       onContextMenu={(req, position) => {
                         setBookingRequestContextMenu({
@@ -1540,6 +1676,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                           onNavigateToDate(date);
                         }
                       }}
+                      onEnterMoveMode={role === 'admin' ? enterRequestMoveMode : undefined}
+                      isInMoveMode={requestMoveMode.isActive && requestMoveMode.request?.id === request.id}
                     />
                   ))}
                 </div>
@@ -1872,6 +2010,18 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
           pilots={allPilots}
           timeSlot={addPilotModal.timeSlot}
           onAddPilot={handleAddPilot}
+        />
+      )}
+
+      {/* Dim overlay when in move mode */}
+      {(moveMode.isActive || requestMoveMode.isActive) && (
+        <div
+          className="fixed inset-0 bg-black/20 z-40 pointer-events-none"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (moveMode.isActive) exitMoveMode();
+            if (requestMoveMode.isActive) exitRequestMoveMode();
+          }}
         />
       )}
     </div>

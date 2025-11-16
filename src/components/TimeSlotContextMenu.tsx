@@ -55,7 +55,7 @@ export function TimeSlotContextMenu({
   return (
     <div
       ref={menuRef}
-      className="fixed bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl py-1 z-50 min-w-[180px]"
+      className="fixed bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-700 rounded-lg shadow-xl py-1 z-50 min-w-[180px]"
       style={{
         left: `${position.x}px`,
         top: `${position.y}px`,
@@ -66,7 +66,7 @@ export function TimeSlotContextMenu({
           onAddPilot();
           onClose();
         }}
-        className="w-full px-4 py-2 text-left text-sm text-white hover:bg-zinc-800 transition-colors"
+        className="w-full px-4 py-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
       >
         Add Pilot
       </button>

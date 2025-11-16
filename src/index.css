@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 @layer base {
   :root {
@@ -66,10 +67,19 @@
     -ms-user-select: none;
   }
   body {
-    @apply bg-zinc-950;
     color: hsl(var(--foreground));
   }
+
+  /* Light theme (default) */
   html {
+    background-color: hsl(var(--background));
+  }
+
+  /* Dark theme */
+  html.dark {
+    @apply bg-zinc-950;
+  }
+  html.dark body {
     @apply bg-zinc-950;
   }
 }

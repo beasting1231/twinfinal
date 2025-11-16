@@ -98,7 +98,7 @@ export function AvailabilityContextMenu({
       {/* Context Menu */}
       <div
         ref={menuRef}
-        className={`fixed z-[9999] bg-zinc-800 border-2 border-blue-500 rounded-lg shadow-2xl py-1 min-w-[180px] ${
+        className={`fixed z-[9999] bg-white dark:bg-zinc-800 border-2 border-blue-500 rounded-lg shadow-2xl py-1 min-w-[180px] ${
           isPositioned ? 'opacity-100' : 'opacity-0'
         }`}
         style={{
@@ -111,7 +111,7 @@ export function AvailabilityContextMenu({
         onContextMenu={(e) => e.preventDefault()}
       >
         {/* Header */}
-        <div className="px-3 py-1.5 text-xs font-medium text-zinc-400 border-b border-zinc-700">
+        <div className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-zinc-400 border-b border-gray-300 dark:border-zinc-700">
           Availability
         </div>
 
@@ -123,7 +123,7 @@ export function AvailabilityContextMenu({
                 onSignIn();
                 onClose();
               }}
-              className="w-full px-3 py-2 text-left text-sm text-green-400 hover:bg-zinc-700 transition-colors flex items-center gap-2"
+              className="w-full px-3 py-2 text-left text-sm text-green-600 dark:text-green-400 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2"
             >
               <LogIn className="w-4 h-4" />
               <span>Sign {pilotName ? `${pilotName} ` : ''}In</span>
@@ -134,7 +134,7 @@ export function AvailabilityContextMenu({
                 onSignOut();
                 onClose();
               }}
-              className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-zinc-700 transition-colors flex items-center gap-2 cursor-pointer"
+              className="w-full px-3 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2 cursor-pointer"
             >
               <LogOut className="w-4 h-4" />
               <span>Sign {pilotName ? `${pilotName} ` : ''}Out</span>

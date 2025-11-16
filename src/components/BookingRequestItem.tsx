@@ -1,5 +1,5 @@
-import { useRef } from "react";
-import { Phone, Mail, Send, Users, Calendar, Clock, PhoneCall, AlertTriangle } from "lucide-react";
+import { useRef, useState } from "react";
+import { Phone, Mail, Users, Calendar, Clock, PhoneCall, AlertTriangle } from "lucide-react";
 import type { BookingRequest } from "../types/index";
 import { useDraggable } from "@dnd-kit/core";
 
@@ -9,10 +9,16 @@ interface BookingRequestItemProps {
   onDateClick: (date: string) => void;
   canDrag?: boolean; // Whether this request can be dragged (admin only)
   availableSpots?: number; // Number of available spots at this time slot
+  // Move mode props (admin only)
+  onEnterMoveMode?: (request: BookingRequest) => void; // Callback to enter move mode
+  isInMoveMode?: boolean; // Whether this specific request is in move mode
 }
 
-export function BookingRequestItem({ request, onContextMenu, onDateClick, canDrag = false, availableSpots }: BookingRequestItemProps) {
+export function BookingRequestItem({ request, onContextMenu, onDateClick, canDrag = false, availableSpots, onEnterMoveMode, isInMoveMode = false }: BookingRequestItemProps) {
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const moveModeTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [pressGlow, setPressGlow] = useState<'none' | 'light' | 'intense'>('none');
+  const preventClickRef = useRef(false);
 
   // Check if this booking would cause overbooking
   const wouldOverbook = availableSpots !== undefined && request.numberOfPeople > availableSpots;
@@ -36,10 +42,42 @@ export function BookingRequestItem({ request, onContextMenu, onDateClick, canDra
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
+    // Stage 1: 500ms - context menu + light glow
     longPressTimerRef.current = setTimeout(() => {
       const touch = e.touches[0];
+      setPressGlow('light');
       onContextMenu(request, { x: touch.clientX, y: touch.clientY });
-    }, 500); // 500ms for long press
+    }, 500); // 500ms for context menu
+
+    // Stage 2: 1000ms - move mode + intense glow (admin only)
+    if (onEnterMoveMode && canDrag && request.id) {
+      moveModeTimerRef.current = setTimeout(() => {
+        setPressGlow('intense');
+
+        // Trigger haptic feedback if supported
+        if (navigator.vibrate) {
+          navigator.vibrate(50);
+        }
+
+        // Prevent click event from firing after this long press
+        preventClickRef.current = true;
+
+        onEnterMoveMode(request);
+      }, 1000); // 1000ms for move mode
+    }
+  };
+
+  const handleTouchMove = () => {
+    // For simplicity, cancel both timers on any move
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    if (moveModeTimerRef.current) {
+      clearTimeout(moveModeTimerRef.current);
+      moveModeTimerRef.current = null;
+    }
+    setPressGlow('none');
   };
 
   const handleTouchEnd = () => {
@@ -47,7 +85,27 @@ export function BookingRequestItem({ request, onContextMenu, onDateClick, canDra
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
+    if (moveModeTimerRef.current) {
+      clearTimeout(moveModeTimerRef.current);
+      moveModeTimerRef.current = null;
+    }
+    setPressGlow('none');
+
+    // Reset preventClick after a short delay to allow click event to be blocked
+    setTimeout(() => {
+      preventClickRef.current = false;
+    }, 100);
   };
+
+  // Apply glow effect based on press state or move mode
+  let boxShadow = 'none';
+  if (isInMoveMode) {
+    boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.5), 0 0 20px rgba(59, 130, 246, 0.4)'; // Blue glow for active move
+  } else if (pressGlow === 'light') {
+    boxShadow = '0 0 0 2px rgba(59, 130, 246, 0.3)'; // Light blue glow at 500ms
+  } else if (pressGlow === 'intense') {
+    boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.6), 0 0 15px rgba(59, 130, 246, 0.5)'; // Intense blue glow at 1000ms
+  }
 
   return (
     <div
@@ -56,15 +114,15 @@ export function BookingRequestItem({ request, onContextMenu, onDateClick, canDra
       onContextMenu={handleContextMenuEvent}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
-      onTouchMove={handleTouchEnd}
-      className={`bg-zinc-900 border border-zinc-800 rounded-lg p-3 hover:bg-zinc-800 transition-colors select-none ${canDrag && request.id ? 'cursor-grab active:cursor-grabbing' : ''}`}
-      style={dragStyle}
+      onTouchMove={handleTouchMove}
+      className={`bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-800 rounded-lg p-3 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-all select-none ${canDrag && request.id ? 'cursor-grab active:cursor-grabbing' : ''}`}
+      style={{ ...dragStyle, boxShadow }}
     >
       <div className="flex items-center justify-between gap-3">
         {/* Left side: Customer name and badges */}
         <div className="flex items-center gap-2 flex-wrap">
-          <p className="text-white font-medium">{request.customerName}</p>
-          <span className="px-2 py-0.5 bg-white text-black text-xs font-medium rounded-full flex items-center gap-1">
+          <p className="text-gray-900 dark:text-white font-medium">{request.customerName}</p>
+          <span className="px-2 py-0.5 bg-gray-900 dark:bg-white text-white dark:text-black text-xs font-medium rounded-full flex items-center gap-1">
             <Users className="w-3 h-3" />
             {request.numberOfPeople}
           </span>
@@ -76,7 +134,7 @@ export function BookingRequestItem({ request, onContextMenu, onDateClick, canDra
         </div>
 
         {/* Right side: Date and time */}
-        <div className="flex items-center gap-3 text-xs text-zinc-400">
+        <div className="flex items-center gap-3 text-xs text-gray-600 dark:text-zinc-400">
           {wouldOverbook && (
             <div
               className="flex items-center gap-1 text-orange-400"
@@ -90,7 +148,7 @@ export function BookingRequestItem({ request, onContextMenu, onDateClick, canDra
               e.stopPropagation();
               onDateClick(request.date);
             }}
-            className="flex items-center gap-1 hover:text-white transition-colors cursor-pointer"
+            className="flex items-center gap-1 hover:text-gray-900 dark:hover:text-white transition-colors cursor-pointer"
             title="Go to this date"
           >
             <Calendar className="w-3.5 h-3.5" />
@@ -107,29 +165,29 @@ export function BookingRequestItem({ request, onContextMenu, onDateClick, canDra
       <div className="mt-2 space-y-1.5">
         {request.email && (
           <div className="flex items-center gap-2">
-            <Mail className="w-3.5 h-3.5 text-zinc-500 flex-shrink-0" />
-            <span className="text-xs text-zinc-300 flex-1 truncate">{request.email}</span>
+            <Mail className="w-3.5 h-3.5 text-gray-500 dark:text-zinc-500 flex-shrink-0" />
+            <span className="text-xs text-gray-700 dark:text-zinc-300 flex-1 truncate">{request.email}</span>
             <a
               href={`mailto:${request.email}`}
               onClick={(e) => e.stopPropagation()}
-              className="p-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+              className="p-2 rounded-md bg-blue-100 dark:bg-blue-600 hover:bg-blue-200 dark:hover:bg-blue-700 text-blue-700 dark:text-white transition-colors"
               title="Send Email"
             >
-              <Send className="w-4 h-4" />
+              <Mail className="w-4 h-4" />
             </a>
           </div>
         )}
         {request.phone && (
           <div className="flex items-center gap-2">
-            <Phone className="w-3.5 h-3.5 text-zinc-500 flex-shrink-0" />
-            <span className="text-xs text-zinc-300 flex-1 truncate">
+            <Phone className="w-3.5 h-3.5 text-gray-500 dark:text-zinc-500 flex-shrink-0" />
+            <span className="text-xs text-gray-700 dark:text-zinc-300 flex-1 truncate">
               {request.phone}
             </span>
             <div className="flex gap-1">
               <a
                 href={`tel:${request.phone.replace(/\s/g, '')}`}
                 onClick={(e) => e.stopPropagation()}
-                className="p-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                className="p-2 rounded-md bg-blue-100 dark:bg-blue-600 hover:bg-blue-200 dark:hover:bg-blue-700 text-blue-700 dark:text-white transition-colors"
                 title="Call"
               >
                 <PhoneCall className="w-4 h-4" />
@@ -139,7 +197,7 @@ export function BookingRequestItem({ request, onContextMenu, onDateClick, canDra
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
-                className="p-2 rounded-md bg-[#25D366] hover:bg-[#20BA5A] text-white transition-colors"
+                className="p-2 rounded-md bg-green-100 dark:bg-[#25D366] hover:bg-green-200 dark:hover:bg-[#20BA5A] text-green-700 dark:text-white transition-colors"
                 title="WhatsApp"
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
@@ -153,7 +211,7 @@ export function BookingRequestItem({ request, onContextMenu, onDateClick, canDra
 
       {/* Notes */}
       {request.notes && (
-        <p className="mt-2 text-xs text-zinc-500 italic truncate">"{request.notes}"</p>
+        <p className="mt-2 text-xs text-gray-600 dark:text-zinc-500 italic truncate">"{request.notes}"</p>
       )}
     </div>
   );

@@ -88,7 +88,7 @@ function AutocompleteField({
 
   return (
     <div className="space-y-2 relative">
-      <Label htmlFor={id} className="text-white">
+      <Label htmlFor={id} className="text-gray-900 dark:text-white">
         {label}
       </Label>
       <div className="relative">
@@ -104,7 +104,7 @@ function AutocompleteField({
         <button
           type="button"
           onClick={handleDropdownToggle}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white transition-colors"
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white transition-colors"
         >
           <ChevronDown
             className={`w-4 h-4 transition-transform ${isOpen ? "rotate-180" : ""}`}
@@ -112,7 +112,7 @@ function AutocompleteField({
         </button>
 
         {isOpen && (
-          <div className="absolute z-50 w-full mt-1 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+          <div className="absolute z-50 w-full mt-1 bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-700 rounded-lg shadow-xl max-h-60 overflow-y-auto">
             {filteredSuggestions.length > 0 ? (
               <div className="py-1">
                 {filteredSuggestions.map((item) => (
@@ -120,21 +120,21 @@ function AutocompleteField({
                     key={item.name}
                     type="button"
                     onClick={() => handleSelectItem(item.name)}
-                    className="w-full px-4 py-2 text-left hover:bg-zinc-800 text-white flex items-center justify-between group transition-colors"
+                    className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-900 dark:text-white flex items-center justify-between group transition-colors"
                   >
                     <span>{item.name}</span>
-                    <span className="text-xs text-zinc-500 group-hover:text-zinc-400">
+                    <span className="text-xs text-gray-500 dark:text-zinc-500 group-hover:text-gray-600 dark:group-hover:text-zinc-400">
                       {item.count} {item.count === 1 ? "time" : "times"}
                     </span>
                   </button>
                 ))}
               </div>
             ) : (
-              <div className="px-4 py-3 text-zinc-500 text-sm">
+              <div className="px-4 py-3 text-gray-500 dark:text-zinc-500 text-sm">
                 {searchQuery.trim() ? (
                   <>
                     No matches found. Type to create{" "}
-                    <span className="text-white font-medium">"{searchQuery}"</span>
+                    <span className="text-gray-900 dark:text-white font-medium">"{searchQuery}"</span>
                   </>
                 ) : (
                   `No ${label.toLowerCase()} yet`
@@ -291,11 +291,11 @@ export function DriverVehicleModal({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent
-        className="bg-zinc-950 border-zinc-800 text-white max-w-md"
+        className="bg-white dark:bg-zinc-950 border-gray-300 dark:border-zinc-800 text-gray-900 dark:text-white max-w-md"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <DialogHeader>
-          <DialogTitle>{driverColumn === 2 ? 'Driver 2' : 'Driver'}</DialogTitle>
+          <DialogTitle className="text-gray-900 dark:text-white">{driverColumn === 2 ? 'Driver 2' : 'Driver'}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
@@ -322,7 +322,7 @@ export function DriverVehicleModal({
           <Button
             onClick={handleSave}
             disabled={isSaving}
-            className="flex-1 bg-white text-black hover:bg-zinc-200"
+            className="flex-1 bg-gray-900 dark:bg-white text-white dark:text-black hover:bg-gray-700 dark:hover:bg-zinc-200"
           >
             {isSaving ? "Saving..." : "Save"}
           </Button>
@@ -330,7 +330,7 @@ export function DriverVehicleModal({
             variant="outline"
             onClick={handleCancel}
             disabled={isSaving}
-            className="flex-1 border-zinc-700 text-white hover:bg-zinc-800"
+            className="flex-1 border-gray-300 dark:border-zinc-700 text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-800"
           >
             Cancel
           </Button>

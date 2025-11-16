@@ -36,6 +36,10 @@ interface BookingAvailableProps {
   draggedItemPax?: number; // Number of passengers in the currently dragged item
   hasEnoughSpace?: boolean; // Whether there's enough space at this location for the dragged item
   overbookedCount?: number; // Number of overbooked spots (if any)
+  // Move mode props (admin only)
+  onEnterMoveMode?: (booking: any) => void; // Callback to enter move mode
+  isInMoveMode?: boolean; // Whether this specific booking is in move mode
+  isMoveModeActive?: boolean; // Whether ANY booking/request is in move mode (affects available cell styling)
 }
 
 export const BookingAvailable = memo(function BookingAvailable({
@@ -68,13 +72,19 @@ export const BookingAvailable = memo(function BookingAvailable({
   canDrag = false,
   draggedItemPax,
   hasEnoughSpace = true,
-  overbookedCount = 0
+  overbookedCount = 0,
+  onEnterMoveMode,
+  isInMoveMode = false,
+  isMoveModeActive = false
 }: BookingAvailableProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const longPressTimerRef = useRef<number | null>(null);
+  const moveModeTimerRef = useRef<number | null>(null);
   const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
   const infoIconRef = useRef<HTMLDivElement>(null);
   const [showNotesTooltip, setShowNotesTooltip] = useState(false);
+  const [pressGlow, setPressGlow] = useState<'none' | 'light' | 'intense'>('none');
+  const preventClickRef = useRef(false);
 
   // Set up draggable for booked cells (admin only)
   const draggableId = bookingId ? `booking-${bookingId}` : null;
@@ -131,16 +141,19 @@ export const BookingAvailable = memo(function BookingAvailable({
     }
   };
 
-  // Handle touch start (mobile long-press)
+  // Handle touch start (mobile long-press with two stages)
   const handleTouchStart = (e: React.TouchEvent) => {
     if (status !== "booked" || bookingStatus === "cancelled") return;
-    if (!onContextMenu && !onOverbookedClick) return;
+    if (!onContextMenu && !onOverbookedClick && !onEnterMoveMode) return;
 
     const touch = e.touches[0];
     touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
 
+    // Stage 1: 500ms - context menu + light glow
     longPressTimerRef.current = window.setTimeout(() => {
       if (touchStartPosRef.current) {
+        setPressGlow('light');
+
         const slotIndex = getSlotIndexFromPosition(touchStartPosRef.current.x);
 
         // Check if this position is overbooked
@@ -154,12 +167,51 @@ export const BookingAvailable = memo(function BookingAvailable({
           onContextMenu(slotIndex, touchStartPosRef.current);
         }
       }
-    }, 500); // 500ms long press
+    }, 500); // 500ms for context menu
+
+    // Stage 2: 1000ms - move mode + intense glow (admin only)
+    if (onEnterMoveMode && canDrag && bookingId) {
+      moveModeTimerRef.current = window.setTimeout(() => {
+        if (touchStartPosRef.current) {
+          setPressGlow('intense');
+
+          // Trigger haptic feedback if supported
+          if (navigator.vibrate) {
+            navigator.vibrate(50);
+          }
+
+          // Construct booking object to pass to move mode
+          const booking = {
+            id: bookingId,
+            customerName,
+            pickupLocation,
+            bookingSource,
+            assignedPilots,
+            pilotPayments,
+            bookingStatus,
+            numberOfPeople: span,
+            span,
+            femalePilotsRequired,
+            flightType,
+            notes,
+            // These will be provided by parent
+            timeIndex: 0,
+            date: '',
+            pilotIndex: 0,
+          };
+
+          // Prevent click event from firing after this long press
+          preventClickRef.current = true;
+
+          onEnterMoveMode(booking);
+        }
+      }, 1000); // 1000ms for move mode
+    }
   };
 
   // Handle touch move (cancel long-press if finger moves)
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (!touchStartPosRef.current || !longPressTimerRef.current) return;
+    if (!touchStartPosRef.current) return;
 
     const touch = e.touches[0];
     const deltaX = Math.abs(touch.clientX - touchStartPosRef.current.x);
@@ -171,17 +223,44 @@ export const BookingAvailable = memo(function BookingAvailable({
         clearTimeout(longPressTimerRef.current);
         longPressTimerRef.current = null;
       }
+      if (moveModeTimerRef.current) {
+        clearTimeout(moveModeTimerRef.current);
+        moveModeTimerRef.current = null;
+      }
+      setPressGlow('none');
       touchStartPosRef.current = null;
     }
   };
 
-  // Handle touch end (clear long-press timer)
+  // Handle touch end (clear long-press timers and reset glow)
   const handleTouchEnd = () => {
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
+    if (moveModeTimerRef.current) {
+      clearTimeout(moveModeTimerRef.current);
+      moveModeTimerRef.current = null;
+    }
+    setPressGlow('none');
     touchStartPosRef.current = null;
+
+    // Reset preventClick after a short delay to allow click event to be blocked
+    setTimeout(() => {
+      preventClickRef.current = false;
+    }, 100);
+  };
+
+  // Handle click - prevent if it's right after entering move mode
+  const handleClick = (e: React.MouseEvent | React.TouchEvent) => {
+    if (preventClickRef.current) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    if (onBookedClick) {
+      onBookedClick();
+    }
   };
 
   if (status === "booked") {
@@ -210,6 +289,16 @@ export const BookingAvailable = memo(function BookingAvailable({
       opacity: isDragging ? 0.5 : 1,
     } : {};
 
+    // Apply glow effect based on press state or move mode
+    let boxShadow = 'none';
+    if (isInMoveMode) {
+      boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.5), 0 0 20px rgba(59, 130, 246, 0.4)'; // Blue glow for active move
+    } else if (pressGlow === 'light') {
+      boxShadow = '0 0 0 2px rgba(59, 130, 246, 0.3)'; // Light blue glow at 500ms
+    } else if (pressGlow === 'intense') {
+      boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.6), 0 0 15px rgba(59, 130, 246, 0.5)'; // Intense blue glow at 1000ms
+    }
+
     return (
       <div
         ref={(node) => {
@@ -218,12 +307,13 @@ export const BookingAvailable = memo(function BookingAvailable({
             setDragNodeRef(node);
           }
         }}
-        className={`w-full h-full rounded-lg pt-2 px-2 flex flex-col justify-between transition-colors overflow-hidden relative ${onBookedClick ? 'cursor-pointer' : 'cursor-default'} ${canDrag && bookingId ? 'cursor-grab active:cursor-grabbing' : ''}`}
+        className={`w-full h-full rounded-lg pt-2 px-2 flex flex-col justify-between transition-all overflow-hidden relative ${onBookedClick ? 'cursor-pointer' : 'cursor-default'} ${canDrag && bookingId ? 'cursor-grab active:cursor-grabbing' : ''}`}
         style={{
           backgroundColor,
           borderWidth: '1px',
           borderStyle: 'solid',
           borderColor,
+          boxShadow,
           ...dragStyle,
         }}
         {...(canDrag && bookingId ? { ...attributes, ...listeners } : {})}
@@ -237,7 +327,7 @@ export const BookingAvailable = memo(function BookingAvailable({
             e.currentTarget.style.backgroundColor = backgroundColor;
           }
         }}
-        onClick={isDragging ? undefined : onBookedClick}
+        onClick={isDragging ? undefined : handleClick}
         onContextMenu={handleContextMenu}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
@@ -254,7 +344,7 @@ export const BookingAvailable = memo(function BookingAvailable({
             onMouseEnter={() => setShowNotesTooltip(true)}
             onMouseLeave={() => setShowNotesTooltip(false)}
           >
-            <Info className="w-4 h-4 text-white cursor-help" />
+            <Info className="w-4 h-4 text-zinc-900 cursor-help" />
           </div>
         )}
 
@@ -263,7 +353,7 @@ export const BookingAvailable = memo(function BookingAvailable({
           const rect = infoIconRef.current.getBoundingClientRect();
           return (
             <div
-              className="fixed w-64 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl p-3 text-sm text-white whitespace-pre-wrap break-words"
+              className="fixed w-64 bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-700 rounded-lg shadow-xl p-3 text-sm text-gray-900 dark:text-white whitespace-pre-wrap break-words"
               style={{
                 left: `${rect.right - 256}px`,
                 bottom: `${window.innerHeight - rect.top + 2}px`,
@@ -272,7 +362,7 @@ export const BookingAvailable = memo(function BookingAvailable({
               onMouseEnter={() => setShowNotesTooltip(true)}
               onMouseLeave={() => setShowNotesTooltip(false)}
             >
-              <div className="text-xs text-zinc-400 mb-1">Notes:</div>
+              <div className="text-xs text-gray-600 dark:text-zinc-400 mb-1">Notes:</div>
               {notes}
             </div>
           );
@@ -285,7 +375,7 @@ export const BookingAvailable = memo(function BookingAvailable({
                 classic
               </span>
             )}
-            <div className="font-semibold text-sm text-white truncate">
+            <div className="font-semibold text-sm text-zinc-900 dark:text-white truncate">
               {[bookingSource, pickupLocation, customerName].filter(Boolean).join(" - ")}
             </div>
           </div>
@@ -341,7 +431,7 @@ export const BookingAvailable = memo(function BookingAvailable({
             if (isOverbookedPosition) {
               return (
                 <div key={index} className="flex justify-center">
-                  <div className="text-xs text-orange-200 bg-orange-600/90 rounded-t-lg px-2 py-0.5 w-[80%] relative">
+                  <div className="text-xs text-white bg-orange-600/90 rounded-t-lg px-2 py-0.5 w-[80%] relative">
                     <div className="text-center truncate">{pilot}</div>
                     {numAmount !== undefined && numAmount !== 0 && !isNaN(numAmount) && (
                       <span className="absolute right-2 top-0.5 font-medium text-white">{numAmount}</span>
@@ -357,7 +447,7 @@ export const BookingAvailable = memo(function BookingAvailable({
                 <div
                   className={`${requiresFemalePilot
                     ? "text-xs text-white bg-red-600/90 rounded-t-lg px-2 py-0.5 w-[80%] relative"
-                    : "text-xs text-white bg-zinc-800/90 rounded-t-lg px-2 py-0.5 w-[80%] relative"
+                    : "text-xs text-white bg-gray-700/90 dark:bg-zinc-800/90 rounded-t-lg px-2 py-0.5 w-[80%] relative"
                   } ${canClickToUnassign ? 'cursor-pointer hover:opacity-80' : ''}`}
                   onClick={(e) => {
                     if (canClickToUnassign) {
@@ -437,9 +527,11 @@ export const BookingAvailable = memo(function BookingAvailable({
     return (
       <div
         className={`w-full h-full rounded-lg flex items-center justify-center ${
-          isFemalePilot
+          isMoveModeActive
+            ? 'bg-blue-200 dark:bg-blue-900/40 hover:bg-blue-300 dark:hover:bg-blue-800/50 border-2 border-blue-400 dark:border-blue-600 cursor-pointer'
+            : isFemalePilot
             ? (hasClickHandler ? 'bg-red-600/80 cursor-pointer hover:bg-red-700/80' : 'bg-red-600/80 cursor-not-allowed')
-            : (hasClickHandler ? 'bg-zinc-900 cursor-pointer hover:bg-zinc-800' : 'bg-zinc-900 cursor-not-allowed')
+            : (hasClickHandler ? 'bg-gray-500 dark:bg-zinc-900 cursor-pointer hover:bg-gray-400 dark:hover:bg-zinc-800' : 'bg-gray-500 dark:bg-zinc-900 cursor-not-allowed')
         }`}
         onClick={onNoPilotClick}
         onContextMenu={handleNoPilotContextMenu}
@@ -447,7 +539,7 @@ export const BookingAvailable = memo(function BookingAvailable({
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
-        <div className={`text-xs ${isFemalePilot ? 'text-white' : 'text-zinc-500'}`}>no {pilotId.toLowerCase()}</div>
+        <div className={`text-xs ${isMoveModeActive ? 'text-blue-600 dark:text-blue-300' : isFemalePilot ? 'text-white' : 'text-white dark:text-zinc-500'}`}>no {pilotId.toLowerCase()}</div>
       </div>
     );
   }
@@ -461,13 +553,15 @@ export const BookingAvailable = memo(function BookingAvailable({
       className={`w-full h-full rounded-lg transition-colors ${
         hasEnoughSpace ? 'cursor-pointer' : 'cursor-not-allowed'
       } ${
-        showMultiColumnOverlay
-          ? 'bg-zinc-800 relative' // Hide green styling when showing overlay
+        isMoveModeActive
+          ? 'bg-blue-200 dark:bg-blue-900/40 hover:bg-blue-300 dark:hover:bg-blue-800/50 border-2 border-blue-400 dark:border-blue-600'
+          : showMultiColumnOverlay
+          ? 'bg-gray-300 dark:bg-zinc-800 relative' // Hide green styling when showing overlay
           : isOver && hasEnoughSpace
           ? 'bg-green-600/40 border-2 border-green-500'
           : !hasEnoughSpace && draggedItemPax
           ? 'bg-red-600/20 border border-red-500'
-          : 'bg-zinc-800 hover:bg-zinc-700'
+          : 'bg-gray-300 dark:bg-zinc-800 hover:bg-gray-400 dark:hover:bg-zinc-700'
       }`}
       onClick={onAvailableClick}
       onContextMenu={handleAvailableContextMenu}
@@ -477,7 +571,7 @@ export const BookingAvailable = memo(function BookingAvailable({
     >
       {/* Empty booking cell - available for booking */}
       {isOver && !hasEnoughSpace && (
-        <div className="flex items-center justify-center h-full text-xs text-red-400">
+        <div className="flex items-center justify-center h-full text-xs text-red-600 dark:text-red-400">
           Not enough space
         </div>
       )}

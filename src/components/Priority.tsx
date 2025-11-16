@@ -87,26 +87,26 @@ export function Priority() {
 
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-zinc-950">
-        <div className="w-8 h-8 border-4 border-zinc-700 border-t-white rounded-full animate-spin"></div>
+      <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-zinc-950">
+        <div className="w-8 h-8 border-4 border-gray-300 dark:border-zinc-700 border-t-white border-t-gray-900 dark:border-t-white rounded-full animate-spin"></div>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-zinc-950 p-6 overflow-hidden">
+    <div className="flex-1 flex flex-col bg-gray-50 dark:bg-zinc-950 p-6 overflow-hidden">
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Pilot Priority</h1>
-          <p className="text-sm text-zinc-400 mt-1">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Pilot Priority</h1>
+          <p className="text-sm text-gray-600 dark:text-zinc-400 mt-1">
             Drag and drop to reorder pilots. 1 = highest priority.
           </p>
         </div>
         <Button
           onClick={handleSave}
           disabled={isSaving}
-          className="bg-blue-600 hover:bg-blue-700 text-white"
+          className="bg-blue-600 hover:bg-blue-700 dark:hover:bg-blue-700 text-white"
         >
           {isSaving ? "Saving..." : "Save Priority Order"}
         </Button>
@@ -123,20 +123,20 @@ export function Priority() {
               onDragOver={(e) => handleDragOver(e, index)}
               onDragEnd={handleDragEnd}
               className={`
-                bg-zinc-900 border border-zinc-800 rounded-lg p-4
+                bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-lg p-4
                 cursor-move transition-all
-                hover:bg-zinc-800 hover:border-zinc-700
+                hover:bg-gray-50 dark:hover:bg-zinc-800 hover:border-zinc-700 hover:border-gray-300 dark:hover:border-zinc-700
                 ${draggedIndex === index ? "opacity-50" : ""}
               `}
             >
               <div className="flex items-center gap-4">
-                <GripVertical className="w-5 h-5 text-zinc-500" />
-                <div className="flex items-center justify-center w-10 h-10 bg-zinc-800 rounded-full">
-                  <span className="text-lg font-bold text-white">{index + 1}</span>
+                <GripVertical className="w-5 h-5 text-zinc-500 text-gray-400 dark:text-zinc-500" />
+                <div className="flex items-center justify-center w-10 h-10 bg-gray-100 dark:bg-zinc-800 rounded-full">
+                  <span className="text-lg font-bold text-gray-900 dark:text-white">{index + 1}</span>
                 </div>
                 <div className="flex-1">
-                  <div className="text-white font-medium">{pilot.displayName}</div>
-                  <div className="text-sm text-zinc-400">{pilot.email}</div>
+                  <div className="text-gray-900 dark:text-white font-medium">{pilot.displayName}</div>
+                  <div className="text-sm text-gray-600 dark:text-zinc-400">{pilot.email}</div>
                 </div>
               </div>
             </div>

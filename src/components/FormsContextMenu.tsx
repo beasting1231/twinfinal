@@ -99,7 +99,7 @@ export function FormsContextMenu({
       {/* Context Menu */}
       <div
         ref={menuRef}
-        className={`fixed z-50 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl py-1 min-w-[200px] transition-opacity duration-75 ${
+        className={`fixed z-50 bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 rounded-lg shadow-xl py-1 min-w-[200px] transition-opacity duration-75 ${
           isPositioned ? 'opacity-100' : 'opacity-0'
         }`}
         style={{ left: position.x, top: position.y }}
@@ -107,7 +107,7 @@ export function FormsContextMenu({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="px-3 py-1.5 text-xs font-medium text-zinc-400 border-b border-zinc-700">
+        <div className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-zinc-400 border-b border-gray-300 dark:border-zinc-700">
           Booking Request
         </div>
 
@@ -119,7 +119,7 @@ export function FormsContextMenu({
                 onAddToWaitlist();
                 onClose();
               }}
-              className="w-full px-3 py-2 text-left text-sm text-white hover:bg-zinc-700 transition-colors flex items-center gap-2"
+              className="w-full px-3 py-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2"
             >
               <ListPlus className="w-4 h-4" />
               <span>Add to Waiting List</span>
@@ -132,7 +132,7 @@ export function FormsContextMenu({
                 onRemoveFromWaitlist();
                 onClose();
               }}
-              className="w-full px-3 py-2 text-left text-sm text-white hover:bg-zinc-700 transition-colors flex items-center gap-2"
+              className="w-full px-3 py-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2"
             >
               <ListMinus className="w-4 h-4" />
               <span>Remove from Waiting List</span>
@@ -140,7 +140,7 @@ export function FormsContextMenu({
           )}
 
           {(onAddToWaitlist || onRemoveFromWaitlist) && (
-            <div className="border-t border-zinc-700 my-1" />
+            <div className="border-t border-gray-300 dark:border-zinc-700 my-1" />
           )}
 
           <button
@@ -148,7 +148,7 @@ export function FormsContextMenu({
               onDelete();
               onClose();
             }}
-            className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-zinc-700 transition-colors flex items-center gap-2"
+            className="w-full px-3 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2"
           >
             <Trash2 className="w-4 h-4" />
             <span>Delete</span>

@@ -334,7 +334,7 @@ export function NewBookingModal({
     if (customerName.trim()) {
       bookingData.customerName = customerName.trim();
     }
-    if (pickupLocation.trim()) {
+    if (pickupLocation.trim() && pickupLocation !== "other") {
       bookingData.pickupLocation = pickupLocation.trim();
     }
     if (phoneNumber.trim()) {
@@ -396,7 +396,7 @@ export function NewBookingModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="w-[90vw] max-w-[500px] rounded-2xl"
+        className="w-[90vw] max-w-[500px] rounded-2xl bg-white dark:bg-zinc-950 border-gray-300 dark:border-zinc-800 text-gray-900 dark:text-white"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <form onSubmit={handleSubmit} className="space-y-4 overflow-x-hidden px-1">
@@ -404,8 +404,8 @@ export function NewBookingModal({
           {availabilityError && (
             <div className={`p-3 rounded-lg border text-sm ${
               role === 'admin'
-                ? 'bg-orange-900/30 border-orange-800 text-orange-200'
-                : 'bg-red-900/30 border-red-800 text-red-200'
+                ? 'bg-orange-50 dark:bg-orange-900/30 border-orange-300 dark:border-orange-800 text-orange-900 dark:text-orange-200'
+                : 'bg-red-50 dark:bg-red-900/30 border-red-300 dark:border-red-800 text-red-900 dark:text-red-200'
             }`}>
               {role === 'admin' ? (
                 <>
@@ -420,10 +420,10 @@ export function NewBookingModal({
           )}
 
           {/* Date and Time Selection */}
-          <div className="grid grid-cols-2 gap-3 pb-2 border-b border-zinc-800">
+          <div className="grid grid-cols-2 gap-3 pb-2 border-b border-gray-300 dark:border-zinc-800">
             {/* Date Picker */}
             <div className="space-y-2">
-              <Label className="text-white">Date</Label>
+              <Label className="text-gray-900 dark:text-white">Date</Label>
               <div className="relative">
                 <div
                   className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 z-10 cursor-pointer"
@@ -432,7 +432,7 @@ export function NewBookingModal({
                     dateInput?.showPicker?.();
                   }}
                 >
-                  <Calendar className="w-4 h-4 text-white" />
+                  <Calendar className="w-4 h-4 text-gray-900 dark:text-white" />
                 </div>
                 <Input
                   id="modal-date"
@@ -442,9 +442,8 @@ export function NewBookingModal({
                     setSelectedModalDate(e.target.value);
                     setInitialAvailableSlots(null); // Reset availability tracking
                   }}
-                  className="pl-10 !h-10 !py-0 !text-sm flex items-center max-h-10 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-date-and-time-value]:!text-sm [&::-webkit-date-and-time-value]:leading-10"
+                  className="pl-10 !h-10 !py-0 !text-sm flex items-center max-h-10 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-date-and-time-value]:!text-sm [&::-webkit-date-and-time-value]:leading-10 dark:[color-scheme:dark] [color-scheme:light]"
                   style={{
-                    colorScheme: 'dark',
                     WebkitAppearance: 'none',
                     MozAppearance: 'none',
                     appearance: 'none',
@@ -457,7 +456,7 @@ export function NewBookingModal({
 
             {/* Time Dropdown */}
             <div className="space-y-2">
-              <Label className="text-white">Time</Label>
+              <Label className="text-gray-900 dark:text-white">Time</Label>
               <Select
                 value={selectedModalTimeIndex.toString()}
                 onValueChange={(value) => {
@@ -484,8 +483,8 @@ export function NewBookingModal({
                           <span className="flex-shrink-0">{slot.timeSlot}</span>
                           <span className={`text-xs px-2 py-0.5 rounded flex-shrink-0 ${
                             availableCount === 0
-                              ? 'bg-red-900/50 text-red-400'
-                              : 'bg-green-900/50 text-green-400'
+                              ? 'bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-400'
+                              : 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-400'
                           }`}>
                             {availableCount} available
                           </span>
@@ -500,7 +499,7 @@ export function NewBookingModal({
 
           {/* Customer Name */}
           <div className="space-y-2">
-            <Label htmlFor="customerName" className="text-white">
+            <Label htmlFor="customerName" className="text-gray-900 dark:text-white">
               Customer Name
             </Label>
             <Input
@@ -513,7 +512,7 @@ export function NewBookingModal({
 
           {/* Number of People */}
           <div className="space-y-2">
-            <Label htmlFor="numberOfPeople" className="text-white">
+            <Label htmlFor="numberOfPeople" className="text-gray-900 dark:text-white">
               Number of People <span className="text-red-500">*</span>
             </Label>
             <div className="overflow-x-auto">
@@ -529,10 +528,10 @@ export function NewBookingModal({
                       disabled={isDisabled}
                       className={`flex-shrink-0 w-12 h-12 rounded-lg font-medium transition-colors ${
                         numberOfPeople === num.toString()
-                          ? "bg-white text-black"
+                          ? "bg-gray-900 dark:bg-white text-white dark:text-black"
                           : isDisabled
-                          ? "bg-zinc-900 text-zinc-600 cursor-not-allowed"
-                          : "bg-zinc-800 text-white hover:bg-zinc-700"
+                          ? "bg-gray-200 dark:bg-zinc-900 text-gray-400 dark:text-zinc-600 cursor-not-allowed"
+                          : "bg-gray-100 dark:bg-zinc-800 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-zinc-700"
                       }`}
                     >
                       {num}
@@ -545,28 +544,28 @@ export function NewBookingModal({
 
           {/* Meeting Point */}
           <div className="space-y-2">
-            <Label htmlFor="pickupLocation" className="text-white">
+            <Label htmlFor="pickupLocation" className="text-gray-900 dark:text-white">
               Meeting Point
             </Label>
             <Select
               value={pickupLocation}
               onValueChange={setPickupLocation}
             >
-              <SelectTrigger className="bg-zinc-950 border-zinc-800 text-white">
+              <SelectTrigger className="bg-white dark:bg-zinc-950 border-gray-300 dark:border-zinc-800 text-gray-900 dark:text-white">
                 <SelectValue placeholder="Select meeting point" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Meet at our base near the landing field in the centre">
-                  Meet at our base near the landing field in the centre
+                <SelectItem value="HW">
+                  HW
                 </SelectItem>
-                <SelectItem value="Train Station Interlaken Ost (Outside BIG coop supermarket)">
-                  Train Station Interlaken Ost (Outside BIG coop supermarket)
+                <SelectItem value="OST">
+                  OST
                 </SelectItem>
-                <SelectItem value="Mattenhof Resort (Free Parking)">
-                  Mattenhof Resort (Free Parking)
+                <SelectItem value="mhof">
+                  mhof
                 </SelectItem>
-                <SelectItem value="Other meeting point in or near Interlaken">
-                  Other meeting point in or near Interlaken
+                <SelectItem value="other">
+                  (blank)
                 </SelectItem>
               </SelectContent>
             </Select>
@@ -581,7 +580,7 @@ export function NewBookingModal({
 
           {/* Phone Number (Optional) */}
           <div className="space-y-2">
-            <Label htmlFor="phoneNumber" className="text-white">
+            <Label htmlFor="phoneNumber" className="text-gray-900 dark:text-white">
               Phone Number
             </Label>
             <Input
@@ -595,7 +594,7 @@ export function NewBookingModal({
 
           {/* Email (Optional) */}
           <div className="space-y-2">
-            <Label htmlFor="email" className="text-white">
+            <Label htmlFor="email" className="text-gray-900 dark:text-white">
               Email
             </Label>
             <Input
@@ -612,21 +611,21 @@ export function NewBookingModal({
             <button
               type="button"
               onClick={() => setShowAdditionalOptions(!showAdditionalOptions)}
-              className="flex items-center justify-between w-full text-white hover:text-zinc-300 transition-colors"
+              className="flex items-center justify-between w-full text-gray-900 dark:text-white hover:text-gray-600 dark:hover:text-zinc-300 transition-colors"
             >
               <span className="text-sm font-medium">Additional Options</span>
               {showAdditionalOptions ? (
-                <ChevronUp className="w-4 h-4" />
+                <ChevronUp className="w-4 h-4 text-gray-600 dark:text-zinc-400" />
               ) : (
-                <ChevronDown className="w-4 h-4" />
+                <ChevronDown className="w-4 h-4 text-gray-600 dark:text-zinc-400" />
               )}
             </button>
 
             {showAdditionalOptions && (
-              <div className="space-y-4 pt-2 border-t border-zinc-800">
+              <div className="space-y-4 pt-2 border-t border-gray-300 dark:border-zinc-800">
                 {/* Commission (Optional) */}
                 <div className="space-y-2">
-                  <Label htmlFor="commission" className="text-white">
+                  <Label htmlFor="commission" className="text-gray-900 dark:text-white">
                     Commission (per person)
                   </Label>
                   <Input
@@ -642,14 +641,14 @@ export function NewBookingModal({
 
                 {/* Commission Status */}
                 <div className="space-y-2">
-                  <Label htmlFor="commissionStatus" className="text-white">
+                  <Label htmlFor="commissionStatus" className="text-gray-900 dark:text-white">
                     Commission Status
                   </Label>
                   <select
                     id="commissionStatus"
                     value={commissionStatus}
                     onChange={(e) => setCommissionStatus(e.target.value as "paid" | "unpaid")}
-                    className="flex h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-white ring-offset-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2"
+                    className="flex h-10 w-full rounded-md border border-gray-300 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-sm text-gray-900 dark:text-white ring-offset-white dark:ring-offset-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 dark:focus-visible:ring-white focus-visible:ring-offset-2"
                   >
                     <option value="unpaid">Unpaid</option>
                     <option value="paid">Paid</option>
@@ -658,10 +657,10 @@ export function NewBookingModal({
 
                 {/* Lady Pilots Required */}
                 <div className="space-y-2">
-                  <Label className="text-white">
+                  <Label className="text-gray-900 dark:text-white">
                     Lady Pilots Required
                     {availableFemalePilots > 0 && (
-                      <span className="text-xs text-zinc-400 ml-2">
+                      <span className="text-xs text-gray-600 dark:text-zinc-400 ml-2">
                         ({availableFemalePilots} available)
                       </span>
                     )}
@@ -675,8 +674,8 @@ export function NewBookingModal({
                           onClick={() => setFemalePilotsRequired(num)}
                           className={`flex-shrink-0 w-12 h-12 rounded-lg font-medium transition-colors ${
                             femalePilotsRequired === num
-                              ? "bg-white text-black"
-                              : "bg-zinc-800 text-white hover:bg-zinc-700"
+                              ? "bg-gray-900 dark:bg-white text-white dark:text-black"
+                              : "bg-gray-100 dark:bg-zinc-800 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-zinc-700"
                           }`}
                         >
                           {num}
@@ -688,7 +687,7 @@ export function NewBookingModal({
 
                 {/* Flight Type */}
                 <div className="space-y-2">
-                  <Label className="text-white">
+                  <Label className="text-gray-900 dark:text-white">
                     Flight Type
                   </Label>
                   <div className="flex gap-2">
@@ -703,8 +702,8 @@ export function NewBookingModal({
                         onClick={() => setFlightType(type)}
                         className={`flex-1 px-3 py-3 rounded-lg font-medium transition-colors ${
                           flightType === type
-                            ? "bg-white text-black"
-                            : "bg-zinc-800 text-white hover:bg-zinc-700"
+                            ? "bg-gray-900 dark:bg-white text-white dark:text-black"
+                            : "bg-gray-100 dark:bg-zinc-800 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-zinc-700"
                         }`}
                       >
                         <div className="capitalize text-sm">{type}</div>
@@ -716,7 +715,7 @@ export function NewBookingModal({
 
                 {/* Additional Notes (Optional) */}
                 <div className="space-y-2">
-                  <Label htmlFor="notes" className="text-white">
+                  <Label htmlFor="notes" className="text-gray-900 dark:text-white">
                     Additional Notes
                   </Label>
                   <Textarea
@@ -732,10 +731,10 @@ export function NewBookingModal({
 
           {/* Action Buttons */}
           <div className="flex gap-3 pt-4">
-            <Button type="submit" className="flex-1 bg-white text-black hover:bg-zinc-200">
+            <Button type="submit" className="flex-1 bg-gray-900 dark:bg-white text-white dark:text-black hover:bg-gray-700 dark:hover:bg-zinc-200">
               Create Booking
             </Button>
-            <Button type="button" variant="outline" onClick={handleCancel} className="flex-1 border-zinc-700 text-white hover:bg-zinc-800">
+            <Button type="button" variant="outline" onClick={handleCancel} className="flex-1 border-gray-300 dark:border-zinc-700 text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-800">
               Cancel
             </Button>
           </div>

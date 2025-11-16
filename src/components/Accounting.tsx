@@ -308,14 +308,14 @@ export function Accounting() {
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-zinc-950 p-4 overflow-hidden">
+    <div className="flex-1 flex flex-col bg-gray-50 dark:bg-zinc-950 p-4 overflow-hidden">
       {/* Header */}
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-white">Accounting</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Accounting</h1>
         <Button
           onClick={exportToCSV}
           variant="outline"
-          className="border-zinc-700 text-white hover:bg-zinc-800"
+          className="border-gray-300 dark:border-zinc-700 text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-800"
         >
           <Download className="h-4 w-4 mr-2" />
           Export CSV
@@ -326,12 +326,12 @@ export function Accounting() {
       <div className="mb-4 space-y-3">
         {/* Date Range Filter */}
         <div className="flex gap-3 items-center">
-          <span className="text-sm text-zinc-400 min-w-[80px]">Date Range:</span>
+          <span className="text-sm text-gray-600 dark:text-zinc-400 min-w-[80px]">Date Range:</span>
           <Input
             type="date"
             value={dateRange.from}
             onChange={(e) => setDateRange({ ...dateRange, from: e.target.value })}
-            className="bg-zinc-900 border-zinc-800 text-white w-40 !h-10 !py-0 !text-sm flex items-center max-h-10 [&::-webkit-date-and-time-value]:!text-sm [&::-webkit-date-and-time-value]:leading-10"
+            className="bg-white dark:bg-zinc-900 border-gray-300 dark:border-zinc-800 text-gray-900 dark:text-white w-40 !h-10 !py-0 !text-sm flex items-center max-h-10 [&::-webkit-date-and-time-value]:!text-sm [&::-webkit-date-and-time-value]:leading-10 dark:[color-scheme:dark] [color-scheme:light]"
             style={{
               WebkitAppearance: 'none',
               MozAppearance: 'none',
@@ -340,12 +340,12 @@ export function Accounting() {
               lineHeight: '2.5rem'
             } as React.CSSProperties}
           />
-          <span className="text-zinc-500">to</span>
+          <span className="text-gray-500 dark:text-zinc-500">to</span>
           <Input
             type="date"
             value={dateRange.to}
             onChange={(e) => setDateRange({ ...dateRange, to: e.target.value })}
-            className="bg-zinc-900 border-zinc-800 text-white w-40 !h-10 !py-0 !text-sm flex items-center max-h-10 [&::-webkit-date-and-time-value]:!text-sm [&::-webkit-date-and-time-value]:leading-10"
+            className="bg-white dark:bg-zinc-900 border-gray-300 dark:border-zinc-800 text-gray-900 dark:text-white w-40 !h-10 !py-0 !text-sm flex items-center max-h-10 [&::-webkit-date-and-time-value]:!text-sm [&::-webkit-date-and-time-value]:leading-10 dark:[color-scheme:dark] [color-scheme:light]"
             style={{
               WebkitAppearance: 'none',
               MozAppearance: 'none',
@@ -354,25 +354,25 @@ export function Accounting() {
               lineHeight: '2.5rem'
             } as React.CSSProperties}
           />
-          <span className="text-sm text-zinc-400 ml-6">
-            Total flights: <span className="text-white font-medium">{filteredData.length}</span>
+          <span className="text-sm text-gray-600 dark:text-zinc-400 ml-6">
+            Total flights: <span className="text-gray-900 dark:text-white font-medium">{filteredData.length}</span>
           </span>
         </div>
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto bg-zinc-900 rounded-lg border border-zinc-800">
+      <div className="flex-1 overflow-auto bg-white dark:bg-zinc-900 rounded-lg border border-gray-200 dark:border-zinc-800">
         {(loading || driversLoading) ? (
           <div className="flex items-center justify-center h-32">
-            <div className="w-8 h-8 border-4 border-zinc-700 border-t-white rounded-full animate-spin"></div>
+            <div className="w-8 h-8 border-4 border-gray-300 dark:border-zinc-700 border-t-gray-900 dark:border-t-white rounded-full animate-spin"></div>
           </div>
         ) : (
           <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-zinc-800 border-b border-zinc-700">
+            <thead className="sticky top-0 bg-gray-100 dark:bg-zinc-800 border-b border-gray-200 dark:border-zinc-700">
               <tr>
-                <th className="text-left px-4 py-3 text-zinc-300 font-medium whitespace-nowrap">Date</th>
-                <th className="text-left px-4 py-3 text-zinc-300 font-medium whitespace-nowrap">Time</th>
-                <th className="text-left px-4 py-3 text-zinc-300 font-medium whitespace-nowrap">
+                <th className="text-left px-4 py-3 text-gray-700 dark:text-zinc-300 font-medium whitespace-nowrap">Date</th>
+                <th className="text-left px-4 py-3 text-gray-700 dark:text-zinc-300 font-medium whitespace-nowrap">Time</th>
+                <th className="text-left px-4 py-3 text-gray-700 dark:text-zinc-300 font-medium whitespace-nowrap">
                   <div className="flex items-center gap-2">
                     <span>Pilot</span>
                     <FilterDropdown
@@ -381,15 +381,15 @@ export function Accounting() {
                       selectedValues={selectedPilots}
                       onChange={setSelectedPilots}
                       trigger={
-                        <button className={`hover:text-white transition-colors ${selectedPilots.length > 0 ? 'text-blue-400' : ''}`}>
+                        <button className={`hover:text-gray-900 dark:hover:text-white transition-colors ${selectedPilots.length > 0 ? 'text-blue-600 dark:text-blue-400' : ''}`}>
                           <Filter className="h-4 w-4" />
                         </button>
                       }
                     />
                   </div>
                 </th>
-                <th className="text-right px-4 py-3 text-zinc-300 font-medium whitespace-nowrap">Payment</th>
-                <th className="text-left px-4 py-3 text-zinc-300 font-medium whitespace-nowrap">
+                <th className="text-right px-4 py-3 text-gray-700 dark:text-zinc-300 font-medium whitespace-nowrap">Payment</th>
+                <th className="text-left px-4 py-3 text-gray-700 dark:text-zinc-300 font-medium whitespace-nowrap">
                   <div className="flex items-center gap-2">
                     <span>Method</span>
                     <FilterDropdown
@@ -398,14 +398,14 @@ export function Accounting() {
                       selectedValues={selectedMethods}
                       onChange={setSelectedMethods}
                       trigger={
-                        <button className={`hover:text-white transition-colors ${selectedMethods.length > 0 ? 'text-blue-400' : ''}`}>
+                        <button className={`hover:text-gray-900 dark:hover:text-white transition-colors ${selectedMethods.length > 0 ? 'text-blue-600 dark:text-blue-400' : ''}`}>
                           <Filter className="h-4 w-4" />
                         </button>
                       }
                     />
                   </div>
                 </th>
-                <th className="text-left px-4 py-3 text-zinc-300 font-medium whitespace-nowrap">
+                <th className="text-left px-4 py-3 text-gray-700 dark:text-zinc-300 font-medium whitespace-nowrap">
                   <div className="flex items-center gap-2">
                     <span>Source</span>
                     <FilterDropdown
@@ -414,16 +414,16 @@ export function Accounting() {
                       selectedValues={selectedSources}
                       onChange={setSelectedSources}
                       trigger={
-                        <button className={`hover:text-white transition-colors ${selectedSources.length > 0 ? 'text-blue-400' : ''}`}>
+                        <button className={`hover:text-gray-900 dark:hover:text-white transition-colors ${selectedSources.length > 0 ? 'text-blue-600 dark:text-blue-400' : ''}`}>
                           <Filter className="h-4 w-4" />
                         </button>
                       }
                     />
                   </div>
                 </th>
-                <th className="text-center px-4 py-3 text-zinc-300 font-medium whitespace-nowrap">Turn</th>
-                <th className="text-center px-4 py-3 text-zinc-300 font-medium whitespace-nowrap">Pax</th>
-                <th className="text-left px-4 py-3 text-zinc-300 font-medium whitespace-nowrap">
+                <th className="text-center px-4 py-3 text-gray-700 dark:text-zinc-300 font-medium whitespace-nowrap">Turn</th>
+                <th className="text-center px-4 py-3 text-gray-700 dark:text-zinc-300 font-medium whitespace-nowrap">Pax</th>
+                <th className="text-left px-4 py-3 text-gray-700 dark:text-zinc-300 font-medium whitespace-nowrap">
                   <div className="flex items-center gap-2">
                     <span>Driver(s)</span>
                     <FilterDropdown
@@ -432,14 +432,14 @@ export function Accounting() {
                       selectedValues={selectedDrivers}
                       onChange={setSelectedDrivers}
                       trigger={
-                        <button className={`hover:text-white transition-colors ${selectedDrivers.length > 0 ? 'text-blue-400' : ''}`}>
+                        <button className={`hover:text-gray-900 dark:hover:text-white transition-colors ${selectedDrivers.length > 0 ? 'text-blue-600 dark:text-blue-400' : ''}`}>
                           <Filter className="h-4 w-4" />
                         </button>
                       }
                     />
                   </div>
                 </th>
-                <th className="text-left px-4 py-3 text-zinc-300 font-medium whitespace-nowrap">
+                <th className="text-left px-4 py-3 text-gray-700 dark:text-zinc-300 font-medium whitespace-nowrap">
                   <div className="flex items-center gap-2">
                     <span>Vehicle(s)</span>
                     <FilterDropdown
@@ -448,22 +448,22 @@ export function Accounting() {
                       selectedValues={selectedVehicles}
                       onChange={setSelectedVehicles}
                       trigger={
-                        <button className={`hover:text-white transition-colors ${selectedVehicles.length > 0 ? 'text-blue-400' : ''}`}>
+                        <button className={`hover:text-gray-900 dark:hover:text-white transition-colors ${selectedVehicles.length > 0 ? 'text-blue-600 dark:text-blue-400' : ''}`}>
                           <Filter className="h-4 w-4" />
                         </button>
                       }
                     />
                   </div>
                 </th>
-                <th className="text-right px-4 py-3 text-zinc-300 font-medium whitespace-nowrap">Commission</th>
-                <th className="text-left px-4 py-3 text-zinc-300 font-medium whitespace-nowrap">Comm. Status</th>
-                <th className="text-center px-4 py-3 text-zinc-300 font-medium whitespace-nowrap">Receipt</th>
+                <th className="text-right px-4 py-3 text-gray-700 dark:text-zinc-300 font-medium whitespace-nowrap">Commission</th>
+                <th className="text-left px-4 py-3 text-gray-700 dark:text-zinc-300 font-medium whitespace-nowrap">Comm. Status</th>
+                <th className="text-center px-4 py-3 text-gray-700 dark:text-zinc-300 font-medium whitespace-nowrap">Receipt</th>
               </tr>
             </thead>
             <tbody>
               {filteredData.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="px-4 py-12 text-center text-zinc-500">
+                  <td colSpan={13} className="px-4 py-12 text-center text-gray-500 dark:text-zinc-500">
                     <p>No records found matching your filters</p>
                   </td>
                 </tr>
@@ -477,39 +477,39 @@ export function Accounting() {
                   return (
                     <tr
                       key={`${row.date}-${row.time}-${row.pilot}-${index}`}
-                      className="border-b border-zinc-800 hover:bg-zinc-800/50 transition-colors"
+                      className="border-b border-gray-200 dark:border-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors"
                     >
-                      <td className="px-4 py-3 text-white whitespace-nowrap">{formatDate(row.date)}</td>
-                      <td className="px-4 py-3 text-white whitespace-nowrap">{row.time}</td>
-                      <td className="px-4 py-3 text-white whitespace-nowrap">{row.pilot}</td>
-                      <td className="px-4 py-3 text-right text-white font-medium whitespace-nowrap">
+                      <td className="px-4 py-3 text-gray-900 dark:text-white whitespace-nowrap">{formatDate(row.date)}</td>
+                      <td className="px-4 py-3 text-gray-900 dark:text-white whitespace-nowrap">{row.time}</td>
+                      <td className="px-4 py-3 text-gray-900 dark:text-white whitespace-nowrap">{row.pilot}</td>
+                      <td className="px-4 py-3 text-right text-gray-900 dark:text-white font-medium whitespace-nowrap">
                         {typeof row.payment === "number" ? row.payment.toFixed(2) : row.payment}
                       </td>
-                      <td className="px-4 py-3 text-zinc-300 whitespace-nowrap">
+                      <td className="px-4 py-3 text-gray-700 dark:text-zinc-300 whitespace-nowrap">
                         <span className={`px-2 py-1 rounded text-xs font-medium ${
-                          row.paymentMethod === "direkt" ? "bg-green-900/30 text-green-400" :
-                          row.paymentMethod === "ticket" ? "bg-blue-900/30 text-blue-400" :
-                          "bg-purple-900/30 text-purple-400"
+                          row.paymentMethod === "direkt" ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400" :
+                          row.paymentMethod === "ticket" ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400" :
+                          "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400"
                         }`}>
                           {formatPaymentMethod(row.paymentMethod)}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-zinc-300 whitespace-nowrap">
+                      <td className="px-4 py-3 text-gray-700 dark:text-zinc-300 whitespace-nowrap">
                         {row.bookingSource}
                       </td>
-                      <td className="px-4 py-3 text-center text-white whitespace-nowrap">
+                      <td className="px-4 py-3 text-center text-gray-900 dark:text-white whitespace-nowrap">
                         {isFirstRowOfTurn ? row.turn : ""}
                       </td>
-                      <td className="px-4 py-3 text-center text-white whitespace-nowrap">
+                      <td className="px-4 py-3 text-center text-gray-900 dark:text-white whitespace-nowrap">
                         {isFirstRowOfTurn ? row.pax : ""}
                       </td>
-                      <td className="px-4 py-3 text-zinc-300 whitespace-nowrap">
+                      <td className="px-4 py-3 text-gray-700 dark:text-zinc-300 whitespace-nowrap">
                         {isFirstRowOfTurn ? (row.drivers.length > 0 ? row.drivers.join(", ") : "-") : ""}
                       </td>
-                      <td className="px-4 py-3 text-zinc-300 whitespace-nowrap">
+                      <td className="px-4 py-3 text-gray-700 dark:text-zinc-300 whitespace-nowrap">
                         {isFirstRowOfTurn ? (row.vehicles.length > 0 ? row.vehicles.join(", ") : "-") : ""}
                       </td>
-                      <td className="px-4 py-3 text-right text-white whitespace-nowrap">
+                      <td className="px-4 py-3 text-right text-gray-900 dark:text-white whitespace-nowrap">
                         {row.commission !== null ? row.commission.toFixed(2) : "-"}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
@@ -520,8 +520,8 @@ export function Accounting() {
                               onChange={(e) => updateCommissionStatus(row.bookingId!, e.target.value as "paid" | "unpaid")}
                               className={`px-2 py-1 rounded text-xs font-medium border-0 ${
                                 row.commissionStatus === "paid"
-                                  ? "bg-green-900/30 text-green-400"
-                                  : "bg-red-900/30 text-red-400"
+                                  ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                                  : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
                               }`}
                             >
                               <option value="unpaid">Unpaid</option>
@@ -530,14 +530,14 @@ export function Accounting() {
                           ) : (
                             <span className={`px-2 py-1 rounded text-xs font-medium ${
                               row.commissionStatus === "paid"
-                                ? "bg-green-900/30 text-green-400"
-                                : "bg-red-900/30 text-red-400"
+                                ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                                : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
                             }`}>
                               {row.commissionStatus === "paid" ? "Paid" : "Unpaid"}
                             </span>
                           )
                         ) : (
-                          <span className="text-zinc-500">-</span>
+                          <span className="text-gray-500 dark:text-zinc-500">-</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-center whitespace-nowrap">
@@ -557,7 +557,7 @@ export function Accounting() {
                             ))}
                           </div>
                         ) : (
-                          <span className="text-zinc-500">-</span>
+                          <span className="text-gray-500 dark:text-zinc-500">-</span>
                         )}
                       </td>
                     </tr>

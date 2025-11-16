@@ -277,7 +277,7 @@ export function BookingRequestForm() {
         time: selectedTimeSlot,
         timeIndex: parseInt(formData.timeIndex),
         numberOfPeople: Number(formData.numberOfPeople),
-        meetingPoint: formData.meetingPoint,
+        meetingPoint: formData.meetingPoint === "other" ? "" : formData.meetingPoint,
         flightType: formData.flightType,
         notes: formData.notes,
         status: "pending",
@@ -606,16 +606,16 @@ export function BookingRequestForm() {
                 <SelectValue placeholder="Select meeting point" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Meet at our base near the landing field in the centre">
+                <SelectItem value="HW">
                   Meet at our base near the landing field in the centre
                 </SelectItem>
-                <SelectItem value="Train Station Interlaken Ost (Outside BIG coop supermarket)">
+                <SelectItem value="OST">
                   Train Station Interlaken Ost (Outside BIG coop supermarket)
                 </SelectItem>
-                <SelectItem value="Mattenhof Resort (Free Parking)">
+                <SelectItem value="mhof">
                   Mattenhof Resort (Free Parking)
                 </SelectItem>
-                <SelectItem value="Other meeting point in or near Interlaken">
+                <SelectItem value="other">
                   Other meeting point in or near Interlaken
                 </SelectItem>
               </SelectContent>

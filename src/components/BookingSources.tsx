@@ -100,24 +100,24 @@ export function BookingSources() {
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-zinc-950 p-4 overflow-hidden">
+    <div className="flex-1 flex flex-col bg-gray-50 dark:bg-zinc-950 p-4 overflow-hidden">
       {/* Header */}
       <div className="mb-4">
-        <h1 className="text-2xl font-bold text-white mb-2">Booking Sources</h1>
-        <p className="text-zinc-400 text-sm">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Booking Sources</h1>
+        <p className="text-gray-600 dark:text-zinc-400 text-sm">
           Manage and track your booking sources
         </p>
       </div>
 
       {/* Search */}
       <div className="relative mb-4">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-zinc-500" />
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-zinc-500 text-gray-400 dark:text-zinc-500" />
         <Input
           type="text"
           placeholder="Search booking sources..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="pl-10 bg-zinc-900 border-zinc-800 text-white placeholder-zinc-500"
+          className="pl-10 bg-white dark:bg-zinc-900 border-gray-300 dark:border-zinc-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-zinc-500"
         />
       </div>
 
@@ -125,10 +125,10 @@ export function BookingSources() {
       <div className="flex-1 overflow-y-auto space-y-2">
         {loading ? (
           <div className="flex items-center justify-center h-32">
-            <div className="w-8 h-8 border-4 border-zinc-700 border-t-white rounded-full animate-spin"></div>
+            <div className="w-8 h-8 border-4 border-gray-300 dark:border-zinc-700 border-t-white border-t-gray-900 dark:border-t-white rounded-full animate-spin"></div>
           </div>
         ) : filteredSources.length === 0 ? (
-          <div className="text-center py-12 text-zinc-500">
+          <div className="text-center py-12 text-gray-500 dark:text-zinc-500">
             <p>{searchTerm ? "No booking sources found" : "No booking sources yet"}</p>
           </div>
         ) : (
@@ -136,7 +136,7 @@ export function BookingSources() {
             <div
               key={source.name}
               onClick={() => handleEditSource(source)}
-              className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 hover:bg-zinc-800 transition-colors cursor-pointer flex items-center justify-between"
+              className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors cursor-pointer flex items-center justify-between"
             >
               <div className="flex items-center gap-4 flex-1">
                 {/* Color indicator */}
@@ -149,15 +149,15 @@ export function BookingSources() {
 
                 {/* Source info */}
                 <div className="flex-1">
-                  <div className="text-white font-medium text-lg">{source.name}</div>
-                  <div className="text-zinc-400 text-sm">
+                  <div className="text-gray-900 dark:text-white font-medium text-lg">{source.name}</div>
+                  <div className="text-gray-600 dark:text-zinc-400 text-sm">
                     {source.count} {source.count === 1 ? "booking" : "bookings"}
                   </div>
                 </div>
               </div>
 
               {/* Count badge */}
-              <div className="bg-zinc-800 text-white px-3 py-1 rounded-full font-medium">
+              <div className="bg-gray-100 dark:bg-zinc-800 text-gray-900 dark:text-white px-3 py-1 rounded-full font-medium">
                 {source.count}
               </div>
             </div>
@@ -168,20 +168,20 @@ export function BookingSources() {
       {/* Edit Color Dialog */}
       {editingSource && (
         <Dialog open={!!editingSource} onOpenChange={() => setEditingSource(null)}>
-          <DialogContent className="w-[90vw] max-w-md bg-zinc-900 border-zinc-800">
+          <DialogContent className="w-[90vw] max-w-md bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800">
             <DialogHeader>
-              <DialogTitle className="text-white">Edit Booking Source Color</DialogTitle>
+              <DialogTitle className="text-gray-900 dark:text-white">Edit Booking Source Color</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
               <div>
-                <label className="text-sm text-zinc-400 mb-2 block">
+                <label className="text-sm text-gray-600 dark:text-zinc-400 mb-2 block">
                   Booking Source
                 </label>
-                <div className="text-white font-medium text-lg">{editingSource.name}</div>
+                <div className="text-gray-900 dark:text-white font-medium text-lg">{editingSource.name}</div>
               </div>
 
               <div>
-                <label className="text-sm text-zinc-400 mb-2 block">
+                <label className="text-sm text-gray-600 dark:text-zinc-400 mb-2 block">
                   Color
                 </label>
                 <div className="flex gap-3">
@@ -189,7 +189,7 @@ export function BookingSources() {
                     type="color"
                     value={editColor}
                     onChange={(e) => setEditColor(e.target.value)}
-                    className="w-20 h-20 rounded-lg cursor-pointer border-2 border-zinc-700"
+                    className="w-20 h-20 rounded-lg cursor-pointer border-2 border-gray-300 dark:border-zinc-700"
                   />
                   <div className="flex-1">
                     <Input
@@ -197,10 +197,10 @@ export function BookingSources() {
                       value={editColor}
                       onChange={(e) => setEditColor(e.target.value)}
                       placeholder="#1e3a8a"
-                      className="bg-zinc-800 border-zinc-700 text-white mb-2"
+                      className="bg-white dark:bg-zinc-800 border-gray-300 dark:border-zinc-700 text-gray-900 dark:text-white mb-2"
                     />
                     <div
-                      className="w-full h-10 rounded-lg border-2 border-zinc-700"
+                      className="w-full h-10 rounded-lg border-2 border-gray-300 dark:border-zinc-700"
                       style={{ backgroundColor: editColor }}
                     />
                   </div>
@@ -211,13 +211,13 @@ export function BookingSources() {
                 <Button
                   onClick={() => setEditingSource(null)}
                   variant="outline"
-                  className="border-zinc-700 text-white hover:bg-zinc-800"
+                  className="border-gray-300 dark:border-zinc-700 text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-800"
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={handleSaveColor}
-                  className="bg-white text-black hover:bg-zinc-200"
+                  className="bg-gray-900 dark:bg-white text-white dark:text-black hover:bg-gray-800 dark:hover:bg-zinc-200"
                 >
                   Save
                 </Button>

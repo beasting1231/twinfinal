@@ -6,6 +6,7 @@
     "rules": "storage.rules"
   },
   "hosting": {
+    "site": "twinparagliding",
     "public": "dist",
     "ignore": [
       "firebase.json",

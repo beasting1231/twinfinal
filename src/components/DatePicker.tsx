@@ -32,7 +32,7 @@ export function DatePicker({ date, onDateChange }: DatePickerProps) {
         variant="outline"
         size="icon"
         onClick={handlePrevDay}
-        className="h-10 w-10 border-zinc-700 hover:bg-zinc-800 hover:border-zinc-600"
+        className="h-10 w-10 border-gray-300 dark:border-zinc-700 hover:bg-gray-100 dark:hover:bg-zinc-800 hover:border-gray-400 dark:hover:border-zinc-600"
       >
         <ChevronLeft className="h-4 w-4" />
       </Button>
@@ -41,15 +41,15 @@ export function DatePicker({ date, onDateChange }: DatePickerProps) {
           <Button
             variant="outline"
             className={cn(
-              "justify-center text-center font-normal min-w-[200px] border-zinc-700 hover:bg-zinc-800 hover:border-zinc-600",
-              !date && "text-zinc-500"
+              "justify-center text-center font-normal min-w-[200px] border-gray-300 dark:border-zinc-700 hover:bg-gray-100 dark:hover:bg-zinc-800 hover:border-gray-400 dark:hover:border-zinc-600",
+              !date && "text-gray-400 dark:text-zinc-500"
             )}
           >
             <CalendarIcon className="mr-2 h-4 w-4" />
             {date ? format(date, "dd MMM yyyy") : <span>Pick a date</span>}
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-0 bg-zinc-900 border-zinc-800" align="center">
+        <PopoverContent className="w-auto p-0 bg-white dark:bg-zinc-900 border-gray-300 dark:border-zinc-800" align="center">
           <Calendar
             mode="single"
             selected={date}
@@ -67,7 +67,7 @@ export function DatePicker({ date, onDateChange }: DatePickerProps) {
         variant="outline"
         size="icon"
         onClick={handleNextDay}
-        className="h-10 w-10 border-zinc-700 hover:bg-zinc-800 hover:border-zinc-600"
+        className="h-10 w-10 border-gray-300 dark:border-zinc-700 hover:bg-gray-100 dark:hover:bg-zinc-800 hover:border-gray-400 dark:hover:border-zinc-600"
       >
         <ChevronRight className="h-4 w-4" />
       </Button>

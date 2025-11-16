@@ -51,25 +51,25 @@ export function Header({
   const isActive = (path: string) => location.pathname === path;
 
   return (
-    <header className="bg-zinc-950 border-b border-zinc-800 pt-[env(safe-area-inset-top)]">
+    <header className="bg-white dark:bg-zinc-950 border-b border-gray-200 dark:border-zinc-800 pt-[env(safe-area-inset-top)]">
       <div className="flex items-center justify-between p-4">
         {/* Left: Hamburger Menu */}
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
           <SheetTrigger asChild>
-            <Button variant="ghost" size="icon" className="hover:bg-zinc-800">
+            <Button variant="ghost" size="icon" className="hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-900 dark:text-white">
               <Menu className="h-6 w-6" />
             </Button>
           </SheetTrigger>
-          <SheetContent side="left" className="bg-zinc-900 border-zinc-700 w-72">
+          <SheetContent side="left" className="bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-700 w-72">
             <SheetHeader>
-              <SheetTitle className="text-white text-xl">Menu</SheetTitle>
+              <SheetTitle className="text-gray-900 dark:text-white text-xl">Menu</SheetTitle>
             </SheetHeader>
             <div className="flex flex-col gap-2 mt-6">
               {permissions.canViewAllBookings && (
                 <button
                   onClick={() => handleNavigate("/")}
-                  className={`w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white ${
-                    isActive("/") ? "bg-zinc-800" : ""
+                  className={`w-full text-left px-4 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors text-gray-900 dark:text-white ${
+                    isActive("/") ? "bg-gray-100 dark:bg-zinc-800" : ""
                   }`}
                 >
                   Daily Plan
@@ -78,8 +78,8 @@ export function Header({
               {permissions.canManageOwnAvailability && (
                 <button
                   onClick={() => handleNavigate("/availability")}
-                  className={`w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white ${
-                    isActive("/availability") ? "bg-zinc-800" : ""
+                  className={`w-full text-left px-4 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors text-gray-900 dark:text-white ${
+                    isActive("/availability") ? "bg-gray-100 dark:bg-zinc-800" : ""
                   }`}
                 >
                   Availability
@@ -88,8 +88,8 @@ export function Header({
               {permissions.canManageDriversAndSources && (
                 <button
                   onClick={() => handleNavigate("/booking-sources")}
-                  className={`w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white ${
-                    isActive("/booking-sources") ? "bg-zinc-800" : ""
+                  className={`w-full text-left px-4 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors text-gray-900 dark:text-white ${
+                    isActive("/booking-sources") ? "bg-gray-100 dark:bg-zinc-800" : ""
                   }`}
                 >
                   Booking Sources
@@ -98,8 +98,8 @@ export function Header({
               {permissions.canAccessAccounting && (
                 <button
                   onClick={() => handleNavigate("/accounting")}
-                  className={`w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white ${
-                    isActive("/accounting") ? "bg-zinc-800" : ""
+                  className={`w-full text-left px-4 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors text-gray-900 dark:text-white ${
+                    isActive("/accounting") ? "bg-gray-100 dark:bg-zinc-800" : ""
                   }`}
                 >
                   Accounting
@@ -108,8 +108,8 @@ export function Header({
               {permissions.canManageDriversAndSources && (
                 <button
                   onClick={() => handleNavigate("/priority")}
-                  className={`w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white ${
-                    isActive("/priority") ? "bg-zinc-800" : ""
+                  className={`w-full text-left px-4 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors text-gray-900 dark:text-white ${
+                    isActive("/priority") ? "bg-gray-100 dark:bg-zinc-800" : ""
                   }`}
                 >
                   Priority
@@ -118,8 +118,8 @@ export function Header({
               {permissions.canManageBookingRequests && (
                 <button
                   onClick={() => handleNavigate("/forms")}
-                  className={`w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white ${
-                    isActive("/forms") ? "bg-zinc-800" : ""
+                  className={`w-full text-left px-4 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors text-gray-900 dark:text-white ${
+                    isActive("/forms") ? "bg-gray-100 dark:bg-zinc-800" : ""
                   }`}
                 >
                   Forms
@@ -127,8 +127,8 @@ export function Header({
               )}
               <button
                 onClick={() => handleNavigate("/account")}
-                className={`w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white ${
-                  isActive("/account") ? "bg-zinc-800" : ""
+                className={`w-full text-left px-4 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors text-gray-900 dark:text-white ${
+                  isActive("/account") ? "bg-gray-100 dark:bg-zinc-800" : ""
                 }`}
               >
                 Account
@@ -136,17 +136,17 @@ export function Header({
               {permissions.canManageRoles && (
                 <button
                   onClick={() => handleNavigate("/user-management")}
-                  className={`w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-white ${
-                    isActive("/user-management") ? "bg-zinc-800" : ""
+                  className={`w-full text-left px-4 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors text-gray-900 dark:text-white ${
+                    isActive("/user-management") ? "bg-gray-100 dark:bg-zinc-800" : ""
                   }`}
                 >
                   User Management
                 </button>
               )}
-              <div className="my-2 border-t border-zinc-700" />
+              <div className="my-2 border-t border-gray-200 dark:border-zinc-700" />
               <button
                 onClick={handleLogout}
-                className="w-full text-left px-4 py-3 rounded-lg hover:bg-zinc-800 transition-colors text-red-400 hover:text-red-300"
+                className="w-full text-left px-4 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
               >
                 Logout
               </button>
@@ -165,7 +165,7 @@ export function Header({
 
         {/* Right: User Profile */}
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">{currentUser?.displayName || currentUser?.email}</span>
+          <span className="text-sm font-medium text-gray-900 dark:text-white">{currentUser?.displayName || currentUser?.email}</span>
         </div>
       </div>
     </header>

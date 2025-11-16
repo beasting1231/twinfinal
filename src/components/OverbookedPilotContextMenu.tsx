@@ -96,7 +96,7 @@ export function OverbookedPilotContextMenu({
       {/* Context Menu */}
       <div
         ref={menuRef}
-        className={`fixed z-50 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl py-1 min-w-[200px] max-h-[400px] overflow-y-auto transition-opacity duration-75 ${
+        className={`fixed z-50 bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 rounded-lg shadow-xl py-1 min-w-[200px] max-h-[400px] overflow-y-auto transition-opacity duration-75 ${
           isPositioned ? 'opacity-100' : 'opacity-0'
         }`}
         style={{ left: position.x, top: position.y }}
@@ -104,7 +104,7 @@ export function OverbookedPilotContextMenu({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="px-3 py-1.5 text-xs font-medium text-orange-400 border-b border-zinc-700">
+        <div className="px-3 py-1.5 text-xs font-medium text-orange-600 dark:text-orange-400 border-b border-gray-300 dark:border-zinc-700">
           Assign Overbooked Pilot
         </div>
 
@@ -115,7 +115,7 @@ export function OverbookedPilotContextMenu({
               onUnassign();
               onClose();
             }}
-            className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-zinc-700 transition-colors flex items-center gap-2"
+            className="w-full px-3 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2"
           >
             <X className="w-4 h-4" />
             <span>Un-assign</span>
@@ -123,7 +123,7 @@ export function OverbookedPilotContextMenu({
         )}
 
         {/* Unavailable Pilots */}
-        {currentPilot && <div className="border-t border-zinc-700 my-1" />}
+        {currentPilot && <div className="border-t border-gray-300 dark:border-zinc-700 my-1" />}
         {unavailablePilots.length > 0 ? (
           <div className="py-1">
             {unavailablePilots.map((pilot) => {
@@ -135,20 +135,20 @@ export function OverbookedPilotContextMenu({
                     onSelectPilot(pilot.displayName);
                     onClose();
                   }}
-                  className={`w-full px-3 py-2 text-left text-sm hover:bg-zinc-700 transition-colors flex items-center justify-between gap-2 ${
-                    isCurrent ? "text-orange-400" : "text-white"
+                  className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center justify-between gap-2 ${
+                    isCurrent ? "text-orange-600 dark:text-orange-400" : "text-gray-900 dark:text-white"
                   }`}
                 >
                   <div className="flex items-center gap-2">
                     <span>{pilot.displayName}</span>
-                    <span className="text-xs text-zinc-500">(not signed in)</span>
+                    <span className="text-xs text-gray-500 dark:text-zinc-500">(not signed in)</span>
                   </div>
                 </button>
               );
             })}
           </div>
         ) : (
-          <div className="px-3 py-2 text-sm text-zinc-500">
+          <div className="px-3 py-2 text-sm text-gray-500 dark:text-zinc-500">
             No pilots to assign
           </div>
         )}

@@ -164,7 +164,7 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
     }
 
     fetchAllPilotsAvailability();
-  }, [weekStartDate, currentUser]);
+  }, [weekStartDate, currentUser, justSaved]);
 
   // Function to check if a cell should be locked (cannot be toggled to unavailable)
   // Locks cells when the user is available AND the time slot is fully or overbooked
@@ -220,6 +220,14 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
   const handleToggleColumn = async (dayIndex: number) => {
     const day = days[dayIndex];
     const timeSlots = dailyTimeSlots[dayIndex];
+
+    // Check if any slots are locked
+    const anyLocked = timeSlots.some((slot) => isCellLocked(day, slot));
+
+    if (anyLocked) {
+      // Don't allow day-level toggle if any slots are locked
+      return;
+    }
 
     // Check if all slots are available
     const allAvailable = timeSlots.every((slot) => isAvailable(day, slot));
@@ -304,7 +312,7 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
   return (
     <div
       ref={containerRef}
-      className="flex-1 overflow-auto p-4 bg-zinc-950"
+      className="flex-1 overflow-auto p-4 bg-gray-50 dark:bg-zinc-950"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -312,13 +320,13 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
       {/* Admin User Selector */}
       {role === 'admin' && (
         <div className="mb-6 max-w-xs">
-          <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-2">
+          <label className="block text-xs font-semibold text-gray-600 dark:text-zinc-400 uppercase tracking-wide mb-2">
             Viewing Availability For
           </label>
           <select
             value={selectedUserId || ''}
             onChange={(e) => setSelectedUserId(e.target.value || undefined)}
-            className="w-full bg-zinc-900 border-2 border-zinc-700 rounded-lg px-3 py-2.5 text-white text-sm font-medium shadow-sm hover:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors cursor-pointer"
+            className="w-full bg-white dark:bg-zinc-900 border-2 border-gray-300 dark:border-zinc-700 rounded-lg px-3 py-2.5 text-gray-900 dark:text-white text-sm font-medium shadow-sm hover:border-gray-400 dark:hover:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors cursor-pointer"
           >
             <option value="">My Availability</option>
             {pilotsAndAdmins.map(user => (
@@ -333,18 +341,18 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
       {/* Saving indicator */}
       {(saving || justSaved) && (
         <div className="fixed bottom-4 right-4 z-50">
-          <div className="w-24 h-8 bg-zinc-700/90 rounded-md shadow-lg flex items-center justify-center gap-1.5 px-2 transition-all">
+          <div className="w-24 h-8 bg-gray-800 dark:bg-zinc-700/90 rounded-md shadow-lg flex items-center justify-center gap-1.5 px-2 transition-all">
             {saving ? (
               <>
-                <div className="w-3 h-3 border-2 border-zinc-300 border-t-transparent rounded-full animate-spin"></div>
-                <span className="text-xs font-medium text-zinc-200">Saving</span>
+                <div className="w-3 h-3 border-2 border-gray-200 dark:border-zinc-300 border-t-transparent rounded-full animate-spin"></div>
+                <span className="text-xs font-medium text-gray-200 dark:text-zinc-200">Saving</span>
               </>
             ) : (
               <>
-                <svg className="w-3 h-3 text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-3 h-3 text-gray-200 dark:text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                <span className="text-xs font-medium text-zinc-200">Saved</span>
+                <span className="text-xs font-medium text-gray-200 dark:text-zinc-200">Saved</span>
               </>
             )}
           </div>
@@ -368,15 +376,15 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
                 {/* Day Header */}
                 <button
                   onClick={() => handleToggleColumn(dayIndex)}
-                  className={`h-14 flex flex-col items-center justify-center rounded-lg font-medium text-sm transition-colors cursor-pointer ${
+                  className={`h-14 flex flex-col items-center justify-center rounded-lg font-medium text-sm transition-colors cursor-pointer border ${
                     isToday
-                      ? 'bg-blue-900/50 hover:bg-blue-900/70 border-2 border-blue-500'
-                      : 'bg-zinc-900 hover:bg-zinc-800'
+                      ? 'bg-blue-100 dark:bg-blue-900/50 hover:bg-blue-200 dark:hover:bg-blue-900/70 border-2 border-blue-500'
+                      : 'bg-white dark:bg-zinc-900 hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-900 dark:text-white border-gray-300 dark:border-zinc-700'
                   }`}
                   disabled={isInitialLoading || saving}
                 >
-                  <div className={`text-xs ${isToday ? 'text-blue-300' : 'text-zinc-400'}`}>{dayName}</div>
-                  <div className={isToday ? 'text-blue-100' : ''}>{monthDay}</div>
+                  <div className={`text-xs ${isToday ? 'text-blue-600 dark:text-blue-300' : 'text-gray-600 dark:text-zinc-400'}`}>{dayName}</div>
+                  <div className={isToday ? 'text-blue-700 dark:text-blue-100' : ''}>{monthDay}</div>
                 </button>
 
                 {/* Time Slots for this day */}
@@ -384,7 +392,7 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
                   // Loading skeleton
                   timeSlots.map((_, slotIndex) => (
                     <div key={`skeleton-${dayIndex}-${slotIndex}`} className="h-14">
-                      <div className="w-full h-14 bg-zinc-800 rounded-lg animate-pulse" />
+                      <div className="w-full h-14 bg-gray-200 dark:bg-zinc-800 rounded-lg animate-pulse" />
                     </div>
                   ))
                 ) : (

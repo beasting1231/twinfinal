@@ -15,6 +15,7 @@ import { useBookings } from "./hooks/useBookings";
 import { usePilots } from "./hooks/usePilots";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { EditingProvider } from "./contexts/EditingContext";
+import { ThemeProvider } from "./contexts/ThemeContext";
 import { Login } from "./components/Auth/Login";
 import { ProtectedRoute } from "./components/Auth/ProtectedRoute";
 import { getTimeSlotsByDate } from "./utils/timeSlots";
@@ -37,7 +38,7 @@ function DailyPlanPage() {
   const timeSlots = useMemo(() => getTimeSlotsByDate(selectedDate), [selectedDate]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-zinc-950 dark">
+    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-zinc-950">
       <Header
         date={selectedDate}
         onDateChange={setSelectedDate}
@@ -67,7 +68,7 @@ function AvailabilityPage() {
   const [weekStartDate, setWeekStartDate] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
 
   return (
-    <div className="min-h-screen flex flex-col bg-zinc-950 dark">
+    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-zinc-950">
       <Header
         date={selectedDate}
         onDateChange={setSelectedDate}
@@ -85,7 +86,7 @@ function PageWrapper({ children }: { children: React.ReactNode }) {
   const [weekStartDate, setWeekStartDate] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
 
   return (
-    <div className="min-h-screen flex flex-col bg-zinc-950 dark">
+    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-zinc-950">
       <Header
         date={selectedDate}
         onDateChange={setSelectedDate}
@@ -177,9 +178,11 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <EditingProvider>
-          <AppContent />
-        </EditingProvider>
+        <ThemeProvider>
+          <EditingProvider>
+            <AppContent />
+          </EditingProvider>
+        </ThemeProvider>
       </AuthProvider>
     </BrowserRouter>
   );

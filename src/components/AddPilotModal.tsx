@@ -94,16 +94,16 @@ export function AddPilotModal({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        className="bg-zinc-950 border-zinc-800 text-white max-w-md overflow-visible"
+        className="bg-white dark:bg-zinc-950 border-gray-300 dark:border-zinc-800 text-gray-900 dark:text-white max-w-md overflow-visible"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <DialogHeader>
-          <DialogTitle>Add Pilot to {timeSlot}</DialogTitle>
+          <DialogTitle className="text-gray-900 dark:text-white">Add Pilot to {timeSlot}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-4 overflow-visible">
           <div className="space-y-2 relative overflow-visible">
-            <Label htmlFor="pilot-select" className="text-white">
+            <Label htmlFor="pilot-select" className="text-gray-900 dark:text-white">
               Pilot
             </Label>
             <div className="relative">
@@ -119,7 +119,7 @@ export function AddPilotModal({
               <button
                 type="button"
                 onClick={handleDropdownToggle}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white transition-colors"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-600 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white transition-colors"
               >
                 <ChevronDown
                   className={`w-4 h-4 transition-transform ${isDropdownOpen ? "rotate-180" : ""}`}
@@ -127,7 +127,7 @@ export function AddPilotModal({
               </button>
 
               {isDropdownOpen && (
-                <div className="absolute z-50 w-full mt-1 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                <div className="absolute z-50 w-full mt-1 bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-700 rounded-lg shadow-xl max-h-60 overflow-y-auto">
                   {filteredPilots.length > 0 ? (
                     <div className="py-1">
                       {filteredPilots.map((pilot) => (
@@ -135,7 +135,7 @@ export function AddPilotModal({
                           key={pilot.uid}
                           type="button"
                           onClick={() => handleSelectPilot(pilot)}
-                          className="w-full px-4 py-2 text-left hover:bg-zinc-800 text-white flex items-center justify-between group transition-colors"
+                          className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-900 dark:text-white flex items-center justify-between group transition-colors"
                         >
                           <span>
                             {pilot.displayName} {pilot.femalePilot ? "👩" : ""}
@@ -144,7 +144,7 @@ export function AddPilotModal({
                       ))}
                     </div>
                   ) : (
-                    <div className="px-4 py-3 text-zinc-500 text-sm">
+                    <div className="px-4 py-3 text-gray-500 dark:text-zinc-500 text-sm">
                       No pilots found
                     </div>
                   )}
@@ -157,14 +157,14 @@ export function AddPilotModal({
         <div className="flex gap-3 pt-4">
           <Button
             onClick={handleSave}
-            className="flex-1 bg-white text-black hover:bg-zinc-200"
+            className="flex-1 bg-gray-900 dark:bg-white text-white dark:text-black hover:bg-gray-700 dark:hover:bg-zinc-200"
           >
             Save
           </Button>
           <Button
             variant="outline"
             onClick={handleCancel}
-            className="flex-1 border-zinc-700 text-white hover:bg-zinc-800"
+            className="flex-1 border-gray-300 dark:border-zinc-700 text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-800"
           >
             Cancel
           </Button>

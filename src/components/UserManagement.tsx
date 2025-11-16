@@ -112,7 +112,7 @@ export function UserManagement() {
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <div className="text-zinc-400">Loading users...</div>
+        <div className="text-gray-600 dark:text-zinc-400">Loading users...</div>
       </div>
     );
   }
@@ -129,24 +129,24 @@ export function UserManagement() {
     <div className="flex-1 overflow-auto p-3 sm:p-6">
       <div className="max-w-4xl mx-auto overflow-visible">
         <div className="flex items-center justify-between mb-4 sm:mb-6">
-          <h1 className="text-xl sm:text-2xl font-bold text-white">User Management</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">User Management</h1>
           {hasChanges && (
             <button
               onClick={saveChanges}
               disabled={saving}
-              className="px-3 sm:px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors text-sm sm:text-base"
+              className="px-3 sm:px-4 py-2 bg-blue-600 hover:bg-blue-700 dark:hover:bg-blue-700 disabled:bg-blue-800 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors text-sm sm:text-base"
             >
               {saving ? "Saving..." : "Save Changes"}
             </button>
           )}
         </div>
-        <div className="bg-zinc-900 rounded-lg border border-zinc-800 overflow-visible">
+        <div className="bg-white dark:bg-zinc-900 rounded-lg border border-gray-200 dark:border-zinc-800 overflow-visible">
           <table className="w-full table-fixed">
             <thead>
-              <tr className="border-b border-zinc-800">
-                <th className="text-left p-2 sm:p-4 text-zinc-400 font-medium w-[25%] sm:w-[30%]">Name</th>
-                <th className="text-left p-2 sm:p-4 text-zinc-400 font-medium w-[40%] sm:w-[35%]">Email</th>
-                <th className="text-left p-2 sm:p-4 text-zinc-400 font-medium w-[35%] sm:w-[35%]">Role</th>
+              <tr className="border-b border-gray-200 dark:border-zinc-800">
+                <th className="text-left p-2 sm:p-4 text-gray-600 dark:text-zinc-400 font-medium w-[25%] sm:w-[30%]">Name</th>
+                <th className="text-left p-2 sm:p-4 text-gray-600 dark:text-zinc-400 font-medium w-[40%] sm:w-[35%]">Email</th>
+                <th className="text-left p-2 sm:p-4 text-gray-600 dark:text-zinc-400 font-medium w-[35%] sm:w-[35%]">Role</th>
               </tr>
             </thead>
             <tbody className="overflow-visible">
@@ -157,10 +157,10 @@ export function UserManagement() {
                 return (
                   <tr
                     key={user.uid}
-                    className="border-b border-zinc-800 last:border-0 hover:bg-zinc-800/50 transition-colors overflow-visible"
+                    className="border-b border-gray-200 dark:border-zinc-800 last:border-0 hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors overflow-visible"
                   >
-                    <td className="p-2 sm:p-4 text-white truncate">{user.displayName}</td>
-                    <td className="p-2 sm:p-4 text-zinc-400 truncate" title={user.email}>{user.email}</td>
+                    <td className="p-2 sm:p-4 text-gray-900 dark:text-white truncate">{user.displayName}</td>
+                    <td className="p-2 sm:p-4 text-gray-600 dark:text-zinc-400 truncate" title={user.email}>{user.email}</td>
                     <td className="p-2 sm:p-4 overflow-visible">
                       <div className="relative">
                         <button
@@ -193,16 +193,16 @@ export function UserManagement() {
                               className="fixed inset-0 z-10"
                               onClick={() => setOpenDropdownId(null)}
                             />
-                            <div className="absolute z-20 mt-2 py-2 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg min-w-[160px] left-0">
+                            <div className="absolute z-20 mt-2 py-2 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg shadow-lg min-w-[160px] left-0">
                               {roles.map((roleOption) => (
                                 <button
                                   key={roleOption.label}
                                   onClick={() =>
                                     handleRoleChange(user.uid, roleOption.value)
                                   }
-                                  className={`w-full text-left px-4 py-2 hover:bg-zinc-700 transition-colors ${
+                                  className={`w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors ${
                                     currentRole === roleOption.value
-                                      ? "bg-zinc-700"
+                                      ? "bg-gray-100 dark:bg-zinc-700"
                                       : ""
                                   }`}
                                 >
