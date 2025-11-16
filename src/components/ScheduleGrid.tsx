@@ -43,7 +43,11 @@ interface ScheduleGridProps {
   onNavigateToDate?: (date: Date) => void;
 }
 
-export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], isPilotAvailableForTimeSlot, loading = false, currentUserDisplayName, onAddBooking, onUpdateBooking, onDeleteBooking, onNavigateToDate }: ScheduleGridProps) {
+export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBookings = [], isPilotAvailableForTimeSlot, loading = false, currentUserDisplayName, onAddBooking, onUpdateBooking, onDeleteBooking, onNavigateToDate }: ScheduleGridProps) {
+  // Filter out deleted bookings from the main grid
+  const bookings = useMemo(() => {
+    return allBookings.filter(booking => booking.bookingStatus !== "deleted");
+  }, [allBookings]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedCell, setSelectedCell] = useState<{ pilotIndex: number; timeIndex: number; timeSlot: string } | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
@@ -114,10 +118,10 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
     return bookingRequests.filter(req => req.status === "waitlist" && req.date === dateString);
   }, [bookingRequests, dateString]);
 
-  const deletedRequests = useMemo(() => {
-    // Only show deleted requests for the currently selected date
-    return bookingRequests.filter(req => req.status === "deleted" && req.date === dateString);
-  }, [bookingRequests, dateString]);
+  const deletedBookings = useMemo(() => {
+    // Only show deleted bookings for the currently selected date
+    return allBookings.filter(booking => booking.bookingStatus === "deleted" && booking.date === dateString);
+  }, [allBookings, dateString]);
 
   // Helper function to calculate available spots for a booking request
   const getAvailableSpotsForRequest = (request: BookingRequest): number => {
@@ -1623,7 +1627,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
                 Waiting List ({waitlistRequests.length})
               </TabsTrigger>
               <TabsTrigger value="deleted" className="data-[state=active]:bg-white dark:data-[state=active]:bg-zinc-900">
-                Deleted ({deletedRequests.length})
+                Deleted ({deletedBookings.length})
               </TabsTrigger>
             </TabsList>
 
@@ -1698,35 +1702,54 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
             </TabsContent>
 
             <TabsContent value="deleted" className="p-4 mt-0">
-              {deletedRequests.length === 0 ? (
+              {deletedBookings.length === 0 ? (
                 <div className="flex items-center justify-center h-32">
                   <p className="text-gray-500 dark:text-zinc-500">No deleted bookings</p>
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {deletedRequests.map((request) => (
-                    <BookingRequestItem
-                      key={request.id}
-                      request={request}
-                      canDrag={false}
-                      availableSpots={getAvailableSpotsForRequest(request)}
-                      onContextMenu={(req, position) => {
-                        setBookingRequestContextMenu({
-                          isOpen: true,
-                          position,
-                          request: req,
-                        });
-                      }}
-                      onDateClick={(dateString) => {
-                        if (onNavigateToDate) {
-                          const [year, month, day] = dateString.split('-').map(Number);
-                          const date = new Date(year, month - 1, day);
-                          onNavigateToDate(date);
-                        }
-                      }}
-                      onEnterMoveMode={undefined}
-                      isInMoveMode={false}
-                    />
+                  {deletedBookings.map((booking) => (
+                    <div
+                      key={booking.id}
+                      className="p-3 bg-gray-50 dark:bg-zinc-800 rounded-lg border border-gray-200 dark:border-zinc-700"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-medium text-gray-900 dark:text-white">
+                              {booking.customerName || "No name"}
+                            </span>
+                            <span className="text-sm text-gray-500 dark:text-zinc-400">
+                              {booking.numberOfPeople} pax
+                            </span>
+                            {booking.flightType && (
+                              <span className="text-xs px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
+                                {booking.flightType}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-sm text-gray-600 dark:text-zinc-400">
+                            <span>{timeSlots[booking.timeIndex]}</span>
+                            {booking.pickupLocation && (
+                              <span className="ml-2">• {booking.pickupLocation}</span>
+                            )}
+                            {booking.bookingSource && (
+                              <span className="ml-2">• Source: {booking.bookingSource}</span>
+                            )}
+                          </div>
+                          {booking.assignedPilots && booking.assignedPilots.filter(p => p).length > 0 && (
+                            <div className="text-xs text-gray-500 dark:text-zinc-500 mt-1">
+                              Pilots: {booking.assignedPilots.filter(p => p).join(", ")}
+                            </div>
+                          )}
+                          {booking.notes && (
+                            <div className="text-xs text-gray-500 dark:text-zinc-500 mt-1">
+                              Notes: {booking.notes}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}

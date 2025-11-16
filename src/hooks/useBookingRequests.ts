@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { collection, onSnapshot, query, where, doc, updateDoc } from "firebase/firestore";
+import { collection, onSnapshot, query, where, doc, updateDoc, deleteDoc } from "firebase/firestore";
 import { db } from "../firebase/config";
 import type { BookingRequest } from "../types/index";
 
@@ -8,10 +8,10 @@ export function useBookingRequests() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Subscribe to pending, waitlist, and deleted booking requests
+    // Subscribe to pending and waitlist booking requests
     const q = query(
       collection(db, "bookingRequests"),
-      where("status", "in", ["pending", "waitlist", "deleted"])
+      where("status", "in", ["pending", "waitlist"])
     );
 
     const unsubscribe = onSnapshot(
@@ -54,7 +54,7 @@ export function useBookingRequests() {
   const deleteBookingRequest = async (id: string) => {
     try {
       const requestRef = doc(db, "bookingRequests", id);
-      await updateDoc(requestRef, { status: "deleted" });
+      await deleteDoc(requestRef);
     } catch (error) {
       console.error("Error deleting booking request:", error);
       throw error;

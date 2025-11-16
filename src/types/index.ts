@@ -28,7 +28,7 @@ export interface Booking {
   femalePilotsRequired?: number;
   flightType?: "sensational" | "classic" | "early bird";
   assignedPilots: string[];
-  bookingStatus: "unconfirmed" | "confirmed" | "pending" | "cancelled";
+  bookingStatus: "unconfirmed" | "confirmed" | "pending" | "cancelled" | "deleted";
   span: number;
   pilotPayments?: PilotPayment[];
   driver?: string;
@@ -93,6 +93,6 @@ export interface BookingRequest {
   numberOfPeople: number;
   flightType?: "sensational" | "classic" | "early bird";
   notes?: string;
-  status: "pending" | "approved" | "rejected" | "waitlist" | "deleted";
+  status: "pending" | "approved" | "rejected" | "waitlist";
   createdAt: Date;
 }

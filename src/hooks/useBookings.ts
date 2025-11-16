@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, deleteField, serverTimestamp } from "firebase/firestore";
+import { collection, onSnapshot, addDoc, updateDoc, doc, deleteField, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase/config";
 import type { Booking } from "../types/index";
 import { useEditing } from "../contexts/EditingContext";
@@ -153,10 +153,12 @@ export function useBookings() {
     }
   };
 
-  // Delete a booking
+  // Delete a booking (soft delete - marks as deleted)
   const deleteBooking = async (id: string) => {
     try {
-      await deleteDoc(doc(db, "bookings", id));
+      await updateDoc(doc(db, "bookings", id), {
+        bookingStatus: "deleted"
+      });
     } catch (err: any) {
       console.error("Error deleting booking:", err);
       setError(err.message);
