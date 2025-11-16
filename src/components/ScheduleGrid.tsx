@@ -14,6 +14,7 @@ import { BookingRequestItem } from "./BookingRequestItem";
 import { TimeSlotContextMenu } from "./TimeSlotContextMenu";
 import { AddPilotModal } from "./AddPilotModal";
 import { DeletedBookingContextMenu } from "./DeletedBookingContextMenu";
+import { DeletedBookingItem } from "./DeletedBookingItem";
 import { CollapsibleDriverMap } from "./CollapsibleDriverMap";
 import { CollapsibleDriverOwnMap } from "./CollapsibleDriverOwnMap";
 import { LocationToggle } from "./LocationToggle";
@@ -1734,96 +1735,20 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {deletedBookings.map((booking) => {
-                    const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
-                    const [pressGlow, setPressGlow] = useState(false);
-
-                    const handleTouchStart = (e: React.TouchEvent) => {
-                      longPressTimerRef.current = setTimeout(() => {
-                        const touch = e.touches[0];
-                        setPressGlow(true);
-                        setDeletedBookingContextMenu({
-                          isOpen: true,
-                          position: { x: touch.clientX, y: touch.clientY },
-                          booking,
-                        });
-                      }, 500); // 500ms for context menu
-                    };
-
-                    const handleTouchMove = () => {
-                      if (longPressTimerRef.current) {
-                        clearTimeout(longPressTimerRef.current);
-                        longPressTimerRef.current = null;
-                      }
-                      setPressGlow(false);
-                    };
-
-                    const handleTouchEnd = () => {
-                      if (longPressTimerRef.current) {
-                        clearTimeout(longPressTimerRef.current);
-                        longPressTimerRef.current = null;
-                      }
-                      setPressGlow(false);
-                    };
-
-                    return (
-                    <div
+                  {deletedBookings.map((booking) => (
+                    <DeletedBookingItem
                       key={booking.id}
-                      className={`p-3 bg-gray-50 dark:bg-zinc-800 rounded-lg border border-gray-200 dark:border-zinc-700 cursor-context-menu transition-shadow ${
-                        pressGlow ? 'ring-2 ring-blue-500 shadow-lg' : ''
-                      }`}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
+                      booking={booking}
+                      timeSlots={timeSlots}
+                      onContextMenu={(booking, position) => {
                         setDeletedBookingContextMenu({
                           isOpen: true,
-                          position: { x: e.clientX, y: e.clientY },
+                          position,
                           booking,
                         });
                       }}
-                      onTouchStart={handleTouchStart}
-                      onTouchMove={handleTouchMove}
-                      onTouchEnd={handleTouchEnd}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-medium text-gray-900 dark:text-white">
-                              {booking.customerName || "No name"}
-                            </span>
-                            <span className="text-sm text-gray-500 dark:text-zinc-400">
-                              {booking.numberOfPeople} pax
-                            </span>
-                            {booking.flightType && (
-                              <span className="text-xs px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
-                                {booking.flightType}
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-sm text-gray-600 dark:text-zinc-400">
-                            <span>{timeSlots[booking.timeIndex]}</span>
-                            {booking.pickupLocation && (
-                              <span className="ml-2">• {booking.pickupLocation}</span>
-                            )}
-                            {booking.bookingSource && (
-                              <span className="ml-2">• Source: {booking.bookingSource}</span>
-                            )}
-                          </div>
-                          {booking.assignedPilots && booking.assignedPilots.filter(p => p).length > 0 && (
-                            <div className="text-xs text-gray-500 dark:text-zinc-500 mt-1">
-                              Pilots: {booking.assignedPilots.filter(p => p).join(", ")}
-                            </div>
-                          )}
-                          {booking.notes && (
-                            <div className="text-xs text-gray-500 dark:text-zinc-500 mt-1">
-                              Notes: {booking.notes}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    );
-                  })}
+                    />
+                  ))}
                 </div>
               )}
             </TabsContent>
