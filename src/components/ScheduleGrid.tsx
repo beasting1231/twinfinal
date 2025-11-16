@@ -13,6 +13,7 @@ import { ScheduleBookingRequestContextMenu } from "./ScheduleBookingRequestConte
 import { BookingRequestItem } from "./BookingRequestItem";
 import { TimeSlotContextMenu } from "./TimeSlotContextMenu";
 import { AddPilotModal } from "./AddPilotModal";
+import { DeletedBookingContextMenu } from "./DeletedBookingContextMenu";
 import { CollapsibleDriverMap } from "./CollapsibleDriverMap";
 import { CollapsibleDriverOwnMap } from "./CollapsibleDriverOwnMap";
 import { LocationToggle } from "./LocationToggle";
@@ -164,6 +165,16 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
 
   // State for pre-filling new booking modal from a booking request
   const [bookingRequestToBook, setBookingRequestToBook] = useState<BookingRequest | null>(null);
+
+  // Deleted booking context menu state
+  const [deletedBookingContextMenu, setDeletedBookingContextMenu] = useState<{
+    isOpen: boolean;
+    position: { x: number; y: number };
+    booking: Booking;
+  } | null>(null);
+
+  // State for restoring deleted booking
+  const [deletedBookingToRestore, setDeletedBookingToRestore] = useState<Booking | null>(null);
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
@@ -487,7 +498,21 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
   }, [canViewBooking]);
 
   const handleBookingSubmit = useCallback(async (booking: Omit<Booking, "id">) => {
-    if (onAddBooking) {
+    // If restoring a deleted booking to a new time, update the existing booking
+    if (deletedBookingToRestore?.id && onUpdateBooking) {
+      try {
+        await onUpdateBooking(deletedBookingToRestore.id, {
+          date: booking.date,
+          timeIndex: booking.timeIndex,
+          pilotIndex: booking.pilotIndex,
+          bookingStatus: "pending",
+          assignedPilots: [],
+        });
+      } catch (error) {
+        console.error("Error restoring deleted booking:", error);
+        alert("Failed to restore booking. Please try again.");
+      }
+    } else if (onAddBooking) {
       onAddBooking(booking);
 
       // If this booking was created from a booking request, mark the request as approved
@@ -503,7 +528,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     }
     setIsModalOpen(false);
     setBookingRequestToBook(null);
-  }, [onAddBooking, bookingRequestToBook]);
+    setDeletedBookingToRestore(null);
+  }, [onAddBooking, onUpdateBooking, bookingRequestToBook, deletedBookingToRestore]);
 
   const handleDriverVehicleCellClick = useCallback((booking: Booking | null, driverColumn: 1 | 2 = 1, timeIndex: number) => {
     // Only driver and admin can manage drivers
@@ -1711,7 +1737,16 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                   {deletedBookings.map((booking) => (
                     <div
                       key={booking.id}
-                      className="p-3 bg-gray-50 dark:bg-zinc-800 rounded-lg border border-gray-200 dark:border-zinc-700"
+                      className="p-3 bg-gray-50 dark:bg-zinc-800 rounded-lg border border-gray-200 dark:border-zinc-700 cursor-context-menu"
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setDeletedBookingContextMenu({
+                          isOpen: true,
+                          position: { x: e.clientX, y: e.clientY },
+                          booking,
+                        });
+                      }}
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
@@ -1790,8 +1825,9 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
           onOpenChange={(open) => {
             setIsModalOpen(open);
             if (!open) {
-              // Clear booking request data when modal closes
+              // Clear booking request and deleted booking data when modal closes
               setBookingRequestToBook(null);
+              setDeletedBookingToRestore(null);
             }
           }}
           selectedDate={selectedDate}
@@ -1802,7 +1838,14 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
           bookings={bookings}
           isPilotAvailableForTimeSlot={isPilotAvailableForTimeSlot}
           onSubmit={handleBookingSubmit}
-          initialData={bookingRequestToBook ? {
+          initialData={deletedBookingToRestore ? {
+            customerName: deletedBookingToRestore.customerName,
+            numberOfPeople: deletedBookingToRestore.numberOfPeople,
+            phoneNumber: deletedBookingToRestore.phoneNumber,
+            email: deletedBookingToRestore.email,
+            notes: deletedBookingToRestore.notes,
+            flightType: deletedBookingToRestore.flightType,
+          } : bookingRequestToBook ? {
             customerName: bookingRequestToBook.customerName,
             numberOfPeople: bookingRequestToBook.numberOfPeople,
             phoneNumber: bookingRequestToBook.phone,
@@ -2092,6 +2135,38 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
             setTimeSlotContextMenu(null);
           }}
           onClose={() => setTimeSlotContextMenu(null)}
+        />
+      )}
+
+      {/* Deleted Booking Context Menu */}
+      {deletedBookingContextMenu && (
+        <DeletedBookingContextMenu
+          isOpen={deletedBookingContextMenu.isOpen}
+          position={deletedBookingContextMenu.position}
+          onRestoreToSlot={async () => {
+            const booking = deletedBookingContextMenu.booking;
+            if (!onUpdateBooking || !booking.id) return;
+
+            try {
+              // Restore the booking to its original slot with "pending" status
+              await onUpdateBooking(booking.id, {
+                bookingStatus: "pending"
+              });
+              setDeletedBookingContextMenu(null);
+            } catch (error) {
+              console.error("Error restoring booking:", error);
+              alert("Failed to restore booking. Please try again.");
+            }
+          }}
+          onRestoreToAnotherTime={() => {
+            const booking = deletedBookingContextMenu.booking;
+            setDeletedBookingToRestore(booking);
+            // Open the new booking modal with default time slot (user can change it)
+            setSelectedCell({ pilotIndex: 0, timeIndex: 0, timeSlot: timeSlots[0] });
+            setIsModalOpen(true);
+            setDeletedBookingContextMenu(null);
+          }}
+          onClose={() => setDeletedBookingContextMenu(null)}
         />
       )}
 

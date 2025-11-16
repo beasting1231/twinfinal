@@ -1,0 +1,139 @@
+import { useEffect, useRef, useState } from "react";
+import { Calendar, CalendarClock } from "lucide-react";
+
+interface DeletedBookingContextMenuProps {
+  isOpen: boolean;
+  position: { x: number; y: number };
+  onRestoreToSlot: () => void;
+  onRestoreToAnotherTime: () => void;
+  onClose: () => void;
+}
+
+export function DeletedBookingContextMenu({
+  isOpen,
+  position,
+  onRestoreToSlot,
+  onRestoreToAnotherTime,
+  onClose,
+}: DeletedBookingContextMenuProps) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [isPositioned, setIsPositioned] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        onClose();
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("touchstart", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [isOpen, onClose]);
+
+  // Reset positioning state when menu opens
+  useEffect(() => {
+    if (isOpen) {
+      setIsPositioned(false);
+    }
+  }, [isOpen]);
+
+  // Adjust position to keep menu on screen
+  useEffect(() => {
+    if (!isOpen || !menuRef.current) return;
+
+    const menu = menuRef.current;
+    const rect = menu.getBoundingClientRect();
+    const viewportHeight = window.innerHeight;
+    const viewportWidth = window.innerWidth;
+
+    // Position menu to the left of the touch point (anchor at top-right)
+    let adjustedLeft = position.x - rect.width;
+    let adjustedTop = position.y;
+
+    // Adjust horizontal position if menu goes off left edge
+    if (adjustedLeft < 10) {
+      adjustedLeft = position.x;
+    }
+
+    // Adjust horizontal position if menu goes off right edge
+    if (adjustedLeft + rect.width > viewportWidth - 10) {
+      adjustedLeft = viewportWidth - rect.width - 10;
+    }
+
+    // Adjust vertical position if menu goes off bottom
+    if (rect.bottom > viewportHeight) {
+      adjustedTop = viewportHeight - rect.height - 10;
+    }
+
+    menu.style.left = `${adjustedLeft}px`;
+    menu.style.top = `${adjustedTop}px`;
+
+    // Mark as positioned to make visible
+    setIsPositioned(true);
+  }, [isOpen, position]);
+
+  if (!isOpen) return null;
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div className="fixed inset-0 z-40" />
+
+      {/* Context Menu */}
+      <div
+        ref={menuRef}
+        className={`fixed z-50 bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 rounded-lg shadow-xl py-1 min-w-[200px] transition-opacity duration-75 ${
+          isPositioned ? 'opacity-100' : 'opacity-0'
+        }`}
+        style={{ left: position.x, top: position.y }}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-zinc-400 border-b border-gray-300 dark:border-zinc-700">
+          Deleted Booking
+        </div>
+
+        {/* Options */}
+        <div className="py-1">
+          <button
+            onClick={() => {
+              onRestoreToSlot();
+              onClose();
+            }}
+            className="w-full px-3 py-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2"
+          >
+            <Calendar className="w-4 h-4" />
+            <span>Book This Slot</span>
+          </button>
+
+          <button
+            onClick={() => {
+              onRestoreToAnotherTime();
+              onClose();
+            }}
+            className="w-full px-3 py-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2"
+          >
+            <CalendarClock className="w-4 h-4" />
+            <span>Book for Another Time</span>
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
