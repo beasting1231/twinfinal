@@ -14,7 +14,7 @@ import { BookingRequestItem } from "./BookingRequestItem";
 import { TimeSlotContextMenu } from "./TimeSlotContextMenu";
 import { AddPilotModal } from "./AddPilotModal";
 import { CollapsibleDriverMap } from "./CollapsibleDriverMap";
-import { DriverOwnLocationMap } from "./DriverOwnLocationMap";
+import { CollapsibleDriverOwnMap } from "./CollapsibleDriverOwnMap";
 import { LocationToggle } from "./LocationToggle";
 import { useBookingSourceColors } from "../hooks/useBookingSourceColors";
 import { useDriverAssignments } from "../hooks/useDriverAssignments";
@@ -1713,10 +1713,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings = [], i
           <LocationToggle />
         </div>
 
-        {/* Driver's Own Location Map */}
-        <div className="w-full h-[400px]">
-          <DriverOwnLocationMap />
-        </div>
+        {/* Driver's Own Location Map - Collapsible */}
+        <CollapsibleDriverOwnMap />
       </div>
       )}
 
