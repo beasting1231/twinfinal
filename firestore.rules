@@ -143,5 +143,14 @@ service cloud.firestore {
       // Admin can delete any location
       allow delete: if request.auth != null && hasRole('admin');
     }
+
+    // Pilot orders collection (custom daily pilot ordering)
+    match /pilotOrders/{dateId} {
+      // All authenticated users can read (to see pilot order)
+      allow read: if request.auth != null;
+
+      // Only admins can create, update, or delete pilot orders
+      allow create, update, delete: if request.auth != null && hasRole('admin');
+    }
   }
 }

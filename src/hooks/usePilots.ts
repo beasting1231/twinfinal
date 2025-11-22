@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { collection, query, where, getDocs, onSnapshot } from "firebase/firestore";
+import { collection, query, where, getDocs, onSnapshot, doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { format } from "date-fns";
 import type { Pilot } from "../types/index";
@@ -12,6 +12,7 @@ export interface PilotAvailability {
 export function usePilots(selectedDate: Date) {
   const [rawPilots, setRawPilots] = useState<Pilot[]>([]);
   const [pilotAvailability, setPilotAvailability] = useState<Map<string, Set<string>>>(new Map());
+  const [customOrder, setCustomOrder] = useState<string[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const prevPilotsRef = useRef<Pilot[]>([]);
@@ -21,6 +22,25 @@ export function usePilots(selectedDate: Date) {
     setError(null);
 
     const dateStr = format(selectedDate, "yyyy-MM-dd");
+
+    // Fetch custom pilot order for this date (if any)
+    const fetchCustomOrder = async () => {
+      try {
+        const orderDocRef = doc(db, "pilotOrders", dateStr);
+        const orderDoc = await getDoc(orderDocRef);
+        if (orderDoc.exists()) {
+          const data = orderDoc.data();
+          setCustomOrder(data.order || null);
+        } else {
+          setCustomOrder(null);
+        }
+      } catch (err) {
+        console.error("Error fetching custom pilot order:", err);
+        setCustomOrder(null);
+      }
+    };
+
+    fetchCustomOrder();
 
     // Query availability collection for the selected date
     const availabilityQuery = query(
@@ -150,26 +170,59 @@ export function usePilots(selectedDate: Date) {
     return () => unsubscribe();
   }, [selectedDate]);
 
-  // Memoized sorted pilots - recalculates only when rawPilots change
+  // Memoized sorted pilots - recalculates only when rawPilots or customOrder change
   const pilots = useMemo(() => {
     console.log("Recalculating pilot sort order");
 
     // Create a copy for sorting (don't mutate rawPilots)
-    const sortedPilots = [...rawPilots];
+    let sortedPilots = [...rawPilots];
 
-    // Sort pilots by priority (lower number = higher priority = leftmost)
-    sortedPilots.sort((a, b) => {
-      const aPriority = a.priority ?? 999999;
-      const bPriority = b.priority ?? 999999;
+    // If custom order exists for this date, apply it
+    if (customOrder && customOrder.length > 0) {
+      console.log("Applying custom pilot order for this date");
 
-      // Sort by priority (lower number first)
-      if (aPriority !== bPriority) {
-        return aPriority - bPriority;
+      // Create a map for quick lookup
+      const pilotMap = new Map(sortedPilots.map(p => [p.uid, p]));
+
+      // Build sorted array based on custom order
+      const customSorted: Pilot[] = [];
+
+      // First, add pilots in the custom order
+      for (const uid of customOrder) {
+        const pilot = pilotMap.get(uid);
+        if (pilot) {
+          customSorted.push(pilot);
+          pilotMap.delete(uid); // Remove from map
+        }
       }
 
-      // If same priority (or both undefined), sort alphabetically
-      return a.displayName.localeCompare(b.displayName);
-    });
+      // Then append any pilots not in the custom order (sorted by default)
+      const remaining = Array.from(pilotMap.values());
+      remaining.sort((a, b) => {
+        const aPriority = a.priority ?? 999999;
+        const bPriority = b.priority ?? 999999;
+        if (aPriority !== bPriority) {
+          return aPriority - bPriority;
+        }
+        return a.displayName.localeCompare(b.displayName);
+      });
+
+      sortedPilots = [...customSorted, ...remaining];
+    } else {
+      // Sort pilots by priority (lower number = higher priority = leftmost)
+      sortedPilots.sort((a, b) => {
+        const aPriority = a.priority ?? 999999;
+        const bPriority = b.priority ?? 999999;
+
+        // Sort by priority (lower number first)
+        if (aPriority !== bPriority) {
+          return aPriority - bPriority;
+        }
+
+        // If same priority (or both undefined), sort alphabetically
+        return a.displayName.localeCompare(b.displayName);
+      });
+    }
 
     // Differential update: reuse previous array if order hasn't changed
     const prevPilots = prevPilotsRef.current;
@@ -191,12 +244,29 @@ export function usePilots(selectedDate: Date) {
     console.log("Pilot sort order changed - returning new array");
     prevPilotsRef.current = sortedPilots;
     return sortedPilots;
-  }, [rawPilots]);
+  }, [rawPilots, customOrder]);
 
   const isPilotAvailableForTimeSlot = (pilotUid: string, timeSlot: string): boolean => {
     const slots = pilotAvailability.get(pilotUid);
     return slots ? slots.has(timeSlot) : false;
   };
 
-  return { pilots, loading, error, isPilotAvailableForTimeSlot };
+  const saveCustomPilotOrder = async (newOrder: string[]) => {
+    const dateStr = format(selectedDate, "yyyy-MM-dd");
+    try {
+      const orderDocRef = doc(db, "pilotOrders", dateStr);
+      await setDoc(orderDocRef, {
+        date: dateStr,
+        order: newOrder,
+        updatedAt: new Date().toISOString(),
+      });
+      setCustomOrder(newOrder);
+      console.log("Custom pilot order saved for", dateStr);
+    } catch (err) {
+      console.error("Error saving custom pilot order:", err);
+      throw err;
+    }
+  };
+
+  return { pilots, loading, error, isPilotAvailableForTimeSlot, saveCustomPilotOrder };
 }

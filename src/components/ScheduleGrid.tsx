@@ -30,7 +30,7 @@ import type { Booking, Pilot, BookingRequest } from "../types/index";
 import { format } from "date-fns";
 import { doc, updateDoc, collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase/config";
-import { DndContext, useSensor, useSensors, PointerSensor } from "@dnd-kit/core";
+import { DndContext, useSensor, useSensors, PointerSensor, useDraggable, useDroppable } from "@dnd-kit/core";
 import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
 
 interface ScheduleGridProps {
@@ -40,6 +40,7 @@ interface ScheduleGridProps {
   bookings?: Booking[];
   allBookingsForSearch?: Booking[];
   isPilotAvailableForTimeSlot: (pilotUid: string, timeSlot: string) => boolean;
+  saveCustomPilotOrder?: (newOrder: string[]) => Promise<void>;
   loading?: boolean;
   currentUserDisplayName?: string;
   onAddBooking?: (booking: Omit<Booking, "id">) => void;
@@ -48,7 +49,46 @@ interface ScheduleGridProps {
   onNavigateToDate?: (date: Date) => void;
 }
 
-export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBookings = [], allBookingsForSearch = [], isPilotAvailableForTimeSlot, loading = false, currentUserDisplayName, onAddBooking, onUpdateBooking, onDeleteBooking, onNavigateToDate }: ScheduleGridProps) {
+// Draggable Pilot Header Component
+function DraggablePilotHeader({ pilot, index, isAdmin, isDragging }: { pilot: Pilot; index: number; isAdmin: boolean; isDragging: boolean }) {
+  const id = `pilot-header-${index}`;
+
+  const { attributes, listeners, setNodeRef: setDragNodeRef, transform } = useDraggable({
+    id,
+    disabled: !isAdmin,
+  });
+
+  const { setNodeRef: setDropNodeRef, isOver } = useDroppable({
+    id,
+    disabled: !isAdmin,
+  });
+
+  const setNodeRef = (node: HTMLElement | null) => {
+    setDragNodeRef(node);
+    setDropNodeRef(node);
+  };
+
+  const style = transform ? {
+    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+    opacity: isDragging ? 0.5 : 1,
+  } : undefined;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...(isAdmin ? listeners : {})}
+      {...(isAdmin ? attributes : {})}
+      className={`h-7 flex items-center justify-center ${pilot.femalePilot ? 'bg-red-600/80 text-white' : 'bg-gray-200 dark:bg-zinc-900 text-gray-900 dark:text-white'} rounded-lg font-medium text-sm gap-2 ${isAdmin ? 'cursor-move' : ''} ${isOver ? 'ring-2 ring-blue-500' : ''} transition-all`}
+      title={isAdmin ? 'Drag to reorder (Admin only)' : ''}
+    >
+      <span className={pilot.femalePilot ? 'text-white' : 'text-gray-600 dark:text-zinc-500'}>{index + 1}</span>
+      <span>{pilot.displayName}</span>
+    </div>
+  );
+}
+
+export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBookings = [], allBookingsForSearch = [], isPilotAvailableForTimeSlot, saveCustomPilotOrder, loading = false, currentUserDisplayName, onAddBooking, onUpdateBooking, onDeleteBooking, onNavigateToDate }: ScheduleGridProps) {
   // Filter out deleted bookings from the main grid
   const bookings = useMemo(() => {
     return allBookings.filter(booking => booking.bookingStatus !== "deleted");
@@ -260,6 +300,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
   const [draggedBooking, setDraggedBooking] = useState<Booking | null>(null);
   const [draggedRequest, setDraggedRequest] = useState<BookingRequest | null>(null);
   const [draggedDeletedBooking, setDraggedDeletedBooking] = useState<Booking | null>(null);
+  const [draggedPilotIndex, setDraggedPilotIndex] = useState<number | null>(null);
 
   // Time slot context menu state
   const [timeSlotContextMenu, setTimeSlotContextMenu] = useState<{
@@ -1111,8 +1152,13 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
 
     const { active } = event;
 
-    // Check if dragging a booking, booking request, or deleted booking
-    if (typeof active.id === 'string' && active.id.startsWith('deleted-booking-')) {
+    // Check if dragging a pilot header
+    if (typeof active.id === 'string' && active.id.startsWith('pilot-header-')) {
+      const pilotIndex = parseInt(active.id.replace('pilot-header-', ''));
+      if (!isNaN(pilotIndex)) {
+        setDraggedPilotIndex(pilotIndex);
+      }
+    } else if (typeof active.id === 'string' && active.id.startsWith('deleted-booking-')) {
       const bookingId = active.id.replace('deleted-booking-', '');
       const booking = deletedBookings.find(b => b.id === bookingId);
       if (booking) {
@@ -1141,15 +1187,51 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
       setDraggedBooking(null);
       setDraggedRequest(null);
       setDraggedDeletedBooking(null);
+      setDraggedPilotIndex(null);
       return;
     }
 
     const { active, over } = event;
 
+    // Handle pilot header reordering (admin only)
+    if (typeof active.id === 'string' && active.id.startsWith('pilot-header-') && over && typeof over.id === 'string' && over.id.startsWith('pilot-header-')) {
+      setDraggedPilotIndex(null);
+
+      // Only admins can reorder pilots
+      if (role !== 'admin') {
+        alert('Only administrators can reorder pilots');
+        return;
+      }
+
+      const fromIndex = parseInt(active.id.replace('pilot-header-', ''));
+      const toIndex = parseInt(over.id.replace('pilot-header-', ''));
+
+      if (isNaN(fromIndex) || isNaN(toIndex) || fromIndex === toIndex) return;
+
+      // Reorder pilots array
+      const newPilots = [...pilots];
+      const [movedPilot] = newPilots.splice(fromIndex, 1);
+      newPilots.splice(toIndex, 0, movedPilot);
+
+      // Save the new order
+      if (saveCustomPilotOrder) {
+        try {
+          const newOrder = newPilots.map(p => p.uid);
+          await saveCustomPilotOrder(newOrder);
+        } catch (error) {
+          console.error('Error saving pilot order:', error);
+          alert('Failed to save pilot order. Please try again.');
+        }
+      }
+
+      return;
+    }
+
     // Clear drag state
     setDraggedBooking(null);
     setDraggedRequest(null);
     setDraggedDeletedBooking(null);
+    setDraggedPilotIndex(null);
 
     if (!over) return;
 
@@ -1381,13 +1463,13 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
             const pilot = pilots[index];
             if (pilot) {
               return (
-                <div
+                <DraggablePilotHeader
                   key={pilot.uid}
-                  className={`h-7 flex items-center justify-center ${pilot.femalePilot ? 'bg-red-600/80 text-white' : 'bg-gray-200 dark:bg-zinc-900 text-gray-900 dark:text-white'} rounded-lg font-medium text-sm gap-2`}
-                >
-                  <span className={pilot.femalePilot ? 'text-white' : 'text-gray-600 dark:text-zinc-500'}>{index + 1}</span>
-                  <span>{pilot.displayName}</span>
-                </div>
+                  pilot={pilot}
+                  index={index}
+                  isAdmin={role === 'admin'}
+                  isDragging={draggedPilotIndex === index}
+                />
               );
             } else {
               // Extra column header (for overbookings or when no pilots available)

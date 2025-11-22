@@ -34,7 +34,7 @@ function DailyPlanPage() {
     return bookings.filter(booking => booking.date === selectedDateStr);
   }, [bookings, selectedDate]);
 
-  const { pilots, loading: pilotsLoading, isPilotAvailableForTimeSlot } = usePilots(selectedDate);
+  const { pilots, loading: pilotsLoading, isPilotAvailableForTimeSlot, saveCustomPilotOrder } = usePilots(selectedDate);
   const isLoading = pilotsLoading || bookingsLoading;
   const timeSlots = useMemo(() => getTimeSlotsByDate(selectedDate), [selectedDate]);
 
@@ -53,6 +53,7 @@ function DailyPlanPage() {
         bookings={filteredBookings}
         allBookingsForSearch={bookings}
         isPilotAvailableForTimeSlot={isPilotAvailableForTimeSlot}
+        saveCustomPilotOrder={saveCustomPilotOrder}
         loading={isLoading}
         currentUserDisplayName={currentUser?.displayName || currentUser?.email || undefined}
         onAddBooking={addBooking}

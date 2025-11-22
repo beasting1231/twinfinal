@@ -531,7 +531,7 @@ export function Accounting() {
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap">
                             {row.commission !== null ? (
-                              row.bookingId && role !== "pilot" ? (
+                              row.bookingId && (role === "admin" || role === "agency" || role === "driver") ? (
                                 <select
                                   value={row.commissionStatus}
                                   onChange={(e) => updateCommissionStatus(row.bookingId!, e.target.value as "paid" | "unpaid")}

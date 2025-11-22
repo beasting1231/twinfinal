@@ -988,8 +988,17 @@ export function BookingDetailsModal({
                         lineHeight: '2.5rem'
                       } as React.CSSProperties}
                       autoComplete="off"
+                      id="booking-date-input"
                     />
-                    <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-900 dark:text-white pointer-events-none" />
+                    <Calendar
+                      className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-900 dark:text-white cursor-pointer"
+                      onClick={() => {
+                        const dateInput = document.getElementById('booking-date-input') as HTMLInputElement;
+                        if (dateInput) {
+                          dateInput.showPicker?.();
+                        }
+                      }}
+                    />
                   </div>
                 </div>
 
