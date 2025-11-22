@@ -264,8 +264,10 @@ export function Accounting() {
 
   // Export to CSV
   const exportToCSV = () => {
-    // Create CSV headers
-    const headers = ["Date", "Time", "Pilot", "Payment", "Method", "Source", "Turn", "Pax", "Driver(s)", "Vehicle(s)", "Commission", "Comm. Status"];
+    // Create CSV headers based on role
+    const headers = role === "pilot"
+      ? ["Date", "Time", "Pilot", "Payment", "Method", "Source"]
+      : ["Date", "Time", "Pilot", "Payment", "Method", "Source", "Turn", "Pax", "Driver(s)", "Vehicle(s)", "Commission", "Comm. Status"];
 
     // Create CSV rows from filtered data
     const csvRows = [headers.join(",")];
@@ -275,20 +277,29 @@ export function Accounting() {
         (filteredData[index - 1].date !== row.date ||
          filteredData[index - 1].time !== row.time);
 
-      const rowData = [
-        formatDate(row.date),
-        row.time,
-        row.pilot,
-        typeof row.payment === "number" ? row.payment.toFixed(2) : row.payment,
-        formatPaymentMethod(row.paymentMethod),
-        row.bookingSource,
-        isFirstRowOfTurn ? row.turn : "",
-        isFirstRowOfTurn ? row.pax : "",
-        isFirstRowOfTurn ? (row.drivers.length > 0 ? row.drivers.join("; ") : "-") : "",
-        isFirstRowOfTurn ? (row.vehicles.length > 0 ? row.vehicles.join("; ") : "-") : "",
-        row.commission !== null ? row.commission.toFixed(2) : "-",
-        row.commission !== null ? (row.commissionStatus === "paid" ? "Paid" : "Unpaid") : "-",
-      ];
+      const rowData = role === "pilot"
+        ? [
+            formatDate(row.date),
+            row.time,
+            row.pilot,
+            typeof row.payment === "number" ? row.payment.toFixed(2) : row.payment,
+            formatPaymentMethod(row.paymentMethod),
+            row.bookingSource,
+          ]
+        : [
+            formatDate(row.date),
+            row.time,
+            row.pilot,
+            typeof row.payment === "number" ? row.payment.toFixed(2) : row.payment,
+            formatPaymentMethod(row.paymentMethod),
+            row.bookingSource,
+            isFirstRowOfTurn ? row.turn : "",
+            isFirstRowOfTurn ? row.pax : "",
+            isFirstRowOfTurn ? (row.drivers.length > 0 ? row.drivers.join("; ") : "-") : "",
+            isFirstRowOfTurn ? (row.vehicles.length > 0 ? row.vehicles.join("; ") : "-") : "",
+            row.commission !== null ? row.commission.toFixed(2) : "-",
+            row.commission !== null ? (row.commissionStatus === "paid" ? "Paid" : "Unpaid") : "-",
+          ];
 
       csvRows.push(rowData.map(field => `"${field}"`).join(","));
     });
@@ -421,49 +432,53 @@ export function Accounting() {
                     />
                   </div>
                 </th>
-                <th className="text-center px-4 py-3 text-gray-700 dark:text-zinc-300 font-medium whitespace-nowrap">Turn</th>
-                <th className="text-center px-4 py-3 text-gray-700 dark:text-zinc-300 font-medium whitespace-nowrap">Pax</th>
-                <th className="text-left px-4 py-3 text-gray-700 dark:text-zinc-300 font-medium whitespace-nowrap">
-                  <div className="flex items-center gap-2">
-                    <span>Driver(s)</span>
-                    <FilterDropdown
-                      title="Filter Drivers"
-                      options={filterOptions.drivers}
-                      selectedValues={selectedDrivers}
-                      onChange={setSelectedDrivers}
-                      trigger={
-                        <button className={`hover:text-gray-900 dark:hover:text-white transition-colors ${selectedDrivers.length > 0 ? 'text-blue-600 dark:text-blue-400' : ''}`}>
-                          <Filter className="h-4 w-4" />
-                        </button>
-                      }
-                    />
-                  </div>
-                </th>
-                <th className="text-left px-4 py-3 text-gray-700 dark:text-zinc-300 font-medium whitespace-nowrap">
-                  <div className="flex items-center gap-2">
-                    <span>Vehicle(s)</span>
-                    <FilterDropdown
-                      title="Filter Vehicles"
-                      options={filterOptions.vehicles}
-                      selectedValues={selectedVehicles}
-                      onChange={setSelectedVehicles}
-                      trigger={
-                        <button className={`hover:text-gray-900 dark:hover:text-white transition-colors ${selectedVehicles.length > 0 ? 'text-blue-600 dark:text-blue-400' : ''}`}>
-                          <Filter className="h-4 w-4" />
-                        </button>
-                      }
-                    />
-                  </div>
-                </th>
-                <th className="text-right px-4 py-3 text-gray-700 dark:text-zinc-300 font-medium whitespace-nowrap">Commission</th>
-                <th className="text-left px-4 py-3 text-gray-700 dark:text-zinc-300 font-medium whitespace-nowrap">Comm. Status</th>
-                <th className="text-center px-4 py-3 text-gray-700 dark:text-zinc-300 font-medium whitespace-nowrap">Receipt</th>
+                {role !== "pilot" && (
+                  <>
+                    <th className="text-center px-4 py-3 text-gray-700 dark:text-zinc-300 font-medium whitespace-nowrap">Turn</th>
+                    <th className="text-center px-4 py-3 text-gray-700 dark:text-zinc-300 font-medium whitespace-nowrap">Pax</th>
+                    <th className="text-left px-4 py-3 text-gray-700 dark:text-zinc-300 font-medium whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <span>Driver(s)</span>
+                        <FilterDropdown
+                          title="Filter Drivers"
+                          options={filterOptions.drivers}
+                          selectedValues={selectedDrivers}
+                          onChange={setSelectedDrivers}
+                          trigger={
+                            <button className={`hover:text-gray-900 dark:hover:text-white transition-colors ${selectedDrivers.length > 0 ? 'text-blue-600 dark:text-blue-400' : ''}`}>
+                              <Filter className="h-4 w-4" />
+                            </button>
+                          }
+                        />
+                      </div>
+                    </th>
+                    <th className="text-left px-4 py-3 text-gray-700 dark:text-zinc-300 font-medium whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <span>Vehicle(s)</span>
+                        <FilterDropdown
+                          title="Filter Vehicles"
+                          options={filterOptions.vehicles}
+                          selectedValues={selectedVehicles}
+                          onChange={setSelectedVehicles}
+                          trigger={
+                            <button className={`hover:text-gray-900 dark:hover:text-white transition-colors ${selectedVehicles.length > 0 ? 'text-blue-600 dark:text-blue-400' : ''}`}>
+                              <Filter className="h-4 w-4" />
+                            </button>
+                          }
+                        />
+                      </div>
+                    </th>
+                    <th className="text-right px-4 py-3 text-gray-700 dark:text-zinc-300 font-medium whitespace-nowrap">Commission</th>
+                    <th className="text-left px-4 py-3 text-gray-700 dark:text-zinc-300 font-medium whitespace-nowrap">Comm. Status</th>
+                    <th className="text-center px-4 py-3 text-gray-700 dark:text-zinc-300 font-medium whitespace-nowrap">Receipt</th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
               {filteredData.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="px-4 py-12 text-center text-gray-500 dark:text-zinc-500">
+                  <td colSpan={role === "pilot" ? 6 : 13} className="px-4 py-12 text-center text-gray-500 dark:text-zinc-500">
                     <p>No records found matching your filters</p>
                   </td>
                 </tr>
@@ -497,69 +512,73 @@ export function Accounting() {
                       <td className="px-4 py-3 text-gray-700 dark:text-zinc-300 whitespace-nowrap">
                         {row.bookingSource}
                       </td>
-                      <td className="px-4 py-3 text-center text-gray-900 dark:text-white whitespace-nowrap">
-                        {isFirstRowOfTurn ? row.turn : ""}
-                      </td>
-                      <td className="px-4 py-3 text-center text-gray-900 dark:text-white whitespace-nowrap">
-                        {isFirstRowOfTurn ? row.pax : ""}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700 dark:text-zinc-300 whitespace-nowrap">
-                        {isFirstRowOfTurn ? (row.drivers.length > 0 ? row.drivers.join(", ") : "-") : ""}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700 dark:text-zinc-300 whitespace-nowrap">
-                        {isFirstRowOfTurn ? (row.vehicles.length > 0 ? row.vehicles.join(", ") : "-") : ""}
-                      </td>
-                      <td className="px-4 py-3 text-right text-gray-900 dark:text-white whitespace-nowrap">
-                        {row.commission !== null ? row.commission.toFixed(2) : "-"}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {row.commission !== null ? (
-                          row.bookingId && role !== "pilot" ? (
-                            <select
-                              value={row.commissionStatus}
-                              onChange={(e) => updateCommissionStatus(row.bookingId!, e.target.value as "paid" | "unpaid")}
-                              className={`px-2 py-1 rounded text-xs font-medium border-0 ${
-                                row.commissionStatus === "paid"
-                                  ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
-                                  : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
-                              }`}
-                            >
-                              <option value="unpaid">Unpaid</option>
-                              <option value="paid">Paid</option>
-                            </select>
-                          ) : (
-                            <span className={`px-2 py-1 rounded text-xs font-medium ${
-                              row.commissionStatus === "paid"
-                                ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
-                                : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
-                            }`}>
-                              {row.commissionStatus === "paid" ? "Paid" : "Unpaid"}
-                            </span>
-                          )
-                        ) : (
-                          <span className="text-gray-500 dark:text-zinc-500">-</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-center whitespace-nowrap">
-                        {row.receiptUrls && row.receiptUrls.length > 0 ? (
-                          <div className="flex gap-1 justify-center">
-                            {row.receiptUrls.map((url, idx) => (
-                              <a
-                                key={idx}
-                                href={url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="p-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white transition-colors"
-                                title={`View receipt ${idx + 1}`}
-                              >
-                                <Receipt className="w-3.5 h-3.5" />
-                              </a>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="text-gray-500 dark:text-zinc-500">-</span>
-                        )}
-                      </td>
+                      {role !== "pilot" && (
+                        <>
+                          <td className="px-4 py-3 text-center text-gray-900 dark:text-white whitespace-nowrap">
+                            {isFirstRowOfTurn ? row.turn : ""}
+                          </td>
+                          <td className="px-4 py-3 text-center text-gray-900 dark:text-white whitespace-nowrap">
+                            {isFirstRowOfTurn ? row.pax : ""}
+                          </td>
+                          <td className="px-4 py-3 text-gray-700 dark:text-zinc-300 whitespace-nowrap">
+                            {isFirstRowOfTurn ? (row.drivers.length > 0 ? row.drivers.join(", ") : "-") : ""}
+                          </td>
+                          <td className="px-4 py-3 text-gray-700 dark:text-zinc-300 whitespace-nowrap">
+                            {isFirstRowOfTurn ? (row.vehicles.length > 0 ? row.vehicles.join(", ") : "-") : ""}
+                          </td>
+                          <td className="px-4 py-3 text-right text-gray-900 dark:text-white whitespace-nowrap">
+                            {row.commission !== null ? row.commission.toFixed(2) : "-"}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {row.commission !== null ? (
+                              row.bookingId && role !== "pilot" ? (
+                                <select
+                                  value={row.commissionStatus}
+                                  onChange={(e) => updateCommissionStatus(row.bookingId!, e.target.value as "paid" | "unpaid")}
+                                  className={`px-2 py-1 rounded text-xs font-medium border-0 ${
+                                    row.commissionStatus === "paid"
+                                      ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                                      : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
+                                  }`}
+                                >
+                                  <option value="unpaid">Unpaid</option>
+                                  <option value="paid">Paid</option>
+                                </select>
+                              ) : (
+                                <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                  row.commissionStatus === "paid"
+                                    ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                                    : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
+                                }`}>
+                                  {row.commissionStatus === "paid" ? "Paid" : "Unpaid"}
+                                </span>
+                              )
+                            ) : (
+                              <span className="text-gray-500 dark:text-zinc-500">-</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-center whitespace-nowrap">
+                            {row.receiptUrls && row.receiptUrls.length > 0 ? (
+                              <div className="flex gap-1 justify-center">
+                                {row.receiptUrls.map((url, idx) => (
+                                  <a
+                                    key={idx}
+                                    href={url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="p-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                                    title={`View receipt ${idx + 1}`}
+                                  >
+                                    <Receipt className="w-3.5 h-3.5" />
+                                  </a>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-gray-500 dark:text-zinc-500">-</span>
+                            )}
+                          </td>
+                        </>
+                      )}
                     </tr>
                   );
                 })
