@@ -51,6 +51,7 @@ function DailyPlanPage() {
         pilots={pilots}
         timeSlots={timeSlots}
         bookings={filteredBookings}
+        allBookingsForSearch={bookings}
         isPilotAvailableForTimeSlot={isPilotAvailableForTimeSlot}
         loading={isLoading}
         currentUserDisplayName={currentUser?.displayName || currentUser?.email || undefined}

@@ -108,6 +108,7 @@ export function useBookings() {
       const bookingWithCreator = {
         ...booking,
         createdBy: currentUser?.uid || "",
+        createdByName: currentUser?.displayName || currentUser?.email || "",
         createdAt: serverTimestamp(),
       };
       await addDoc(collection(db, "bookings"), bookingWithCreator);
@@ -157,7 +158,10 @@ export function useBookings() {
   const deleteBooking = async (id: string) => {
     try {
       await updateDoc(doc(db, "bookings", id), {
-        bookingStatus: "deleted"
+        bookingStatus: "deleted",
+        deletedBy: currentUser?.uid || "",
+        deletedByName: currentUser?.displayName || currentUser?.email || "",
+        deletedAt: serverTimestamp(),
       });
     } catch (err: any) {
       console.error("Error deleting booking:", err);

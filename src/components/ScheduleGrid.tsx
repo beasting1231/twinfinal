@@ -18,6 +18,8 @@ import { DeletedBookingItem } from "./DeletedBookingItem";
 import { CollapsibleDriverMap } from "./CollapsibleDriverMap";
 import { CollapsibleDriverOwnMap } from "./CollapsibleDriverOwnMap";
 import { LocationToggle } from "./LocationToggle";
+import { SearchBookingModal } from "./SearchBookingModal";
+import { Search } from "lucide-react";
 import { useBookingSourceColors } from "../hooks/useBookingSourceColors";
 import { useDriverAssignments } from "../hooks/useDriverAssignments";
 import { useBookingRequests } from "../hooks/useBookingRequests";
@@ -36,6 +38,7 @@ interface ScheduleGridProps {
   pilots: Pilot[];
   timeSlots: string[];
   bookings?: Booking[];
+  allBookingsForSearch?: Booking[];
   isPilotAvailableForTimeSlot: (pilotUid: string, timeSlot: string) => boolean;
   loading?: boolean;
   currentUserDisplayName?: string;
@@ -45,7 +48,7 @@ interface ScheduleGridProps {
   onNavigateToDate?: (date: Date) => void;
 }
 
-export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBookings = [], isPilotAvailableForTimeSlot, loading = false, currentUserDisplayName, onAddBooking, onUpdateBooking, onDeleteBooking, onNavigateToDate }: ScheduleGridProps) {
+export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBookings = [], allBookingsForSearch = [], isPilotAvailableForTimeSlot, loading = false, currentUserDisplayName, onAddBooking, onUpdateBooking, onDeleteBooking, onNavigateToDate }: ScheduleGridProps) {
   // Filter out deleted bookings from the main grid
   const bookings = useMemo(() => {
     return allBookings.filter(booking => booking.bookingStatus !== "deleted");
@@ -157,6 +160,11 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     request: BookingRequest | null;
   }>({ isActive: false, request: null });
 
+  const [deletedBookingMoveMode, setDeletedBookingMoveMode] = useState<{
+    isActive: boolean;
+    booking: Booking | null;
+  }>({ isActive: false, booking: null });
+
   // Booking request context menu state
   const [bookingRequestContextMenu, setBookingRequestContextMenu] = useState<{
     isOpen: boolean;
@@ -176,6 +184,28 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
 
   // State for restoring deleted booking
   const [deletedBookingToRestore, setDeletedBookingToRestore] = useState<Booking | null>(null);
+
+  // Search modal state
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+  const [highlightedBookingId, setHighlightedBookingId] = useState<string | null>(null);
+
+  // Handle search result click - navigate to the booking's date and highlight it
+  const handleSearchBookingClick = (booking: Booking) => {
+    if (!booking.date || !onNavigateToDate) return;
+
+    try {
+      const [year, month, day] = booking.date.split('-').map(Number);
+      const date = new Date(year, month - 1, day);
+
+      // Set the highlighted booking
+      setHighlightedBookingId(booking.id || null);
+
+      // Navigate to the date
+      onNavigateToDate(date);
+    } catch (error) {
+      console.error('Error navigating to booking date:', error);
+    }
+  };
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
@@ -229,6 +259,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
   // Drag and drop state - track active drag for validation and multi-column highlighting
   const [draggedBooking, setDraggedBooking] = useState<Booking | null>(null);
   const [draggedRequest, setDraggedRequest] = useState<BookingRequest | null>(null);
+  const [draggedDeletedBooking, setDraggedDeletedBooking] = useState<Booking | null>(null);
 
   // Time slot context menu state
   const [timeSlotContextMenu, setTimeSlotContextMenu] = useState<{
@@ -406,6 +437,17 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     setRequestMoveMode({ isActive: false, request: null });
   };
 
+  const enterDeletedBookingMoveMode = (booking: Booking) => {
+    if (role !== 'admin') return;
+    // Close all context menus when entering move mode
+    setDeletedBookingContextMenu(null);
+    setDeletedBookingMoveMode({ isActive: true, booking });
+  };
+
+  const exitDeletedBookingMoveMode = () => {
+    setDeletedBookingMoveMode({ isActive: false, booking: null });
+  };
+
   // Handle move mode destination - time slot click
   const handleMoveModeDestination = async (targetTimeIndex: number) => {
     // Handle booking request move mode
@@ -454,6 +496,35 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
       }
     }
 
+    // Handle deleted booking restore mode
+    if (deletedBookingMoveMode.isActive && deletedBookingMoveMode.booking && onUpdateBooking) {
+      const booking = deletedBookingMoveMode.booking;
+      const targetDate = format(selectedDate, 'yyyy-MM-dd');
+      const targetTimeSlot = timeSlots[targetTimeIndex];
+
+      // Show confirmation dialog
+      const confirmMessage = `Are you sure you want to restore this booking for ${booking.customerName} (${booking.numberOfPeople} pax) at ${targetTimeSlot}?`;
+      if (!confirm(confirmMessage)) {
+        return;
+      }
+
+      try {
+        // Restore the booking: update status to pending, move to new time/date, and clear pilots
+        await onUpdateBooking(booking.id!, {
+          bookingStatus: "pending",
+          timeIndex: targetTimeIndex,
+          date: targetDate,
+          assignedPilots: [],
+        });
+
+        // Exit move mode
+        exitDeletedBookingMoveMode();
+      } catch (error) {
+        console.error('Error restoring deleted booking:', error);
+        alert('Failed to restore booking. Please try again.');
+      }
+    }
+
     // Handle booking move mode
     if (moveMode.isActive && moveMode.booking && onUpdateBooking) {
       const booking = moveMode.booking;
@@ -493,6 +564,9 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     if (!canViewBooking(booking)) {
       return; // Don't open modal for bookings user cannot view
     }
+
+    // Clear highlight when booking is clicked
+    setHighlightedBookingId(null);
 
     setSelectedBooking(booking);
     setIsDetailsModalOpen(true);
@@ -1037,8 +1111,14 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
 
     const { active } = event;
 
-    // Check if dragging a booking or a booking request
-    if (typeof active.id === 'string' && active.id.startsWith('booking-')) {
+    // Check if dragging a booking, booking request, or deleted booking
+    if (typeof active.id === 'string' && active.id.startsWith('deleted-booking-')) {
+      const bookingId = active.id.replace('deleted-booking-', '');
+      const booking = deletedBookings.find(b => b.id === bookingId);
+      if (booking) {
+        setDraggedDeletedBooking(booking);
+      }
+    } else if (typeof active.id === 'string' && active.id.startsWith('booking-')) {
       const bookingId = active.id.replace('booking-', '');
       const booking = bookings.find(b => b.id === bookingId);
       if (booking) {
@@ -1060,6 +1140,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
       // Clear drag state
       setDraggedBooking(null);
       setDraggedRequest(null);
+      setDraggedDeletedBooking(null);
       return;
     }
 
@@ -1068,6 +1149,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     // Clear drag state
     setDraggedBooking(null);
     setDraggedRequest(null);
+    setDraggedDeletedBooking(null);
 
     if (!over) return;
 
@@ -1170,6 +1252,39 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
         alert('Failed to create booking. Please try again.');
       }
     }
+    // Handle deleted booking being dropped (restore it)
+    else if (typeof active.id === 'string' && active.id.startsWith('deleted-booking-')) {
+      const bookingId = active.id.replace('deleted-booking-', '');
+      const booking = deletedBookings.find(b => b.id === bookingId);
+
+      if (!booking || !onUpdateBooking) return;
+
+      // Only admins can restore deleted bookings
+      if (role !== 'admin') {
+        alert('Only administrators can restore deleted bookings');
+        return;
+      }
+
+      // Show confirmation dialog
+      const targetTimeSlot = timeSlots[targetTimeIndex];
+      const confirmMessage = `Are you sure you want to restore this booking for ${booking.customerName} (${booking.numberOfPeople} pax) at ${targetTimeSlot}?`;
+      if (!confirm(confirmMessage)) {
+        return;
+      }
+
+      // Restore the booking: update status to pending, move to new time/date, and clear pilots
+      try {
+        await onUpdateBooking(booking.id!, {
+          bookingStatus: "pending",
+          timeIndex: targetTimeIndex,
+          date: targetDate,
+          assignedPilots: [], // Clear all pilot assignments
+        });
+      } catch (error) {
+        console.error('Error restoring deleted booking:', error);
+        alert('Failed to restore booking. Please try again.');
+      }
+    }
   };
 
   // Add touch event listeners
@@ -1255,7 +1370,13 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
       >
         <div className="grid gap-2" style={{ gridTemplateColumns: `80px repeat(${maxColumnsNeeded}, 220px) 48px 98px${showSecondDriverColumn ? ' 98px' : ''}` }}>
           {/* Header Row - Shows pilots present today */}
-          <div className="h-7" />
+          <div
+            className="h-7 flex items-center justify-center bg-blue-600 hover:bg-blue-700 rounded-lg cursor-pointer transition-colors"
+            onClick={() => setIsSearchModalOpen(true)}
+            title="Search bookings"
+          >
+            <Search className="w-4 h-4 text-white" />
+          </div>
           {Array.from({ length: maxColumnsNeeded }, (_, index) => {
             const pilot = pilots[index];
             if (pilot) {
@@ -1420,9 +1541,9 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
               // Time Slot Label
               <div
                 key={`time-${timeIndex}`}
-                className={`h-14 flex items-center justify-center bg-gray-200 dark:bg-zinc-900 text-gray-900 dark:text-white rounded-lg font-medium text-sm ${role === 'admin' ? 'cursor-context-menu' : ''} ${moveMode.isActive || requestMoveMode.isActive ? 'cursor-pointer hover:bg-blue-200 dark:hover:bg-blue-900/50' : ''}`}
+                className={`h-14 flex items-center justify-center bg-gray-200 dark:bg-zinc-900 text-gray-900 dark:text-white rounded-lg font-medium text-sm ${role === 'admin' ? 'cursor-context-menu' : ''} ${moveMode.isActive || requestMoveMode.isActive || deletedBookingMoveMode.isActive ? 'cursor-pointer hover:bg-blue-200 dark:hover:bg-blue-900/50' : ''}`}
                 onContextMenu={role === 'admin' ? handleTimeSlotContextMenu(timeIndex, timeSlot) : undefined}
-                onClick={moveMode.isActive || requestMoveMode.isActive ? () => handleMoveModeDestination(timeIndex) : undefined}
+                onClick={moveMode.isActive || requestMoveMode.isActive || deletedBookingMoveMode.isActive ? () => handleMoveModeDestination(timeIndex) : undefined}
               >
                 {timeSlot}
               </div>,
@@ -1501,6 +1622,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                         } : undefined}
                         onEnterMoveMode={role === 'admin' ? enterMoveMode : undefined}
                         isInMoveMode={moveMode.isActive && moveMode.booking?.id === cell.booking.id}
+                        isHighlighted={highlightedBookingId === cell.booking.id}
                       />
                     </div>
                   );
@@ -1514,7 +1636,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                   // Left-click on available cell - check if in move mode first
                   const handleAvailableLeftClick = () => {
                     // If in move mode, handle destination click
-                    if (moveMode.isActive || requestMoveMode.isActive) {
+                    if (moveMode.isActive || requestMoveMode.isActive || deletedBookingMoveMode.isActive) {
                       handleMoveModeDestination(timeIndex);
                       return;
                     }
@@ -1524,7 +1646,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
 
                   // Determine what happens on left-click of "no pilot" cell
                   // Only handle clicks when in move mode
-                  const handleNoPilotLeftClick = (role === "admin" && (moveMode.isActive || requestMoveMode.isActive)) ? async () => {
+                  const handleNoPilotLeftClick = (role === "admin" && (moveMode.isActive || requestMoveMode.isActive || deletedBookingMoveMode.isActive)) ? async () => {
                     handleMoveModeDestination(timeIndex);
                   } : undefined;
 
@@ -1562,13 +1684,13 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                             : undefined
                         }
                         droppableId={cell.status === "available" ? `droppable-${timeIndex}-${cell.pilotIndex ?? 0}` : undefined}
-                        draggedItemPax={draggedBooking ? (draggedBooking.numberOfPeople || draggedBooking.span || 1) : (draggedRequest ? draggedRequest.numberOfPeople : undefined)}
+                        draggedItemPax={draggedBooking ? (draggedBooking.numberOfPeople || draggedBooking.span || 1) : draggedRequest ? draggedRequest.numberOfPeople : draggedDeletedBooking ? (draggedDeletedBooking.numberOfPeople || draggedDeletedBooking.span || 1) : undefined}
                         hasEnoughSpace={
-                          (draggedBooking || draggedRequest) && cell.status === "available"
-                            ? hasEnoughSpaceAtTime(timeIndex, cell.pilotIndex ?? 0, draggedBooking ? (draggedBooking.numberOfPeople || draggedBooking.span || 1) : draggedRequest!.numberOfPeople)
+                          (draggedBooking || draggedRequest || draggedDeletedBooking) && cell.status === "available"
+                            ? hasEnoughSpaceAtTime(timeIndex, cell.pilotIndex ?? 0, draggedBooking ? (draggedBooking.numberOfPeople || draggedBooking.span || 1) : draggedRequest ? draggedRequest.numberOfPeople : draggedDeletedBooking!.numberOfPeople)
                             : true
                         }
-                        isMoveModeActive={moveMode.isActive || requestMoveMode.isActive}
+                        isMoveModeActive={moveMode.isActive || requestMoveMode.isActive || deletedBookingMoveMode.isActive}
                       />
                     </div>
                   );
@@ -1747,6 +1869,9 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                           booking,
                         });
                       }}
+                      canDrag={role === 'admin'}
+                      onEnterMoveMode={role === 'admin' ? enterDeletedBookingMoveMode : undefined}
+                      isInMoveMode={deletedBookingMoveMode.isActive && deletedBookingMoveMode.booking?.id === booking.id}
                     />
                   ))}
                 </div>
@@ -2148,14 +2273,24 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
         />
       )}
 
+      {/* Search Booking Modal */}
+      <SearchBookingModal
+        open={isSearchModalOpen}
+        onOpenChange={setIsSearchModalOpen}
+        bookings={allBookingsForSearch}
+        timeSlots={timeSlots}
+        onBookingClick={handleSearchBookingClick}
+      />
+
       {/* Dim overlay when in move mode */}
-      {(moveMode.isActive || requestMoveMode.isActive) && (
+      {(moveMode.isActive || requestMoveMode.isActive || deletedBookingMoveMode.isActive) && (
         <div
           className="fixed inset-0 bg-black/20 z-40 pointer-events-none"
           onClick={(e) => {
             e.stopPropagation();
             if (moveMode.isActive) exitMoveMode();
             if (requestMoveMode.isActive) exitRequestMoveMode();
+            if (deletedBookingMoveMode.isActive) exitDeletedBookingMoveMode();
           }}
         />
       )}

@@ -36,7 +36,11 @@ export interface Booking {
   driver2?: string;
   vehicle2?: string;
   createdBy?: string; // UID of user who created the booking
+  createdByName?: string; // Display name of user who created the booking
   createdAt?: any; // Firestore Timestamp or Date - when booking was created/last moved
+  deletedBy?: string; // UID of user who deleted the booking
+  deletedByName?: string; // Display name of user who deleted the booking
+  deletedAt?: any; // Firestore Timestamp or Date - when booking was deleted
 }
 
 export type UserRole = "pilot" | "agency" | "driver" | "admin" | null;

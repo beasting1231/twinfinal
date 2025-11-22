@@ -40,6 +40,8 @@ interface BookingAvailableProps {
   onEnterMoveMode?: (booking: any) => void; // Callback to enter move mode
   isInMoveMode?: boolean; // Whether this specific booking is in move mode
   isMoveModeActive?: boolean; // Whether ANY booking/request is in move mode (affects available cell styling)
+  // Highlight prop (for search results)
+  isHighlighted?: boolean; // Whether this booking should be highlighted (from search)
 }
 
 export const BookingAvailable = memo(function BookingAvailable({
@@ -75,7 +77,8 @@ export const BookingAvailable = memo(function BookingAvailable({
   overbookedCount = 0,
   onEnterMoveMode,
   isInMoveMode = false,
-  isMoveModeActive = false
+  isMoveModeActive = false,
+  isHighlighted = false
 }: BookingAvailableProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const longPressTimerRef = useRef<number | null>(null);
@@ -289,9 +292,12 @@ export const BookingAvailable = memo(function BookingAvailable({
       opacity: isDragging ? 0.5 : 1,
     } : {};
 
-    // Apply glow effect based on press state or move mode
+    // Apply glow effect based on press state, move mode, or highlight
     let boxShadow = 'none';
-    if (isInMoveMode) {
+    if (isHighlighted) {
+      // Green pulsing glow for highlighted booking from search
+      boxShadow = '0 0 0 4px rgba(34, 197, 94, 0.6), 0 0 25px rgba(34, 197, 94, 0.5)';
+    } else if (isInMoveMode) {
       boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.5), 0 0 20px rgba(59, 130, 246, 0.4)'; // Blue glow for active move
     } else if (pressGlow === 'light') {
       boxShadow = '0 0 0 2px rgba(59, 130, 246, 0.3)'; // Light blue glow at 500ms
@@ -307,7 +313,7 @@ export const BookingAvailable = memo(function BookingAvailable({
             setDragNodeRef(node);
           }
         }}
-        className={`w-full h-full rounded-lg pt-2 px-2 flex flex-col justify-between transition-all overflow-hidden relative ${onBookedClick ? 'cursor-pointer' : 'cursor-default'} ${canDrag && bookingId ? 'cursor-grab active:cursor-grabbing' : ''}`}
+        className={`w-full h-full rounded-lg pt-2 px-2 flex flex-col justify-between transition-all overflow-hidden relative ${onBookedClick ? 'cursor-pointer' : 'cursor-default'} ${canDrag && bookingId ? 'cursor-grab active:cursor-grabbing' : ''} ${isHighlighted ? 'animate-pulse-slow' : ''}`}
         style={{
           backgroundColor,
           borderWidth: '1px',

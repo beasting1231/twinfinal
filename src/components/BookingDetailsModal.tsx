@@ -873,6 +873,43 @@ export function BookingDetailsModal({
                     <div className="text-gray-900 dark:text-white text-sm leading-relaxed whitespace-pre-wrap break-words">{editedBooking.notes}</div>
                   </div>
                 )}
+
+                {/* Created By / Created At */}
+                {(booking.createdByName || booking.createdBy || booking.createdAt) && (
+                  <div className="bg-gray-50 dark:bg-zinc-900/50 border border-gray-300 dark:border-zinc-800 rounded-xl p-4">
+                    <div className="text-xs text-gray-500 dark:text-zinc-500 mb-2">Booking Info</div>
+                    <div className="text-sm text-gray-900 dark:text-white space-y-1">
+                      {(booking.createdByName || booking.createdBy) && (
+                        <div>Created by: <span className="font-medium">{booking.createdByName || booking.createdBy || 'Unknown'}</span></div>
+                      )}
+                      {booking.createdAt && (
+                        <div>
+                          {(() => {
+                            try {
+                              const date = booking.createdAt.toDate ? booking.createdAt.toDate() : new Date(booking.createdAt);
+                              return (
+                                <>
+                                  Created at: <span className="font-medium">
+                                    {date.toLocaleString('en-US', {
+                                      year: 'numeric',
+                                      month: 'short',
+                                      day: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })}
+                                  </span>
+                                </>
+                              );
+                            } catch (e) {
+                              console.error('Error formatting createdAt date:', e, booking.createdAt);
+                              return null;
+                            }
+                          })()}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               // EDIT MODE - Form layout
