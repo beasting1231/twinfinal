@@ -1623,6 +1623,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                         onEnterMoveMode={role === 'admin' ? enterMoveMode : undefined}
                         isInMoveMode={moveMode.isActive && moveMode.booking?.id === cell.booking.id}
                         isHighlighted={highlightedBookingId === cell.booking.id}
+                        hideDetails={!canViewBooking(cell.booking)}
                       />
                     </div>
                   );

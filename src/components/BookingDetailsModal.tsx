@@ -343,6 +343,25 @@ export function BookingDetailsModal({
     }
   }, [isEditing, editedBooking?.timeIndex, editedBooking?.date, editedBooking?.numberOfPeople, availableSlots, initialAvailableSlots, role]);
 
+  // Check if booking is more than 24 hours old
+  const isBookingOlderThan24Hours = useMemo(() => {
+    if (!booking?.date) return false;
+
+    const bookingDate = new Date(booking.date);
+    const now = new Date();
+    const hoursDifference = (now.getTime() - bookingDate.getTime()) / (1000 * 60 * 60);
+
+    return hoursDifference > 24;
+  }, [booking?.date]);
+
+  // Check if current user can edit payment details
+  // Pilots cannot edit payments for bookings older than 24 hours
+  const canEditPaymentDetails = useMemo(() => {
+    if (role === 'admin') return true; // Admins can always edit
+    if (role === 'pilot' && isBookingOlderThan24Hours) return false; // Pilots cannot edit old bookings
+    return true; // Other roles can edit
+  }, [role, isBookingOlderThan24Hours]);
+
   // Sort pilot payments to show current user's section first
   const sortedPilotPayments = useMemo(() => {
     if (!currentUser?.displayName) return pilotPayments;
@@ -1362,6 +1381,8 @@ export function BookingDetailsModal({
                         }}
                         placeholder="0.00"
                         autoComplete="off"
+                        disabled={!canEditPaymentDetails}
+                        className={!canEditPaymentDetails ? 'opacity-50 cursor-not-allowed' : ''}
                       />
                     </div>
 
@@ -1371,9 +1392,12 @@ export function BookingDetailsModal({
                       <div className="grid grid-cols-3 gap-2">
                         <button
                           type="button"
-                          onClick={() => handlePaymentUpdate(payment.pilotName, 'paymentMethod', 'direkt')}
+                          onClick={() => canEditPaymentDetails && handlePaymentUpdate(payment.pilotName, 'paymentMethod', 'direkt')}
+                          disabled={!canEditPaymentDetails}
                           className={`px-4 py-3 rounded-lg font-medium transition-colors ${
-                            payment.paymentMethod === 'direkt'
+                            !canEditPaymentDetails
+                              ? "opacity-50 cursor-not-allowed bg-gray-100 dark:bg-zinc-800 text-gray-900 dark:text-white"
+                              : payment.paymentMethod === 'direkt'
                               ? "bg-gray-900 dark:bg-white text-white dark:text-black"
                               : "bg-gray-100 dark:bg-zinc-800 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-zinc-700"
                           }`}
@@ -1382,9 +1406,12 @@ export function BookingDetailsModal({
                         </button>
                         <button
                           type="button"
-                          onClick={() => handlePaymentUpdate(payment.pilotName, 'paymentMethod', 'ticket')}
+                          onClick={() => canEditPaymentDetails && handlePaymentUpdate(payment.pilotName, 'paymentMethod', 'ticket')}
+                          disabled={!canEditPaymentDetails}
                           className={`px-4 py-3 rounded-lg font-medium transition-colors ${
-                            payment.paymentMethod === 'ticket'
+                            !canEditPaymentDetails
+                              ? "opacity-50 cursor-not-allowed bg-gray-100 dark:bg-zinc-800 text-gray-900 dark:text-white"
+                              : payment.paymentMethod === 'ticket'
                               ? "bg-gray-900 dark:bg-white text-white dark:text-black"
                               : "bg-gray-100 dark:bg-zinc-800 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-zinc-700"
                           }`}
@@ -1393,9 +1420,12 @@ export function BookingDetailsModal({
                         </button>
                         <button
                           type="button"
-                          onClick={() => handlePaymentUpdate(payment.pilotName, 'paymentMethod', 'ccp')}
+                          onClick={() => canEditPaymentDetails && handlePaymentUpdate(payment.pilotName, 'paymentMethod', 'ccp')}
+                          disabled={!canEditPaymentDetails}
                           className={`px-4 py-3 rounded-lg font-medium transition-colors ${
-                            payment.paymentMethod === 'ccp'
+                            !canEditPaymentDetails
+                              ? "opacity-50 cursor-not-allowed bg-gray-100 dark:bg-zinc-800 text-gray-900 dark:text-white"
+                              : payment.paymentMethod === 'ccp'
                               ? "bg-gray-900 dark:bg-white text-white dark:text-black"
                               : "bg-gray-100 dark:bg-zinc-800 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-zinc-700"
                           }`}
@@ -1413,7 +1443,7 @@ export function BookingDetailsModal({
                         {/* Upload Buttons */}
                         <div className="flex gap-2">
                           {/* Camera Button */}
-                          <label className={`flex-1 ${uploadingReceipt === payment.pilotName ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                          <label className={`flex-1 ${uploadingReceipt === payment.pilotName || !canEditPaymentDetails ? 'opacity-50 cursor-not-allowed' : ''}`}>
                             <input
                               type="file"
                               accept="image/*"
@@ -1426,10 +1456,10 @@ export function BookingDetailsModal({
                                 }
                               }}
                               className="hidden"
-                              disabled={uploadingReceipt === payment.pilotName}
+                              disabled={uploadingReceipt === payment.pilotName || !canEditPaymentDetails}
                             />
                             <div className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-colors ${
-                              uploadingReceipt === payment.pilotName
+                              uploadingReceipt === payment.pilotName || !canEditPaymentDetails
                                 ? 'bg-gray-200 dark:bg-zinc-800 text-gray-900 dark:text-white cursor-not-allowed'
                                 : 'bg-gray-100 dark:bg-zinc-800 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-zinc-700 cursor-pointer'
                             }`}>
@@ -1448,7 +1478,7 @@ export function BookingDetailsModal({
                           </label>
 
                           {/* Upload Button */}
-                          <label className={`flex-1 ${uploadingReceipt === payment.pilotName ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                          <label className={`flex-1 ${uploadingReceipt === payment.pilotName || !canEditPaymentDetails ? 'opacity-50 cursor-not-allowed' : ''}`}>
                             <input
                               type="file"
                               accept="image/*"
@@ -1460,10 +1490,10 @@ export function BookingDetailsModal({
                                 }
                               }}
                               className="hidden"
-                              disabled={uploadingReceipt === payment.pilotName}
+                              disabled={uploadingReceipt === payment.pilotName || !canEditPaymentDetails}
                             />
                             <div className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-colors ${
-                              uploadingReceipt === payment.pilotName
+                              uploadingReceipt === payment.pilotName || !canEditPaymentDetails
                                 ? 'bg-gray-200 dark:bg-zinc-800 text-gray-900 dark:text-white cursor-not-allowed'
                                 : 'bg-gray-100 dark:bg-zinc-800 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-zinc-700 cursor-pointer'
                             }`}>
@@ -1502,8 +1532,8 @@ export function BookingDetailsModal({
                                   >
                                     <Eye className="w-4 h-4" />
                                   </button>
-                                  {/* Only show delete button if user is admin or if it's their own receipt */}
-                                  {(role === 'admin' || currentUser?.displayName === payment.pilotName) && (
+                                  {/* Only show delete button if user is admin or if it's their own receipt and they can edit */}
+                                  {(role === 'admin' || (currentUser?.displayName === payment.pilotName && canEditPaymentDetails)) && (
                                     <button
                                       type="button"
                                       onClick={() => handleRemoveReceipt(payment.pilotName, fileIndex)}
@@ -1527,7 +1557,7 @@ export function BookingDetailsModal({
                 <div className="pt-4 sticky bottom-0 bg-white dark:bg-zinc-950 pb-2">
                   <Button
                     onClick={handleSavePayments}
-                    disabled={isSavingPayments}
+                    disabled={isSavingPayments || !canEditPaymentDetails}
                     className="w-full bg-gray-900 dark:bg-white text-white dark:text-black hover:bg-gray-700 dark:hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isSavingPayments ? (

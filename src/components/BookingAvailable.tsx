@@ -42,6 +42,8 @@ interface BookingAvailableProps {
   isMoveModeActive?: boolean; // Whether ANY booking/request is in move mode (affects available cell styling)
   // Highlight prop (for search results)
   isHighlighted?: boolean; // Whether this booking should be highlighted (from search)
+  // Hide details prop (for agency users viewing others' bookings)
+  hideDetails?: boolean; // Whether to hide booking details and show blank booking
 }
 
 export const BookingAvailable = memo(function BookingAvailable({
@@ -78,7 +80,8 @@ export const BookingAvailable = memo(function BookingAvailable({
   onEnterMoveMode,
   isInMoveMode = false,
   isMoveModeActive = false,
-  isHighlighted = false
+  isHighlighted = false,
+  hideDetails = false
 }: BookingAvailableProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const longPressTimerRef = useRef<number | null>(null);
@@ -282,9 +285,10 @@ export const BookingAvailable = memo(function BookingAvailable({
       return `rgba(${r}, ${g}, ${b}, ${alpha})`;
     };
 
-    const backgroundColor = hexToRgba(bookingSourceColor, 0.4);
-    const borderColor = hexToRgba(bookingSourceColor, 0.5);
-    const hoverColor = hexToRgba(bookingSourceColor, 0.5);
+    // Use generic gray color when hiding details for agency users
+    const backgroundColor = hideDetails ? 'rgba(156, 163, 175, 0.4)' : hexToRgba(bookingSourceColor, 0.4);
+    const borderColor = hideDetails ? 'rgba(156, 163, 175, 0.5)' : hexToRgba(bookingSourceColor, 0.5);
+    const hoverColor = hideDetails ? 'rgba(156, 163, 175, 0.5)' : hexToRgba(bookingSourceColor, 0.5);
 
     // Apply drag transform
     const dragStyle = transform ? {
@@ -374,21 +378,26 @@ export const BookingAvailable = memo(function BookingAvailable({
           );
         })()}
 
-        <div className="flex-1 min-h-0 overflow-hidden">
-          <div className="flex items-center gap-2">
-            {flightType === "classic" && (
-              <span className="text-xs font-semibold text-orange-400 bg-orange-500/20 px-2 py-0.5 rounded-full border border-orange-400/40">
-                classic
-              </span>
-            )}
-            <div className="font-semibold text-sm text-zinc-900 dark:text-white truncate">
-              {[bookingSource, pickupLocation, customerName].filter(Boolean).join(" - ")}
+        {hideDetails ? (
+          // Show completely empty cell for agency users who didn't create this booking
+          <div className="flex-1 min-h-0 overflow-hidden" />
+        ) : (
+          <>
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <div className="flex items-center gap-2">
+                {flightType === "classic" && (
+                  <span className="text-xs font-semibold text-orange-400 bg-orange-500/20 px-2 py-0.5 rounded-full border border-orange-400/40">
+                    classic
+                  </span>
+                )}
+                <div className="font-semibold text-sm text-zinc-900 dark:text-white truncate">
+                  {[bookingSource, pickupLocation, customerName].filter(Boolean).join(" - ")}
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
 
-        {/* Pilot badges grid - includes assigned pilots and overbooked indicators */}
-        <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${span}, 1fr)` }}>
+            {/* Pilot badges grid - includes assigned pilots and overbooked indicators */}
+            <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${span}, 1fr)` }}>
           {Array.from({ length: span }, (_, index) => {
             const pilot = assignedPilots[index];
 
@@ -470,7 +479,9 @@ export const BookingAvailable = memo(function BookingAvailable({
               </div>
             );
           })}
-        </div>
+            </div>
+          </>
+        )}
       </div>
     );
   }
