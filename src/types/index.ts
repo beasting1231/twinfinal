@@ -11,6 +11,24 @@ export interface PilotPayment {
   receiptFiles?: ReceiptFile[];
 }
 
+export type BookingHistoryAction =
+  | "created"
+  | "edited"
+  | "moved"
+  | "deleted"
+  | "restored"
+  | "status_changed"
+  | "pilot_assigned"
+  | "pilot_unassigned";
+
+export interface BookingHistoryEntry {
+  action: BookingHistoryAction;
+  timestamp: any; // Firestore Timestamp or Date
+  userId: string;
+  userName: string;
+  details?: string; // Optional details about the change (e.g., "from 10:00 to 11:00")
+}
+
 export interface Booking {
   id?: string;
   date: string; // ISO date string (YYYY-MM-DD)
@@ -41,6 +59,7 @@ export interface Booking {
   deletedBy?: string; // UID of user who deleted the booking
   deletedByName?: string; // Display name of user who deleted the booking
   deletedAt?: any; // Firestore Timestamp or Date - when booking was deleted
+  history?: BookingHistoryEntry[]; // Array of history entries tracking all changes
 }
 
 export type UserRole = "pilot" | "agency" | "driver" | "admin" | null;

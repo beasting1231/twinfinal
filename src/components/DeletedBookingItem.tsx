@@ -10,9 +10,10 @@ interface DeletedBookingItemProps {
   // Move mode props (admin only)
   onEnterMoveMode?: (booking: Booking) => void; // Callback to enter move mode
   isInMoveMode?: boolean; // Whether this specific booking is in move mode
+  onClick?: (booking: Booking) => void; // Callback when clicking on the booking
 }
 
-export function DeletedBookingItem({ booking, timeSlots, onContextMenu, canDrag = false, onEnterMoveMode, isInMoveMode = false }: DeletedBookingItemProps) {
+export function DeletedBookingItem({ booking, timeSlots, onContextMenu, canDrag = false, onEnterMoveMode, isInMoveMode = false, onClick }: DeletedBookingItemProps) {
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const moveModeTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [pressGlow, setPressGlow] = useState<'none' | 'light' | 'intense'>('none');
@@ -92,6 +93,14 @@ export function DeletedBookingItem({ booking, timeSlots, onContextMenu, canDrag 
     onContextMenu(booking, { x: e.clientX, y: e.clientY });
   };
 
+  const handleClick = () => {
+    // Don't open modal if we just finished a long press or are currently dragging
+    if (preventClickRef.current || isDragging) {
+      return;
+    }
+    onClick?.(booking);
+  };
+
   // Apply glow effect based on press state or move mode
   let boxShadow = 'none';
   if (isInMoveMode) {
@@ -102,11 +111,24 @@ export function DeletedBookingItem({ booking, timeSlots, onContextMenu, canDrag 
     boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.6), 0 0 15px rgba(59, 130, 246, 0.5)'; // Intense blue glow at 1000ms
   }
 
+  // Merge our click handler with dnd-kit's listeners
+  const mergedListeners = canDrag && booking.id ? {
+    ...listeners,
+    onClick: (e: React.MouseEvent) => {
+      // Call dnd-kit's onClick if it exists
+      if (listeners?.onClick) {
+        listeners.onClick(e as any);
+      }
+      handleClick();
+    },
+  } : { onClick: handleClick };
+
   return (
     <div
       ref={setNodeRef}
-      {...(canDrag && booking.id ? { ...attributes, ...listeners } : {})}
-      className={`p-3 bg-gray-50 dark:bg-zinc-800 rounded-lg border border-gray-200 dark:border-zinc-700 cursor-context-menu transition-all select-none ${canDrag && booking.id ? 'cursor-grab active:cursor-grabbing' : ''}`}
+      {...(canDrag && booking.id ? attributes : {})}
+      {...mergedListeners}
+      className={`p-3 bg-gray-50 dark:bg-zinc-800 rounded-lg border border-gray-200 dark:border-zinc-700 cursor-pointer transition-all select-none hover:bg-gray-100 dark:hover:bg-zinc-700 ${canDrag && booking.id ? 'cursor-grab active:cursor-grabbing' : ''}`}
       style={{ ...dragStyle, boxShadow }}
       onContextMenu={handleContextMenuEvent}
       onTouchStart={handleTouchStart}

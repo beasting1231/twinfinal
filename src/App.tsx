@@ -9,6 +9,7 @@ import { BookingSources } from "./components/BookingSources";
 import { Accounting } from "./components/Accounting";
 import { Priority } from "./components/Priority";
 import { Forms } from "./components/Forms";
+import { NotificationSettings } from "./components/NotificationSettings";
 import { UserManagement } from "./components/UserManagement";
 import { BookingRequestForm } from "./components/BookingRequestForm";
 import { useBookings } from "./hooks/useBookings";
@@ -162,6 +163,14 @@ function AppContent() {
         <ProtectedRoute>
           <PageWrapper>
             <Forms />
+          </PageWrapper>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/notifications" element={
+        <ProtectedRoute>
+          <PageWrapper>
+            <NotificationSettings />
           </PageWrapper>
         </ProtectedRoute>
       } />

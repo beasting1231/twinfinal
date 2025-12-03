@@ -1952,6 +1952,10 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                           booking,
                         });
                       }}
+                      onClick={(booking) => {
+                        setSelectedBooking(booking);
+                        setIsDetailsModalOpen(true);
+                      }}
                       canDrag={role === 'admin'}
                       onEnterMoveMode={role === 'admin' ? enterDeletedBookingMoveMode : undefined}
                       isInMoveMode={deletedBookingMoveMode.isActive && deletedBookingMoveMode.booking?.id === booking.id}

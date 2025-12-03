@@ -10,7 +10,7 @@ import type { Booking, Pilot, PilotPayment, ReceiptFile } from "../types/index";
 import { useAuth } from "../contexts/AuthContext";
 import { useEditing } from "../contexts/EditingContext";
 import { useRole } from "../hooks/useRole";
-import { Camera, Upload, Eye, Trash2, Calendar, Clock, MapPin, Users, Phone, Mail, FileText, User, PhoneCall, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
+import { Camera, Upload, Eye, Trash2, Calendar, Clock, MapPin, Users, Phone, Mail, FileText, User, PhoneCall, ChevronDown, ChevronUp, Loader2, History } from "lucide-react";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { db, storage } from "../firebase/config";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -62,6 +62,7 @@ export function BookingDetailsModal({
   const [editedDateBookings, setEditedDateBookings] = useState<Booking[]>([]);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [showAdditionalOptions, setShowAdditionalOptions] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [isSavingPayments, setIsSavingPayments] = useState(false);
   const [uploadingReceipt, setUploadingReceipt] = useState<string | null>(null);
   const [initialAvailableSlots, setInitialAvailableSlots] = useState<number | null>(null);
@@ -893,42 +894,164 @@ export function BookingDetailsModal({
                   </div>
                 )}
 
-                {/* Created By / Created At */}
-                {(booking.createdByName || booking.createdBy || booking.createdAt) && (
-                  <div className="bg-gray-50 dark:bg-zinc-900/50 border border-gray-300 dark:border-zinc-800 rounded-xl p-4">
-                    <div className="text-xs text-gray-500 dark:text-zinc-500 mb-2">Booking Info</div>
-                    <div className="text-sm text-gray-900 dark:text-white space-y-1">
-                      {(booking.createdByName || booking.createdBy) && (
-                        <div>Created by: <span className="font-medium">{booking.createdByName || booking.createdBy || 'Unknown'}</span></div>
-                      )}
-                      {booking.createdAt && (
-                        <div>
-                          {(() => {
-                            try {
-                              const date = booking.createdAt.toDate ? booking.createdAt.toDate() : new Date(booking.createdAt);
-                              return (
-                                <>
-                                  Created at: <span className="font-medium">
-                                    {date.toLocaleString('en-US', {
-                                      year: 'numeric',
-                                      month: 'short',
-                                      day: 'numeric',
-                                      hour: '2-digit',
-                                      minute: '2-digit'
-                                    })}
-                                  </span>
-                                </>
-                              );
-                            } catch (e) {
-                              console.error('Error formatting createdAt date:', e, booking.createdAt);
-                              return null;
-                            }
-                          })()}
+                {/* Booking History - Collapsible */}
+                <div className="bg-gray-50 dark:bg-zinc-900/50 border border-gray-300 dark:border-zinc-800 rounded-xl overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setShowHistory(!showHistory)}
+                    className="w-full p-4 flex items-center justify-between hover:bg-gray-100 dark:hover:bg-zinc-800/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <History className="w-4 h-4 text-gray-500 dark:text-zinc-500" />
+                      <span className="text-xs text-gray-500 dark:text-zinc-500">Booking History</span>
+                    </div>
+                    {showHistory ? (
+                      <ChevronUp className="w-4 h-4 text-gray-500 dark:text-zinc-500" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-gray-500 dark:text-zinc-500" />
+                    )}
+                  </button>
+
+                  {showHistory && (
+                    <div className="px-4 pb-4 space-y-3 border-t border-gray-200 dark:border-zinc-800">
+                      {/* Show history entries if they exist */}
+                      {booking.history && booking.history.length > 0 ? (
+                        <div className="pt-3 space-y-2">
+                          {[...booking.history].reverse().map((entry, index) => {
+                            const formatDate = (timestamp: any) => {
+                              try {
+                                const date = timestamp?.toDate ? timestamp.toDate() : new Date(timestamp);
+                                return date.toLocaleString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                });
+                              } catch {
+                                return 'Unknown date';
+                              }
+                            };
+
+                            const getActionLabel = (action: string) => {
+                              switch (action) {
+                                case 'created': return 'Created';
+                                case 'edited': return 'Edited';
+                                case 'moved': return 'Moved';
+                                case 'deleted': return 'Deleted';
+                                case 'restored': return 'Restored';
+                                case 'status_changed': return 'Status changed';
+                                case 'pilot_assigned': return 'Pilot assigned';
+                                case 'pilot_unassigned': return 'Pilot unassigned';
+                                default: return action;
+                              }
+                            };
+
+                            const getActionColor = (action: string) => {
+                              switch (action) {
+                                case 'created': return 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400';
+                                case 'deleted': return 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400';
+                                case 'restored': return 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400';
+                                case 'moved': return 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400';
+                                default: return 'bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300';
+                              }
+                            };
+
+                            return (
+                              <div key={index} className="flex items-start gap-3 text-sm">
+                                <div className={`px-2 py-0.5 rounded text-xs font-medium ${getActionColor(entry.action)}`}>
+                                  {getActionLabel(entry.action)}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-gray-900 dark:text-white">
+                                    <span className="font-medium">{entry.userName}</span>
+                                    {entry.details && (
+                                      <span className="text-gray-600 dark:text-zinc-400 ml-1">
+                                        {entry.details}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-gray-500 dark:text-zinc-500">
+                                    {formatDate(entry.timestamp)}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        /* Fallback to legacy created/deleted info */
+                        <div className="pt-3 space-y-2">
+                          {(booking.createdByName || booking.createdBy || booking.createdAt) && (
+                            <div className="flex items-start gap-3 text-sm">
+                              <div className="px-2 py-0.5 rounded text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
+                                Created
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-gray-900 dark:text-white">
+                                  <span className="font-medium">{booking.createdByName || booking.createdBy || 'Unknown'}</span>
+                                </div>
+                                {booking.createdAt && (
+                                  <div className="text-xs text-gray-500 dark:text-zinc-500">
+                                    {(() => {
+                                      try {
+                                        const date = booking.createdAt.toDate ? booking.createdAt.toDate() : new Date(booking.createdAt);
+                                        return date.toLocaleString('en-US', {
+                                          month: 'short',
+                                          day: 'numeric',
+                                          year: 'numeric',
+                                          hour: '2-digit',
+                                          minute: '2-digit'
+                                        });
+                                      } catch {
+                                        return 'Unknown date';
+                                      }
+                                    })()}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                          {(booking.deletedByName || booking.deletedBy || booking.deletedAt) && (
+                            <div className="flex items-start gap-3 text-sm">
+                              <div className="px-2 py-0.5 rounded text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">
+                                Deleted
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-gray-900 dark:text-white">
+                                  <span className="font-medium">{booking.deletedByName || booking.deletedBy || 'Unknown'}</span>
+                                </div>
+                                {booking.deletedAt && (
+                                  <div className="text-xs text-gray-500 dark:text-zinc-500">
+                                    {(() => {
+                                      try {
+                                        const date = booking.deletedAt.toDate ? booking.deletedAt.toDate() : new Date(booking.deletedAt);
+                                        return date.toLocaleString('en-US', {
+                                          month: 'short',
+                                          day: 'numeric',
+                                          year: 'numeric',
+                                          hour: '2-digit',
+                                          minute: '2-digit'
+                                        });
+                                      } catch {
+                                        return 'Unknown date';
+                                      }
+                                    })()}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                          {!booking.createdByName && !booking.createdBy && !booking.createdAt && !booking.deletedByName && !booking.deletedBy && !booking.deletedAt && (
+                            <div className="pt-1 text-sm text-gray-500 dark:text-zinc-500">
+                              No history available
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             ) : (
               // EDIT MODE - Form layout
@@ -1299,21 +1422,38 @@ export function BookingDetailsModal({
             <div className="flex gap-3 pt-4">
               {!isEditing ? (
                 <>
-                  {canEditBooking(booking?.createdBy) && (
-                    <Button
-                      onClick={handleEdit}
-                      className="flex-1 bg-gray-900 dark:bg-white text-white dark:text-black hover:bg-gray-700 dark:hover:bg-zinc-200"
-                    >
-                      Edit
-                    </Button>
+                  {/* Show Edit/Delete only for non-deleted bookings */}
+                  {booking?.bookingStatus !== 'deleted' && (
+                    <>
+                      {canEditBooking(booking?.createdBy) && (
+                        <Button
+                          onClick={handleEdit}
+                          className="flex-1 bg-gray-900 dark:bg-white text-white dark:text-black hover:bg-gray-700 dark:hover:bg-zinc-200"
+                        >
+                          Edit
+                        </Button>
+                      )}
+                      {canDeleteBooking(booking?.createdBy) && (
+                        <Button
+                          onClick={handleDelete}
+                          variant="outline"
+                          className="flex-1 border-red-600 dark:border-red-700 text-red-600 dark:text-red-500 hover:bg-red-50 dark:hover:bg-red-950 hover:text-red-700 dark:hover:text-red-400"
+                        >
+                          Delete
+                        </Button>
+                      )}
+                    </>
                   )}
-                  {canDeleteBooking(booking?.createdBy) && (
+                  {/* Show Restore button for deleted bookings */}
+                  {booking?.bookingStatus === 'deleted' && onUpdate && booking.id && (
                     <Button
-                      onClick={handleDelete}
-                      variant="outline"
-                      className="flex-1 border-red-600 dark:border-red-700 text-red-600 dark:text-red-500 hover:bg-red-50 dark:hover:bg-red-950 hover:text-red-700 dark:hover:text-red-400"
+                      onClick={() => {
+                        onUpdate(booking.id!, { bookingStatus: 'pending' });
+                        handleOpenChange(false);
+                      }}
+                      className="flex-1 bg-blue-600 dark:bg-blue-700 text-white hover:bg-blue-700 dark:hover:bg-blue-600"
                     >
-                      Delete
+                      Restore
                     </Button>
                   )}
                   <Button

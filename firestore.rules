@@ -152,5 +152,11 @@ service cloud.firestore {
       // Only admins can create, update, or delete pilot orders
       allow create, update, delete: if request.auth != null && hasRole('admin');
     }
+
+    // Settings collection (notification settings, etc.)
+    match /settings/{settingId} {
+      // Only admins can read and write settings
+      allow read, write: if request.auth != null && hasRole('admin');
+    }
   }
 }

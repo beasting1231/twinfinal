@@ -5,10 +5,12 @@ import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { CountryCodeSelect } from "./CountryCodeSelect";
-import { Calendar } from "lucide-react";
+import { Calendar as CalendarIcon } from "lucide-react";
 import { format, parse } from "date-fns";
 import { getTimeSlotsByDate } from "../utils/timeSlots";
 import type { Booking, Pilot, UserProfile } from "../types/index";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Calendar } from "./ui/calendar";
 
 export function BookingRequestForm() {
   const [formData, setFormData] = useState({
@@ -437,32 +439,29 @@ export function BookingRequestForm() {
             <label htmlFor="date" className="text-sm font-medium text-zinc-200">
               Date *
             </label>
-            <div className="relative w-full max-w-full">
-              <div
-                className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 z-10 cursor-pointer pointer-events-none"
-                onClick={() => {
-                  const dateInput = document.getElementById('date') as HTMLInputElement;
-                  dateInput?.showPicker?.();
-                }}
-              >
-                <Calendar className="w-5 h-5 text-white" />
-              </div>
-              <input
-                id="date"
-                name="date"
-                type="date"
-                value={formData.date}
-                onChange={handleChange}
-                required
-                className="flex !h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 !py-0 !text-sm text-white ring-offset-background placeholder:text-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 pl-11 max-w-full min-w-0 items-center max-h-10 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-date-and-time-value]:!text-sm [&::-webkit-date-and-time-value]:leading-10 [-webkit-appearance:none] [appearance:none] [color-scheme:dark]"
-                style={{
-                  WebkitAppearance: 'none',
-                  MozAppearance: 'none',
-                  appearance: 'none',
-                  fontSize: '14px'
-                }}
-              />
-            </div>
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className="flex h-10 w-full items-center gap-3 rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm text-white ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 hover:bg-zinc-800 transition-colors"
+                >
+                  <CalendarIcon className="h-5 w-5 text-zinc-400" />
+                  <span>{format(selectedDate, "dd/MM/yyyy")}</span>
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0 bg-zinc-900 border-zinc-700" align="start">
+                <Calendar
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={(date) => {
+                    if (date) {
+                      setFormData((prev) => ({ ...prev, date: format(date, "yyyy-MM-dd") }));
+                    }
+                  }}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
           </div>
 
           {/* Time Slot Selection */}
@@ -481,7 +480,7 @@ export function BookingRequestForm() {
                 <SelectTrigger className="bg-zinc-950 border-zinc-800 text-white">
                   <SelectValue placeholder="Select a time slot" />
                 </SelectTrigger>
-                <SelectContent className="min-w-[280px]">
+                <SelectContent className="min-w-[280px] bg-zinc-900 border-zinc-700">
                   {timeSlotAvailability.map((slot) => {
                     const availableCount = slot.availableSpots;
                     const requiredPilots = formData.numberOfPeople;
@@ -493,7 +492,7 @@ export function BookingRequestForm() {
                         key={slot.timeIndex}
                         value={slot.timeIndex.toString()}
                         disabled={isDisabled}
-                        className={isDisabled ? "opacity-50 cursor-not-allowed" : ""}
+                        className={`text-white focus:bg-zinc-800 focus:text-white ${isDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
                       >
                         <div className="flex items-center justify-between gap-4 w-full">
                           <span className="flex-shrink-0">{slot.timeSlot}</span>
@@ -605,17 +604,17 @@ export function BookingRequestForm() {
               <SelectTrigger className="bg-zinc-950 border-zinc-800 text-white">
                 <SelectValue placeholder="Select meeting point" />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="HW">
+              <SelectContent className="bg-zinc-900 border-zinc-700">
+                <SelectItem value="HW" className="text-white focus:bg-zinc-800 focus:text-white">
                   Meet at our base near the landing field in the centre
                 </SelectItem>
-                <SelectItem value="OST">
+                <SelectItem value="OST" className="text-white focus:bg-zinc-800 focus:text-white">
                   Train Station Interlaken Ost (Outside BIG coop supermarket)
                 </SelectItem>
-                <SelectItem value="mhof">
+                <SelectItem value="mhof" className="text-white focus:bg-zinc-800 focus:text-white">
                   Mattenhof Resort (Free Parking)
                 </SelectItem>
-                <SelectItem value="other">
+                <SelectItem value="other" className="text-white focus:bg-zinc-800 focus:text-white">
                   Other meeting point in or near Interlaken
                 </SelectItem>
               </SelectContent>

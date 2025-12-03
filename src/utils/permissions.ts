@@ -25,6 +25,9 @@ export interface Permissions {
   // User management
   canManageRoles: boolean;
   canEditAllUsers: boolean;
+
+  // Notification settings
+  canManageNotifications: boolean;
 }
 
 /**
@@ -47,6 +50,7 @@ export function getPermissions(role: UserRole): Permissions {
       canAccessAccounting: false,
       canManageRoles: false,
       canEditAllUsers: false,
+      canManageNotifications: false,
     };
   }
 
@@ -66,6 +70,7 @@ export function getPermissions(role: UserRole): Permissions {
         canAccessAccounting: true,
         canManageRoles: false,
         canEditAllUsers: false,
+        canManageNotifications: false,
       };
 
     case "agency":
@@ -83,6 +88,7 @@ export function getPermissions(role: UserRole): Permissions {
         canAccessAccounting: false,
         canManageRoles: false,
         canEditAllUsers: false,
+        canManageNotifications: false,
       };
 
     case "driver":
@@ -100,6 +106,7 @@ export function getPermissions(role: UserRole): Permissions {
         canAccessAccounting: false,
         canManageRoles: false,
         canEditAllUsers: false,
+        canManageNotifications: false,
       };
 
     case "admin":
@@ -117,6 +124,7 @@ export function getPermissions(role: UserRole): Permissions {
         canAccessAccounting: true,
         canManageRoles: true,
         canEditAllUsers: true,
+        canManageNotifications: true,
       };
 
     default:
