@@ -166,6 +166,22 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
     fetchAllPilotsAvailability();
   }, [weekStartDate, currentUser, justSaved]);
 
+  // Function to check if a day is more than 24 hours in the past
+  const isDayOlderThan24Hours = (day: Date): boolean => {
+    // Set to end of day to be generous
+    const dayEnd = new Date(day);
+    dayEnd.setHours(23, 59, 59, 999);
+    const now = new Date();
+    const hoursDifference = (now.getTime() - dayEnd.getTime()) / (1000 * 60 * 60);
+    return hoursDifference > 24;
+  };
+
+  // Function to check if editing is allowed for a day (admins always, others only within 24 hours)
+  const canEditDay = (day: Date): boolean => {
+    if (role === 'admin') return true;
+    return !isDayOlderThan24Hours(day);
+  };
+
   // Function to check if a cell should be locked (cannot be toggled to unavailable)
   // Locks cells when the user is available AND the time slot is fully or overbooked
   const isCellLocked = (day: Date, timeSlot: string): boolean => {
@@ -214,12 +230,22 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
   const rafRef = useRef<number | null>(null);
 
   const handleToggleCell = async (dayIndex: number, timeSlot: string) => {
-    await toggleAvailability(days[dayIndex], timeSlot);
+    const day = days[dayIndex];
+    // Check if editing is allowed for this day
+    if (!canEditDay(day)) {
+      return;
+    }
+    await toggleAvailability(day, timeSlot);
   };
 
   const handleToggleColumn = async (dayIndex: number) => {
     const day = days[dayIndex];
     const timeSlots = dailyTimeSlots[dayIndex];
+
+    // Check if editing is allowed for this day
+    if (!canEditDay(day)) {
+      return;
+    }
 
     // Check if any slots are locked
     const anyLocked = timeSlots.some((slot) => isCellLocked(day, slot));
@@ -376,15 +402,17 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
                 {/* Day Header */}
                 <button
                   onClick={() => handleToggleColumn(dayIndex)}
-                  className={`h-14 flex flex-col items-center justify-center rounded-lg font-medium text-sm transition-colors cursor-pointer border ${
-                    isToday
-                      ? 'bg-blue-100 dark:bg-blue-900/50 hover:bg-blue-200 dark:hover:bg-blue-900/70 border-2 border-blue-500'
-                      : 'bg-white dark:bg-zinc-900 hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-900 dark:text-white border-gray-300 dark:border-zinc-700'
+                  className={`h-14 flex flex-col items-center justify-center rounded-lg font-medium text-sm transition-colors border ${
+                    !canEditDay(day)
+                      ? 'bg-gray-100 dark:bg-zinc-800/50 text-gray-400 dark:text-zinc-600 cursor-not-allowed border-gray-200 dark:border-zinc-800'
+                      : isToday
+                      ? 'bg-blue-100 dark:bg-blue-900/50 hover:bg-blue-200 dark:hover:bg-blue-900/70 border-2 border-blue-500 cursor-pointer'
+                      : 'bg-white dark:bg-zinc-900 hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-900 dark:text-white border-gray-300 dark:border-zinc-700 cursor-pointer'
                   }`}
-                  disabled={isInitialLoading || saving}
+                  disabled={isInitialLoading || saving || !canEditDay(day)}
                 >
-                  <div className={`text-xs ${isToday ? 'text-blue-600 dark:text-blue-300' : 'text-gray-600 dark:text-zinc-400'}`}>{dayName}</div>
-                  <div className={isToday ? 'text-blue-700 dark:text-blue-100' : ''}>{monthDay}</div>
+                  <div className={`text-xs ${!canEditDay(day) ? 'text-gray-400 dark:text-zinc-600' : isToday ? 'text-blue-600 dark:text-blue-300' : 'text-gray-600 dark:text-zinc-400'}`}>{dayName}</div>
+                  <div className={!canEditDay(day) ? '' : isToday ? 'text-blue-700 dark:text-blue-100' : ''}>{monthDay}</div>
                 </button>
 
                 {/* Time Slots for this day */}
@@ -403,6 +431,7 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
                         timeSlot={timeSlot}
                         isAvailable={isAvailable(day, timeSlot)}
                         isLocked={isCellLocked(day, timeSlot)}
+                        isDisabled={!canEditDay(day)}
                         onToggle={() => handleToggleCell(dayIndex, timeSlot)}
                       />
                     </div>

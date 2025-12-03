@@ -344,23 +344,32 @@ export function BookingDetailsModal({
     }
   }, [isEditing, editedBooking?.timeIndex, editedBooking?.date, editedBooking?.numberOfPeople, availableSlots, initialAvailableSlots, role]);
 
-  // Check if booking is more than 24 hours old
+  // Check if booking is more than 24 hours in the past
   const isBookingOlderThan24Hours = useMemo(() => {
     if (!booking?.date) return false;
 
-    const bookingDate = new Date(booking.date);
+    // Parse the booking date and set to end of day to be generous
+    const bookingDate = new Date(booking.date + 'T23:59:59');
     const now = new Date();
     const hoursDifference = (now.getTime() - bookingDate.getTime()) / (1000 * 60 * 60);
 
     return hoursDifference > 24;
   }, [booking?.date]);
 
+  // Check if current user can edit booking details (main edit mode)
+  // Non-admins cannot edit bookings older than 24 hours
+  const canEditBookingDetails = useMemo(() => {
+    if (role === 'admin') return true; // Admins can always edit
+    if (isBookingOlderThan24Hours) return false; // Non-admins cannot edit old bookings
+    return true;
+  }, [role, isBookingOlderThan24Hours]);
+
   // Check if current user can edit payment details
-  // Pilots cannot edit payments for bookings older than 24 hours
+  // Non-admins cannot edit payments for bookings older than 24 hours
   const canEditPaymentDetails = useMemo(() => {
     if (role === 'admin') return true; // Admins can always edit
-    if (role === 'pilot' && isBookingOlderThan24Hours) return false; // Pilots cannot edit old bookings
-    return true; // Other roles can edit
+    if (isBookingOlderThan24Hours) return false; // Non-admins cannot edit old bookings
+    return true;
   }, [role, isBookingOlderThan24Hours]);
 
   // Sort pilot payments to show current user's section first
@@ -676,8 +685,13 @@ export function BookingDetailsModal({
                 {/* Status Badge Dropdown */}
                 <div className="flex items-center justify-between mb-4 relative">
                   <button
-                    onClick={() => setShowStatusDropdown(!showStatusDropdown)}
-                    className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium cursor-pointer transition-all hover:scale-105 ${
+                    onClick={() => canEditBookingDetails && setShowStatusDropdown(!showStatusDropdown)}
+                    disabled={!canEditBookingDetails}
+                    className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+                      !canEditBookingDetails
+                        ? 'cursor-default'
+                        : 'cursor-pointer hover:scale-105'
+                    } ${
                       editedBooking.bookingStatus === 'unconfirmed'
                         ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 border border-blue-300 dark:border-blue-500/30 hover:bg-blue-200 dark:hover:bg-blue-500/30'
                         : editedBooking.bookingStatus === 'confirmed'
@@ -1425,7 +1439,7 @@ export function BookingDetailsModal({
                   {/* Show Edit/Delete only for non-deleted bookings */}
                   {booking?.bookingStatus !== 'deleted' && (
                     <>
-                      {canEditBooking(booking?.createdBy) && (
+                      {canEditBooking(booking?.createdBy) && canEditBookingDetails && (
                         <Button
                           onClick={handleEdit}
                           className="flex-1 bg-gray-900 dark:bg-white text-white dark:text-black hover:bg-gray-700 dark:hover:bg-zinc-200"
@@ -1433,7 +1447,12 @@ export function BookingDetailsModal({
                           Edit
                         </Button>
                       )}
-                      {canDeleteBooking(booking?.createdBy) && (
+                      {canEditBooking(booking?.createdBy) && !canEditBookingDetails && (
+                        <div className="flex-1 text-center text-sm text-gray-500 dark:text-zinc-500 py-2">
+                          Editing disabled (booking is more than 24 hours old)
+                        </div>
+                      )}
+                      {canDeleteBooking(booking?.createdBy) && canEditBookingDetails && (
                         <Button
                           onClick={handleDelete}
                           variant="outline"

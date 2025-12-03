@@ -426,10 +426,30 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     }
   }, [pilots.length, timeSlots.length, bookings.length, scale]);
 
+  // Check if the selected date is more than 24 hours in the past
+  const isSelectedDateOlderThan24Hours = useMemo(() => {
+    // Set to end of day to be generous
+    const dateEnd = new Date(selectedDate);
+    dateEnd.setHours(23, 59, 59, 999);
+    const now = new Date();
+    const hoursDifference = (now.getTime() - dateEnd.getTime()) / (1000 * 60 * 60);
+    return hoursDifference > 24;
+  }, [selectedDate]);
+
+  // Check if editing/creating is allowed for the current date (admins always, others only within 24 hours)
+  const canEditForSelectedDate = useMemo(() => {
+    if (role === 'admin') return true;
+    return !isSelectedDateOlderThan24Hours;
+  }, [role, isSelectedDateOlderThan24Hours]);
+
   const handleAvailableCellClick = useCallback((pilotIndex: number, timeIndex: number, timeSlot: string) => {
+    // Check if creating bookings is allowed for this date
+    if (!canEditForSelectedDate) {
+      return;
+    }
     setSelectedCell({ pilotIndex, timeIndex, timeSlot });
     setIsModalOpen(true);
-  }, []);
+  }, [canEditForSelectedDate]);
 
   // Check if a booking can be clicked by the current user
   const canViewBooking = useCallback((booking: Booking) => {
@@ -806,6 +826,11 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     slotIndex: number,
     position: { x: number; y: number }
   ) => {
+    // Check if editing is allowed for this date (non-admins cannot edit past 24 hours)
+    if (!canEditForSelectedDate) {
+      return;
+    }
+
     // Check if this is a pilot clicking on their own assigned position
     const assignedPilotAtSlot = booking.assignedPilots[slotIndex];
     const isPilotSelfUnassign = !!(role === "pilot" &&
@@ -907,6 +932,9 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     pilotName: string,
     position: { x: number; y: number }
   ) => {
+    // Check if editing is allowed for this date (non-admins cannot edit past 24 hours)
+    if (!canEditForSelectedDate) return;
+
     if (!currentUserDisplayName || pilotName !== currentUserDisplayName) return;
 
     // Only allow pilots to click their own names
@@ -921,10 +949,13 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
       timeSlot,
       isPilotSelfUnassign: true,
     });
-  }, [currentUserDisplayName, role]);
+  }, [currentUserDisplayName, role, canEditForSelectedDate]);
 
   // Handle opening availability context menu
   const handleNoPilotContextMenu = (pilotIndex: number, timeIndex: number) => (position: { x: number; y: number }) => {
+    // Check if editing is allowed for this date (non-admins cannot edit past 24 hours)
+    if (!canEditForSelectedDate) return;
+
     console.log("handleNoPilotContextMenu called in ScheduleGrid", { pilotIndex, timeIndex, position, currentUserDisplayName });
 
     // Check if pilot is currently available (has record in availability collection)
