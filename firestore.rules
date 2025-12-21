@@ -40,6 +40,20 @@ service cloud.firestore {
       return onlyPilotsChanged && wasAssigned && sameLengthArrays;
     }
 
+    // Helper function to check if pilot is updating payment info on a booking they're assigned to
+    function isPilotUpdatingOwnPayment() {
+      let userDisplayName = getUserDisplayName();
+      let assignedPilots = resource.data.assignedPilots;
+
+      // Check that the pilot is assigned to this booking
+      let isAssigned = userDisplayName in assignedPilots;
+
+      // Check that only pilotPayments field is being changed
+      let onlyPaymentsChanged = request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pilotPayments']);
+
+      return isAssigned && onlyPaymentsChanged;
+    }
+
     // Bookings collection
     match /bookings/{bookingId} {
       // Allow public read for booking form availability check
@@ -53,6 +67,7 @@ service cloud.firestore {
 
       // Pilot: can update only their own bookings (check createdBy)
       //        OR can update any booking to remove themselves from assignedPilots
+      //        OR can update pilotPayments on bookings they're assigned to
       // Agency: can update only their own bookings (check createdBy)
       // Driver: can update all bookings
       // Admin: can update all bookings
@@ -60,6 +75,7 @@ service cloud.firestore {
       allow update: if request.auth != null && (
         hasAnyRole(['driver', 'admin']) ||
         (hasRole('pilot') && isPilotSelfUnassign()) ||
+        (hasRole('pilot') && isPilotUpdatingOwnPayment()) ||
         (hasAnyRole(['pilot', 'agency']) && (
           !('createdBy' in resource.data) ||
           resource.data.createdBy == request.auth.uid
@@ -155,8 +171,20 @@ service cloud.firestore {
 
     // Settings collection (notification settings, etc.)
     match /settings/{settingId} {
-      // Only admins can read and write settings
-      allow read, write: if request.auth != null && hasRole('admin');
+      // Form settings are publicly readable (for booking form)
+      allow read: if settingId == 'form';
+      // Other settings require admin auth to read
+      allow read: if settingId != 'form' && request.auth != null && hasRole('admin');
+      // Only admins can write any settings
+      allow write: if request.auth != null && hasRole('admin');
+    }
+
+    // Email queue collection (for sending emails via Cloud Functions)
+    match /emailQueue/{emailId} {
+      // Authenticated users can create email requests
+      allow create: if request.auth != null;
+      // Only the Cloud Function (admin SDK) can read/update/delete
+      allow read, update, delete: if false;
     }
   }
 }

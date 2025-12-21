@@ -11,6 +11,7 @@ import type { Pilot, Booking } from "../types/index";
 import { useEditing } from "../contexts/EditingContext";
 import { useRole } from "../hooks/useRole";
 import { BookingSourceAutocomplete } from "./BookingSourceAutocomplete";
+import { MeetingPointAutocomplete } from "./MeetingPointAutocomplete";
 import { getTimeSlotsByDate } from "../utils/timeSlots";
 
 interface NewBookingModalProps {
@@ -45,6 +46,7 @@ interface NewBookingModalProps {
     email?: string;
     notes?: string;
     flightType?: "sensational" | "classic" | "early bird";
+    bookingSource?: string;
   };
 }
 
@@ -148,9 +150,9 @@ export function NewBookingModal({
         setEmail(initialData.email || "");
         setNotes(initialData.notes || "");
         setFlightType(initialData.flightType || "sensational");
+        setBookingSource(initialData.bookingSource || "twin");
         // Keep defaults for fields not in initialData
         setPickupLocation("");
-        setBookingSource("twin");
         setCommission("");
         setCommissionStatus("unpaid");
         setFemalePilotsRequired(0);
@@ -334,7 +336,7 @@ export function NewBookingModal({
     if (customerName.trim()) {
       bookingData.customerName = customerName.trim();
     }
-    if (pickupLocation.trim() && pickupLocation !== "other") {
+    if (pickupLocation.trim()) {
       bookingData.pickupLocation = pickupLocation.trim();
     }
     if (phoneNumber.trim()) {
@@ -543,33 +545,10 @@ export function NewBookingModal({
           </div>
 
           {/* Meeting Point */}
-          <div className="space-y-2">
-            <Label htmlFor="pickupLocation" className="text-gray-900 dark:text-white">
-              Meeting Point
-            </Label>
-            <Select
-              value={pickupLocation}
-              onValueChange={setPickupLocation}
-            >
-              <SelectTrigger className="bg-white dark:bg-zinc-950 border-gray-300 dark:border-zinc-800 text-gray-900 dark:text-white">
-                <SelectValue placeholder="Select meeting point" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="HW">
-                  HW
-                </SelectItem>
-                <SelectItem value="OST">
-                  OST
-                </SelectItem>
-                <SelectItem value="mhof">
-                  mhof
-                </SelectItem>
-                <SelectItem value="other">
-                  (blank)
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <MeetingPointAutocomplete
+            value={pickupLocation}
+            onChange={setPickupLocation}
+          />
 
           {/* Booking Source */}
           <BookingSourceAutocomplete

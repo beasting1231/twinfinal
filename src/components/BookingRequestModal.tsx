@@ -100,10 +100,24 @@ export function BookingRequestModal({
             </div>
           </div>
 
-          {/* Number of People */}
-          <div>
-            <label className="text-sm font-medium text-gray-600 dark:text-zinc-400">Number of People</label>
-            <p className="text-gray-900 dark:text-white">{request.numberOfPeople}</p>
+          {/* Number of People and Meeting Point */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium text-gray-600 dark:text-zinc-400">Number of People</label>
+              <p className="text-gray-900 dark:text-white">{request.numberOfPeople}</p>
+            </div>
+            {request.meetingPoint && (
+              <div>
+                <label className="text-sm font-medium text-gray-600 dark:text-zinc-400">Meeting Point</label>
+                <p className="text-gray-900 dark:text-white">
+                  {request.meetingPoint === "HW" && "Twin Base (Landing Field)"}
+                  {request.meetingPoint === "OST" && "Interlaken Ost Station"}
+                  {request.meetingPoint === "mhof" && "Mattenhof Resort"}
+                  {request.meetingPoint === "other" && "Other Location"}
+                  {!["HW", "OST", "mhof", "other"].includes(request.meetingPoint) && request.meetingPoint}
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Flight Type */}

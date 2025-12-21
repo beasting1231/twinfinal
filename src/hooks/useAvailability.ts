@@ -159,6 +159,7 @@ export function useAvailability(targetUserId?: string) {
           userId: userId,
           date: dateStr,
           timeSlot: timeSlot,
+          signedInAt: new Date().toISOString(), // Track when pilot signed in
         });
       }
 
@@ -210,6 +211,7 @@ export function useAvailability(targetUserId?: string) {
         await Promise.all(deletePromises);
       } else {
         // Add all slots for this day
+        const signedInAt = new Date().toISOString(); // Same timestamp for all slots
         const addPromises = timeSlots.map((slot) => {
           const key = `${dateStr}-${slot}`;
           if (!availabilityMap.has(key)) {
@@ -217,6 +219,7 @@ export function useAvailability(targetUserId?: string) {
               userId: userId,
               date: dateStr,
               timeSlot: slot,
+              signedInAt, // Track when pilot signed in
             });
           }
           return Promise.resolve();

@@ -531,7 +531,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
           timeIndex: targetTimeIndex,
           customerName: request.customerName,
           numberOfPeople: request.numberOfPeople,
-          pickupLocation: "",
+          pickupLocation: request.meetingPoint || "",
           bookingSource: "twin",
           phoneNumber: request.phone || "",
           email: request.email,
@@ -1345,7 +1345,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
           timeIndex: targetTimeIndex,
           customerName: request.customerName,
           numberOfPeople: request.numberOfPeople,
-          pickupLocation: "",
+          pickupLocation: request.meetingPoint || "",
           bookingSource: "twin",
           phoneNumber: request.phone || "",
           email: request.email,
@@ -1483,13 +1483,17 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
       >
         <div className="grid gap-2" style={{ gridTemplateColumns: `80px repeat(${maxColumnsNeeded}, 220px) 48px 98px${showSecondDriverColumn ? ' 98px' : ''}` }}>
           {/* Header Row - Shows pilots present today */}
-          <div
-            className="h-7 flex items-center justify-center bg-blue-600 hover:bg-blue-700 rounded-lg cursor-pointer transition-colors"
-            onClick={() => setIsSearchModalOpen(true)}
-            title="Search bookings"
-          >
-            <Search className="w-4 h-4 text-white" />
-          </div>
+          {role !== 'agency' ? (
+            <div
+              className="h-7 flex items-center justify-center bg-blue-600 hover:bg-blue-700 rounded-lg cursor-pointer transition-colors"
+              onClick={() => setIsSearchModalOpen(true)}
+              title="Search bookings"
+            >
+              <Search className="w-4 h-4 text-white" />
+            </div>
+          ) : (
+            <div className="h-7 bg-zinc-900 rounded-lg" />
+          )}
           {Array.from({ length: maxColumnsNeeded }, (_, index) => {
             const pilot = pilots[index];
             if (pilot) {
@@ -2058,6 +2062,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
             email: bookingRequestToBook.email,
             notes: bookingRequestToBook.notes,
             flightType: bookingRequestToBook.flightType,
+            bookingSource: bookingRequestToBook.bookingSource || "Online",
           } : undefined}
         />
       )}
@@ -2265,8 +2270,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                 timeIndex: timeSlotIndex,
                 customerName: request.customerName,
                 numberOfPeople: request.numberOfPeople,
-                pickupLocation: "",
-                bookingSource: "twin",
+                pickupLocation: request.meetingPoint || "",
+                bookingSource: request.bookingSource || "Online",
                 phoneNumber: request.phone || "",
                 email: request.email,
                 notes: request.notes || "",
@@ -2280,6 +2285,14 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
               await updateDoc(doc(db, "bookingRequests", request.id), {
                 status: "approved",
               });
+
+              // Navigate to the booking's date if it's different from the current date
+              const currentDateString = format(selectedDate, "yyyy-MM-dd");
+              if (request.date !== currentDateString && onNavigateToDate) {
+                const [year, month, day] = request.date.split('-').map(Number);
+                const targetDate = new Date(year, month - 1, day);
+                onNavigateToDate(targetDate);
+              }
             } catch (error) {
               console.error("Error creating booking from request:", error);
               alert("Failed to create booking. Please try again.");

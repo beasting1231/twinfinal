@@ -84,6 +84,14 @@
   }
 }
 
+/* Booking request form page styling (for iframe embedding) */
+html:has(.booking-request-form),
+body:has(.booking-request-form) {
+  margin: 0;
+  padding: 0;
+  background-color: rgb(249, 250, 251) !important; /* bg-gray-50 */
+}
+
 /* Allow text selection in booking details modal */
 .allow-select,
 .allow-select * {

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { collection, query, where, getDocs, onSnapshot, doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "../firebase/config";
-import { format } from "date-fns";
+import { format, differenceInDays, parseISO, startOfDay } from "date-fns";
 import type { Pilot } from "../types/index";
 
 export interface PilotAvailability {
@@ -12,6 +12,7 @@ export interface PilotAvailability {
 export function usePilots(selectedDate: Date) {
   const [rawPilots, setRawPilots] = useState<Pilot[]>([]);
   const [pilotAvailability, setPilotAvailability] = useState<Map<string, Set<string>>>(new Map());
+  const [pilotSignInTimes, setPilotSignInTimes] = useState<Map<string, string>>(new Map()); // Track earliest sign-in time per pilot
   const [customOrder, setCustomOrder] = useState<string[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +57,7 @@ export function usePilots(selectedDate: Date) {
           // Get unique pilot IDs and their available time slots
           const pilotIds = new Set<string>();
           const availabilityMap = new Map<string, Set<string>>();
+          const signInTimesMap = new Map<string, string>(); // Track earliest sign-in time per pilot
 
           availabilitySnapshot.docs.forEach((doc) => {
             const data = doc.data();
@@ -65,12 +67,21 @@ export function usePilots(selectedDate: Date) {
               availabilityMap.set(data.userId, new Set());
             }
             availabilityMap.get(data.userId)!.add(data.timeSlot);
+
+            // Track the earliest sign-in time for this pilot
+            if (data.signedInAt) {
+              const existingTime = signInTimesMap.get(data.userId);
+              if (!existingTime || data.signedInAt < existingTime) {
+                signInTimesMap.set(data.userId, data.signedInAt);
+              }
+            }
           });
 
           // If no pilots are available, return empty array
           if (pilotIds.size === 0) {
             setRawPilots([]);
             setPilotAvailability(new Map());
+            setPilotSignInTimes(new Map());
             setLoading(false);
             return;
           }
@@ -152,6 +163,7 @@ export function usePilots(selectedDate: Date) {
           });
 
           setPilotAvailability(availabilityMap);
+          setPilotSignInTimes(signInTimesMap);
           setLoading(false);
         } catch (err: any) {
           console.error("Error processing pilots:", err);
@@ -170,14 +182,32 @@ export function usePilots(selectedDate: Date) {
     return () => unsubscribe();
   }, [selectedDate]);
 
-  // Memoized sorted pilots - recalculates only when rawPilots or customOrder change
+  // Helper function to check if a pilot signed in on time (>= 2 days before the target date)
+  const isOnTimeSignIn = (pilotUid: string): boolean => {
+    const signedInAt = pilotSignInTimes.get(pilotUid);
+
+    // If no signedInAt timestamp, treat as on-time (backwards compatibility for old records)
+    if (!signedInAt) return true;
+
+    const signInDate = parseISO(signedInAt);
+    const targetDate = startOfDay(selectedDate);
+    const signInDay = startOfDay(signInDate);
+
+    // Calculate days between sign-in and target date
+    const daysInAdvance = differenceInDays(targetDate, signInDay);
+
+    // On-time if signed in >= 2 days before
+    return daysInAdvance >= 2;
+  };
+
+  // Memoized sorted pilots - recalculates only when rawPilots, customOrder, or signInTimes change
   const pilots = useMemo(() => {
     console.log("Recalculating pilot sort order");
 
     // Create a copy for sorting (don't mutate rawPilots)
     let sortedPilots = [...rawPilots];
 
-    // If custom order exists for this date, apply it
+    // If custom order exists for this date, apply it (admin override takes precedence)
     if (customOrder && customOrder.length > 0) {
       console.log("Applying custom pilot order for this date");
 
@@ -209,19 +239,56 @@ export function usePilots(selectedDate: Date) {
 
       sortedPilots = [...customSorted, ...remaining];
     } else {
-      // Sort pilots by priority (lower number = higher priority = leftmost)
-      sortedPilots.sort((a, b) => {
+      // Split pilots into on-time (signed in >= 2 days before) and late sign-ups
+      const onTimePilots: Pilot[] = [];
+      const latePilots: Pilot[] = [];
+
+      sortedPilots.forEach(pilot => {
+        if (isOnTimeSignIn(pilot.uid)) {
+          onTimePilots.push(pilot);
+        } else {
+          latePilots.push(pilot);
+        }
+      });
+
+      // Sort on-time pilots by priority (lower number = higher priority = leftmost)
+      onTimePilots.sort((a, b) => {
         const aPriority = a.priority ?? 999999;
         const bPriority = b.priority ?? 999999;
 
-        // Sort by priority (lower number first)
         if (aPriority !== bPriority) {
           return aPriority - bPriority;
         }
 
-        // If same priority (or both undefined), sort alphabetically
         return a.displayName.localeCompare(b.displayName);
       });
+
+      // Sort late pilots by their sign-in time (earliest sign-in first)
+      latePilots.sort((a, b) => {
+        const aSignIn = pilotSignInTimes.get(a.uid) || '';
+        const bSignIn = pilotSignInTimes.get(b.uid) || '';
+
+        // Earlier sign-in comes first
+        if (aSignIn !== bSignIn) {
+          return aSignIn.localeCompare(bSignIn);
+        }
+
+        // If same sign-in time, fall back to priority
+        const aPriority = a.priority ?? 999999;
+        const bPriority = b.priority ?? 999999;
+        if (aPriority !== bPriority) {
+          return aPriority - bPriority;
+        }
+
+        return a.displayName.localeCompare(b.displayName);
+      });
+
+      // On-time pilots first, then late pilots
+      sortedPilots = [...onTimePilots, ...latePilots];
+
+      if (latePilots.length > 0) {
+        console.log(`Late sign-ups (moved to end): ${latePilots.map(p => p.displayName).join(', ')}`);
+      }
     }
 
     // Differential update: reuse previous array if order hasn't changed
@@ -244,7 +311,7 @@ export function usePilots(selectedDate: Date) {
     console.log("Pilot sort order changed - returning new array");
     prevPilotsRef.current = sortedPilots;
     return sortedPilots;
-  }, [rawPilots, customOrder]);
+  }, [rawPilots, customOrder, pilotSignInTimes, selectedDate]);
 
   const isPilotAvailableForTimeSlot = (pilotUid: string, timeSlot: string): boolean => {
     const slots = pilotAvailability.get(pilotUid);

@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { collection, addDoc, onSnapshot, query, where } from "firebase/firestore";
+import { collection, addDoc, onSnapshot, query, where, doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
@@ -37,6 +37,9 @@ export function BookingRequestForm() {
   const [allPilots, setAllPilots] = useState<Pilot[]>([]);
   const [pilotAvailability, setPilotAvailability] = useState<Map<string, Set<string>>>(new Map());
   const [loading, setLoading] = useState(true);
+  const [hideAvailability, setHideAvailability] = useState(false);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
 
   // Parse the selected date
   const selectedDate = useMemo(() => {
@@ -54,6 +57,40 @@ export function BookingRequestForm() {
     twoMonthsFromNow.setMonth(today.getMonth() + 2);
     return selectedDate >= twoMonthsFromNow;
   }, [selectedDate]);
+
+  // Skip availability restrictions if far future OR if admin has hidden availability
+  const skipAvailabilityRestrictions = isFarFuture || hideAvailability;
+
+  // Fetch form settings (hideAvailability)
+  // Also check URL param as fallback for cross-origin iframes
+  useEffect(() => {
+    const loadFormSettings = async () => {
+      // First check URL parameter (for iframe cross-origin support)
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlHideAvailability = urlParams.get('hideAvailability') === 'true';
+
+      if (urlHideAvailability) {
+        setHideAvailability(true);
+        setSettingsLoaded(true);
+        return;
+      }
+
+      // Otherwise try to fetch from Firestore
+      try {
+        const settingsDoc = await getDoc(doc(db, "settings", "form"));
+        if (settingsDoc.exists()) {
+          const data = settingsDoc.data();
+          const hide = data.hideAvailability ?? false;
+          setHideAvailability(hide);
+        }
+      } catch (error) {
+        console.error("Error loading form settings:", error);
+      } finally {
+        setSettingsLoaded(true);
+      }
+    };
+    loadFormSettings();
+  }, []);
 
   // Get time slots for the selected date
   const timeSlots = useMemo(() => getTimeSlotsByDate(selectedDate), [selectedDate]);
@@ -184,9 +221,9 @@ export function BookingRequestForm() {
   }, [formData.date]);
 
   // Reset numberOfPeople if selected number is not available for current time slot
-  // Skip this for far-future bookings (2+ months in advance)
+  // Skip this for far-future bookings (2+ months in advance) or when availability is hidden
   useEffect(() => {
-    if (isFarFuture) return; // No restrictions for far-future bookings
+    if (skipAvailabilityRestrictions) return; // No restrictions when skipping availability
 
     if (formData.timeIndex) {
       const selectedTimeSlot = timeSlotAvailability.find(
@@ -199,12 +236,12 @@ export function BookingRequestForm() {
         setFormData((prev) => ({ ...prev, numberOfPeople: 1 }));
       }
     }
-  }, [formData.timeIndex, formData.date, timeSlotAvailability, isFarFuture]);
+  }, [formData.timeIndex, formData.date, timeSlotAvailability, skipAvailabilityRestrictions]);
 
   // Track initial availability when time slot is selected
-  // Skip this for far-future bookings (2+ months in advance)
+  // Skip this for far-future bookings (2+ months in advance) or when availability is hidden
   useEffect(() => {
-    if (isFarFuture) return; // No availability tracking for far-future bookings
+    if (skipAvailabilityRestrictions) return; // No availability tracking when skipping availability
 
     if (formData.timeIndex && formData.date) {
       const key = `${formData.date}-${formData.timeIndex}`;
@@ -220,12 +257,12 @@ export function BookingRequestForm() {
         }
       }
     }
-  }, [formData.timeIndex, formData.date, timeSlotAvailability, initialAvailability, isFarFuture]);
+  }, [formData.timeIndex, formData.date, timeSlotAvailability, initialAvailability, skipAvailabilityRestrictions]);
 
   // Monitor availability changes while filling form
-  // Skip this for far-future bookings (2+ months in advance)
+  // Skip this for far-future bookings (2+ months in advance) or when availability is hidden
   useEffect(() => {
-    if (isFarFuture) return; // No restrictions for far-future bookings
+    if (skipAvailabilityRestrictions) return; // No restrictions when skipping availability
 
     if (formData.timeIndex && formData.date && formData.numberOfPeople > 1) {
       const key = `${formData.date}-${formData.timeIndex}`;
@@ -254,7 +291,7 @@ export function BookingRequestForm() {
         }
       }
     }
-  }, [formData.timeIndex, formData.date, formData.numberOfPeople, timeSlotAvailability, initialAvailability, isFarFuture]);
+  }, [formData.timeIndex, formData.date, formData.numberOfPeople, timeSlotAvailability, initialAvailability, skipAvailabilityRestrictions]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -279,9 +316,10 @@ export function BookingRequestForm() {
         time: selectedTimeSlot,
         timeIndex: parseInt(formData.timeIndex),
         numberOfPeople: Number(formData.numberOfPeople),
-        meetingPoint: formData.meetingPoint === "other" ? "" : formData.meetingPoint,
+        meetingPoint: formData.meetingPoint,
         flightType: formData.flightType,
         notes: formData.notes,
+        bookingSource: "Online",
         status: "pending",
         createdAt: new Date(),
       });
@@ -314,41 +352,41 @@ export function BookingRequestForm() {
   // Success screen
   if (submissionSuccess) {
     return (
-      <div className="min-h-screen bg-zinc-950 dark flex items-center justify-center px-4 py-8 sm:py-12">
+      <div className="booking-request-form bg-gray-50 min-h-screen flex items-center justify-center px-4 py-6 sm:py-12">
         <div className="max-w-2xl w-full text-center">
           {/* Success Icon */}
-          <div className="w-20 h-20 mx-auto mb-6 bg-green-600 rounded-full flex items-center justify-center">
-            <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 sm:mb-6 bg-green-500 rounded-full flex items-center justify-center">
+            <svg className="w-8 h-8 sm:w-10 sm:h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
 
           {/* Thank You Message */}
-          <h1 className="text-3xl sm:text-4xl font-bold text-white mb-4">
+          <h1 className="text-2xl sm:text-4xl font-bold text-gray-900 mb-3 sm:mb-4">
             Thank You for Your Booking Request!
           </h1>
-          <p className="text-zinc-300 text-lg mb-8">
+          <p className="text-gray-600 text-base sm:text-lg mb-6 sm:mb-8">
             We have received your request and will be in touch with you shortly.
           </p>
 
           {/* Last Minute Booking Notice */}
-          <div className="bg-blue-950 border border-blue-800 rounded-lg p-4 mb-8">
-            <p className="text-blue-200 text-sm">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 sm:p-4 mb-6 sm:mb-8">
+            <p className="text-blue-800 text-xs sm:text-sm">
               <strong>Last Minute Booking?</strong> To get your booking confirmed as fast as possible,
               contact us directly on WhatsApp.
             </p>
           </div>
 
           {/* QR Code */}
-          <div className="mb-6">
-            <p className="text-zinc-400 mb-4 text-sm">
+          <div className="mb-4 sm:mb-6">
+            <p className="text-gray-500 mb-3 sm:mb-4 text-xs sm:text-sm">
               Scan to contact us on WhatsApp
             </p>
-            <div className="inline-block bg-white p-4 rounded-lg">
+            <div className="inline-block bg-white p-3 sm:p-4 rounded-lg shadow-sm border border-gray-200">
               <img
                 src={qrCodeUrl}
                 alt="WhatsApp QR Code"
-                className="w-48 h-48"
+                className="w-36 h-36 sm:w-48 sm:h-48"
               />
             </div>
           </div>
@@ -358,9 +396,9 @@ export function BookingRequestForm() {
             href={whatsappUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-medium px-8 py-4 rounded-lg transition-colors"
+            className="inline-flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white font-medium px-6 py-3 sm:px-8 sm:py-4 rounded-lg transition-colors text-sm sm:text-base"
           >
-            <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 24 24">
               <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
             </svg>
             Contact us on WhatsApp
@@ -371,15 +409,14 @@ export function BookingRequestForm() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 dark flex items-center justify-center px-4 py-8 sm:py-12">
+    <div className="booking-request-form bg-gray-50 flex items-center justify-center px-4 py-6 sm:py-12">
       <div className="max-w-2xl w-full">
-        <h1 className="text-3xl sm:text-4xl font-bold text-white mb-2">Book a Flight</h1>
-        <p className="text-zinc-400 mb-8 sm:mb-10">Fill out the form below to request a booking.</p>
+        <h1 className="text-2xl sm:text-4xl font-bold text-gray-900 mb-6 sm:mb-10">Book a Flight</h1>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
           {/* Customer Name */}
           <div className="space-y-2">
-            <label htmlFor="customerName" className="text-sm font-medium text-zinc-200">
+            <label htmlFor="customerName" className="text-sm font-medium text-gray-700">
               Name *
             </label>
             <Input
@@ -390,13 +427,13 @@ export function BookingRequestForm() {
               onChange={handleChange}
               required
               placeholder="Your full name"
-              className="text-white"
+              className="!bg-white !border-gray-300 !text-gray-900 placeholder:!text-gray-400"
             />
           </div>
 
           {/* Email */}
           <div className="space-y-2">
-            <label htmlFor="email" className="text-sm font-medium text-zinc-200">
+            <label htmlFor="email" className="text-sm font-medium text-gray-700">
               Email *
             </label>
             <Input
@@ -407,19 +444,20 @@ export function BookingRequestForm() {
               onChange={handleChange}
               required
               placeholder="your@email.com"
-              className="text-white"
+              className="!bg-white !border-gray-300 !text-gray-900 placeholder:!text-gray-400"
             />
           </div>
 
           {/* Phone */}
           <div className="space-y-2">
-            <label htmlFor="phone" className="text-sm font-medium text-zinc-200">
+            <label htmlFor="phone" className="text-sm font-medium text-gray-700">
               Phone Number
             </label>
             <div className="flex gap-2">
               <CountryCodeSelect
                 value={formData.phoneCountryCode}
                 onChange={(code) => setFormData((prev) => ({ ...prev, phoneCountryCode: code }))}
+                lightMode
               />
               <Input
                 id="phone"
@@ -428,7 +466,7 @@ export function BookingRequestForm() {
                 value={formData.phone}
                 onChange={handleChange}
                 placeholder="555 000 0000"
-                className="text-white flex-1"
+                className="!bg-white !border-gray-300 !text-gray-900 placeholder:!text-gray-400 flex-1"
                 autoComplete="off"
               />
             </div>
@@ -436,29 +474,46 @@ export function BookingRequestForm() {
 
           {/* Date */}
           <div className="space-y-2">
-            <label htmlFor="date" className="text-sm font-medium text-zinc-200">
+            <label htmlFor="date" className="text-sm font-medium text-gray-700">
               Date *
             </label>
-            <Popover>
+            <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
               <PopoverTrigger asChild>
                 <button
                   type="button"
-                  className="flex h-10 w-full items-center gap-3 rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm text-white ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 hover:bg-zinc-800 transition-colors"
+                  className="flex h-10 w-full items-center gap-3 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 hover:bg-gray-50 transition-colors"
                 >
-                  <CalendarIcon className="h-5 w-5 text-zinc-400" />
+                  <CalendarIcon className="h-5 w-5 text-gray-400" />
                   <span>{format(selectedDate, "dd/MM/yyyy")}</span>
                 </button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-0 bg-zinc-900 border-zinc-700" align="start">
+              <PopoverContent
+                className="w-auto p-0 !bg-white !border-gray-200"
+                align="start"
+                onOpenAutoFocus={(e) => e.preventDefault()}
+              >
                 <Calendar
                   mode="single"
                   selected={selectedDate}
                   onSelect={(date) => {
                     if (date) {
                       setFormData((prev) => ({ ...prev, date: format(date, "yyyy-MM-dd") }));
+                      setDatePickerOpen(false);
                     }
                   }}
-                  initialFocus
+                  className="!bg-white"
+                  classNames={{
+                    caption_label: "text-sm font-medium text-gray-900",
+                    nav_button: "h-7 w-7 bg-gray-100 p-0 text-gray-900 hover:bg-gray-200 border-gray-300 inline-flex items-center justify-center rounded-md border",
+                    head_cell: "text-gray-500 rounded-md w-9 font-normal text-[0.8rem]",
+                    cell: "h-9 w-9 text-center text-sm p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-gray-100 [&:has([aria-selected])]:bg-gray-100 first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
+                    day: "h-9 w-9 p-0 font-normal text-gray-900 aria-selected:opacity-100 hover:bg-gray-100 inline-flex items-center justify-center rounded-md",
+                    day_selected: "bg-gray-900 text-white hover:bg-gray-900 hover:text-white focus:bg-gray-900 focus:text-white",
+                    day_today: "bg-gray-100 text-gray-900",
+                    day_outside: "day-outside text-gray-400 aria-selected:bg-gray-100 aria-selected:text-gray-500",
+                    day_disabled: "text-gray-300 opacity-50",
+                    day_range_middle: "aria-selected:bg-gray-100 aria-selected:text-gray-900",
+                  }}
                 />
               </PopoverContent>
             </Popover>
@@ -466,41 +521,41 @@ export function BookingRequestForm() {
 
           {/* Time Slot Selection */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-zinc-200">
+            <label className="text-sm font-medium text-gray-700">
               Time Slot *
             </label>
-            {loading ? (
-              <div className="text-zinc-400 text-sm">Loading availability...</div>
+            {(loading || !settingsLoaded) ? (
+              <div className="text-gray-500 text-sm">Loading availability...</div>
             ) : (
               <Select
                 value={formData.timeIndex}
                 onValueChange={(value) => setFormData((prev) => ({ ...prev, timeIndex: value }))}
                 required
               >
-                <SelectTrigger className="bg-zinc-950 border-zinc-800 text-white">
+                <SelectTrigger className="!bg-white !border-gray-300 !text-gray-900">
                   <SelectValue placeholder="Select a time slot" />
                 </SelectTrigger>
-                <SelectContent className="min-w-[280px] bg-zinc-900 border-zinc-700">
+                <SelectContent className="min-w-[280px] !bg-white !border-gray-200 !text-gray-900">
                   {timeSlotAvailability.map((slot) => {
                     const availableCount = slot.availableSpots;
                     const requiredPilots = formData.numberOfPeople;
-                    // For far-future bookings, don't disable any slots
-                    const isDisabled = !isFarFuture && availableCount < requiredPilots;
+                    // Don't disable slots when skipping availability restrictions
+                    const isDisabled = !skipAvailabilityRestrictions && availableCount < requiredPilots;
 
                     return (
                       <SelectItem
                         key={slot.timeIndex}
                         value={slot.timeIndex.toString()}
                         disabled={isDisabled}
-                        className={`text-white focus:bg-zinc-800 focus:text-white ${isDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                        className={`!text-gray-900 focus:!bg-gray-100 focus:!text-gray-900 ${isDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
                       >
                         <div className="flex items-center justify-between gap-4 w-full">
                           <span className="flex-shrink-0">{slot.timeSlot}</span>
-                          {!isFarFuture && (
+                          {!skipAvailabilityRestrictions && (
                             <span className={`text-xs px-2 py-0.5 rounded flex-shrink-0 ${
                               availableCount === 0
-                                ? 'bg-red-900/50 text-red-400'
-                                : 'bg-green-900/50 text-green-400'
+                                ? 'bg-red-100 text-red-600'
+                                : 'bg-green-100 text-green-600'
                             }`}>
                               {availableCount} available
                             </span>
@@ -516,11 +571,11 @@ export function BookingRequestForm() {
 
           {/* Number of People */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-zinc-200">
+            <label className="text-sm font-medium text-gray-700">
               Number of People *
             </label>
             {showTimeWarning && !formData.timeIndex && (
-              <div className="text-sm text-orange-400 bg-orange-950 border border-orange-800 rounded px-3 py-2">
+              <div className="text-sm text-orange-700 bg-orange-50 border border-orange-200 rounded px-3 py-2">
                 Please select a time slot first
               </div>
             )}
@@ -537,15 +592,15 @@ export function BookingRequestForm() {
                           setShowTimeWarning(true);
                           setTimeout(() => setShowTimeWarning(false), 3000);
                         }}
-                        className="flex-shrink-0 w-12 h-12 rounded-lg font-medium transition-colors bg-zinc-900 text-zinc-600 cursor-not-allowed"
+                        className="flex-shrink-0 w-12 h-12 rounded-lg font-medium transition-colors bg-gray-100 text-gray-400 cursor-not-allowed"
                       >
                         {num}
                       </button>
                     );
                   }
 
-                  // For far-future bookings, allow all numbers
-                  if (isFarFuture) {
+                  // When skipping availability restrictions, allow all numbers
+                  if (skipAvailabilityRestrictions) {
                     return (
                       <button
                         key={num}
@@ -553,8 +608,8 @@ export function BookingRequestForm() {
                         onClick={() => setFormData((prev) => ({ ...prev, numberOfPeople: num }))}
                         className={`flex-shrink-0 w-12 h-12 rounded-lg font-medium transition-colors ${
                           formData.numberOfPeople === num
-                            ? "bg-white text-black"
-                            : "bg-zinc-800 text-white hover:bg-zinc-700"
+                            ? "bg-gray-900 text-white"
+                            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                         }`}
                       >
                         {num}
@@ -577,10 +632,10 @@ export function BookingRequestForm() {
                       disabled={isDisabled}
                       className={`flex-shrink-0 w-12 h-12 rounded-lg font-medium transition-colors ${
                         formData.numberOfPeople === num
-                          ? "bg-white text-black"
+                          ? "bg-gray-900 text-white"
                           : isDisabled
-                          ? "bg-zinc-900 text-zinc-600 cursor-not-allowed"
-                          : "bg-zinc-800 text-white hover:bg-zinc-700"
+                          ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                       }`}
                     >
                       {num}
@@ -593,7 +648,7 @@ export function BookingRequestForm() {
 
           {/* Meeting Point */}
           <div className="space-y-2">
-            <label htmlFor="meetingPoint" className="text-sm font-medium text-zinc-200">
+            <label htmlFor="meetingPoint" className="text-sm font-medium text-gray-700">
               Meeting Point *
             </label>
             <Select
@@ -601,20 +656,20 @@ export function BookingRequestForm() {
               onValueChange={(value) => setFormData((prev) => ({ ...prev, meetingPoint: value }))}
               required
             >
-              <SelectTrigger className="bg-zinc-950 border-zinc-800 text-white">
+              <SelectTrigger className="!bg-white !border-gray-300 !text-gray-900">
                 <SelectValue placeholder="Select meeting point" />
               </SelectTrigger>
-              <SelectContent className="bg-zinc-900 border-zinc-700">
-                <SelectItem value="HW" className="text-white focus:bg-zinc-800 focus:text-white">
+              <SelectContent className="!bg-white !border-gray-200 !text-gray-900">
+                <SelectItem value="HW" className="!text-gray-900 focus:!bg-gray-100 focus:!text-gray-900">
                   Meet at our base near the landing field in the centre
                 </SelectItem>
-                <SelectItem value="OST" className="text-white focus:bg-zinc-800 focus:text-white">
+                <SelectItem value="OST" className="!text-gray-900 focus:!bg-gray-100 focus:!text-gray-900">
                   Train Station Interlaken Ost (Outside BIG coop supermarket)
                 </SelectItem>
-                <SelectItem value="mhof" className="text-white focus:bg-zinc-800 focus:text-white">
+                <SelectItem value="mhof" className="!text-gray-900 focus:!bg-gray-100 focus:!text-gray-900">
                   Mattenhof Resort (Free Parking)
                 </SelectItem>
-                <SelectItem value="other" className="text-white focus:bg-zinc-800 focus:text-white">
+                <SelectItem value="other" className="!text-gray-900 focus:!bg-gray-100 focus:!text-gray-900">
                   Other meeting point in or near Interlaken
                 </SelectItem>
               </SelectContent>
@@ -623,7 +678,7 @@ export function BookingRequestForm() {
 
           {/* Flight Type */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-zinc-200">
+            <label className="text-sm font-medium text-gray-700">
               Flight Type *
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -638,8 +693,8 @@ export function BookingRequestForm() {
                   onClick={() => setFormData((prev) => ({ ...prev, flightType: type }))}
                   className={`px-3 py-3 rounded-lg font-medium transition-colors ${
                     formData.flightType === type
-                      ? "bg-white text-black"
-                      : "bg-zinc-800 text-white hover:bg-zinc-700"
+                      ? "bg-gray-900 text-white"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                   }`}
                 >
                   <div className="capitalize text-sm">{type}</div>
@@ -651,7 +706,7 @@ export function BookingRequestForm() {
 
           {/* Notes */}
           <div className="space-y-2">
-            <label htmlFor="notes" className="text-sm font-medium text-zinc-200">
+            <label htmlFor="notes" className="text-sm font-medium text-gray-700">
               Additional Notes
             </label>
             <textarea
@@ -661,7 +716,7 @@ export function BookingRequestForm() {
               onChange={handleChange}
               rows={4}
               placeholder="Any special requests or information..."
-              className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent"
+              className="w-full px-3 py-2 !bg-white !border !border-gray-300 rounded !text-gray-900 placeholder:!text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-transparent"
             />
           </div>
 
@@ -669,7 +724,7 @@ export function BookingRequestForm() {
           <Button
             type="submit"
             disabled={submitting}
-            className="w-full bg-white text-black hover:bg-zinc-200 mt-8"
+            className="w-full !bg-gray-900 !text-white hover:!bg-gray-800 mt-8"
           >
             {submitting ? "Submitting..." : "Submit Booking Request"}
           </Button>
@@ -679,8 +734,8 @@ export function BookingRequestForm() {
             <div
               className={`p-4 rounded-lg text-sm ${
                 message.type === "success"
-                  ? "bg-green-950 text-green-200 border border-green-800"
-                  : "bg-red-950 text-red-200 border border-red-800"
+                  ? "bg-green-50 text-green-700 border border-green-200"
+                  : "bg-red-50 text-red-700 border border-red-200"
               }`}
             >
               {message.text}

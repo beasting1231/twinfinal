@@ -15,6 +15,10 @@
     ],
     "rewrites": [
       {
+        "source": "/embed/**",
+        "destination": "/embed/embed.html"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }

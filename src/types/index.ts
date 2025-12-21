@@ -114,8 +114,10 @@ export interface BookingRequest {
   time: string; // Time string (HH:mm)
   timeIndex: number; // Index of the time slot
   numberOfPeople: number;
+  meetingPoint?: string; // HW, OST, mhof, or other
   flightType?: "sensational" | "classic" | "early bird";
   notes?: string;
+  bookingSource?: string; // e.g., "Online" for requests from the booking form
   status: "pending" | "approved" | "rejected" | "waitlist";
   createdAt: Date;
 }

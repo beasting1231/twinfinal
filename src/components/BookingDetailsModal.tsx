@@ -10,11 +10,14 @@ import type { Booking, Pilot, PilotPayment, ReceiptFile } from "../types/index";
 import { useAuth } from "../contexts/AuthContext";
 import { useEditing } from "../contexts/EditingContext";
 import { useRole } from "../hooks/useRole";
-import { Camera, Upload, Eye, Trash2, Calendar, Clock, MapPin, Users, Phone, Mail, FileText, User, PhoneCall, ChevronDown, ChevronUp, Loader2, History } from "lucide-react";
+import { Camera, Upload, Eye, Trash2, Calendar, Clock, MapPin, Users, Phone, Mail, FileText, User, PhoneCall, ChevronDown, ChevronUp, Loader2, History, Send, PenLine } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { db, storage } from "../firebase/config";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { BookingSourceAutocomplete } from "./BookingSourceAutocomplete";
+import { MeetingPointAutocomplete, getMeetingPointAbbreviation } from "./MeetingPointAutocomplete";
+import { EmailPreviewModal } from "./EmailPreviewModal";
 
 interface BookingDetailsModalProps {
   open: boolean;
@@ -67,6 +70,7 @@ export function BookingDetailsModal({
   const [uploadingReceipt, setUploadingReceipt] = useState<string | null>(null);
   const [initialAvailableSlots, setInitialAvailableSlots] = useState<number | null>(null);
   const [availabilityError, setAvailabilityError] = useState(false);
+  const [showEmailPreview, setShowEmailPreview] = useState(false);
 
 
   // Create an availability check function that uses edited date data when in edit mode
@@ -164,11 +168,7 @@ export function BookingDetailsModal({
 
   useEffect(() => {
     if (booking) {
-      setEditedBooking({
-        ...booking,
-        // Convert empty pickupLocation to "other" for the dropdown
-        pickupLocation: booking.pickupLocation || "other"
-      });
+      setEditedBooking({ ...booking });
     }
   }, [booking]);
 
@@ -415,8 +415,7 @@ export function BookingDetailsModal({
         updates.numberOfPeople = editedBooking.numberOfPeople;
       }
       if (editedBooking.pickupLocation !== booking.pickupLocation) {
-        // Convert "other" to empty string when saving
-        updates.pickupLocation = editedBooking.pickupLocation === "other" ? "" : editedBooking.pickupLocation;
+        updates.pickupLocation = editedBooking.pickupLocation || "";
       }
       if (editedBooking.bookingSource !== booking.bookingSource) {
         updates.bookingSource = editedBooking.bookingSource;
@@ -476,11 +475,7 @@ export function BookingDetailsModal({
   };
 
   const handleCancel = () => {
-    setEditedBooking({
-      ...booking,
-      // Convert empty pickupLocation to "other" for the dropdown
-      pickupLocation: booking.pickupLocation || "other"
-    });
+    setEditedBooking({ ...booking });
     setIsEditing(false);
   };
 
@@ -808,7 +803,7 @@ export function BookingDetailsModal({
                       <MapPin className="w-4 h-4" />
                       <span className="text-xs">Meeting Point</span>
                     </div>
-                    <div className="text-gray-900 dark:text-white font-medium break-words">{editedBooking.pickupLocation || <span className="text-gray-500 dark:text-zinc-500">Not provided</span>}</div>
+                    <div className="text-gray-900 dark:text-white font-medium break-words">{getMeetingPointAbbreviation(editedBooking.pickupLocation) || <span className="text-gray-500 dark:text-zinc-500">Not provided</span>}</div>
                   </div>
                   <div className="bg-gray-50 dark:bg-zinc-900/50 border border-gray-300 dark:border-zinc-800 rounded-xl p-4">
                     <div className="flex items-center gap-2 text-gray-500 dark:text-zinc-500 mb-2">
@@ -872,13 +867,34 @@ export function BookingDetailsModal({
                           </div>
                         </div>
                         <div className="flex gap-2 flex-shrink-0">
-                          <a
-                            href={`mailto:${editedBooking.email}`}
-                            className="p-2 rounded-lg bg-blue-100 dark:bg-blue-600 hover:bg-blue-200 dark:hover:bg-blue-700 text-blue-700 dark:text-white transition-colors"
-                            title="Send Email"
-                          >
-                            <Mail className="w-4 h-4" />
-                          </a>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <button
+                                className="p-2 rounded-lg bg-blue-100 dark:bg-blue-600 hover:bg-blue-200 dark:hover:bg-blue-700 text-blue-700 dark:text-white transition-colors"
+                                title="Send Email"
+                              >
+                                <Mail className="w-4 h-4" />
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-48 p-2 bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-700" align="end">
+                              <div className="flex flex-col gap-1">
+                                <a
+                                  href={`mailto:${editedBooking.email}`}
+                                  className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-900 dark:text-white transition-colors text-sm"
+                                >
+                                  <PenLine className="w-4 h-4" />
+                                  Compose
+                                </a>
+                                <button
+                                  onClick={() => setShowEmailPreview(true)}
+                                  className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-900 dark:text-white transition-colors text-sm w-full text-left"
+                                >
+                                  <Send className="w-4 h-4" />
+                                  Booking Confirmation
+                                </button>
+                              </div>
+                            </PopoverContent>
+                          </Popover>
                         </div>
                       </div>
                     )}
@@ -1255,31 +1271,10 @@ export function BookingDetailsModal({
                 </div>
 
                 {/* Meeting Point */}
-                <div className="space-y-2">
-                  <Label className="text-gray-900 dark:text-white">Meeting Point</Label>
-                  <Select
-                    value={editedBooking.pickupLocation}
-                    onValueChange={(value) => setEditedBooking({ ...editedBooking, pickupLocation: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select meeting point" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="HW">
-                        HW
-                      </SelectItem>
-                      <SelectItem value="OST">
-                        OST
-                      </SelectItem>
-                      <SelectItem value="mhof">
-                        mhof
-                      </SelectItem>
-                      <SelectItem value="other">
-                        (blank)
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                <MeetingPointAutocomplete
+                  value={editedBooking.pickupLocation || ""}
+                  onChange={(value) => setEditedBooking({ ...editedBooking, pickupLocation: value })}
+                />
 
                 {/* Booking Source */}
                 <BookingSourceAutocomplete
@@ -1770,6 +1765,23 @@ export function BookingDetailsModal({
             </div>
           </DialogContent>
         </Dialog>
+      )}
+
+      {/* Email Preview Modal */}
+      {editedBooking?.email && (
+        <EmailPreviewModal
+          open={showEmailPreview}
+          onOpenChange={setShowEmailPreview}
+          booking={{
+            email: editedBooking.email,
+            customerName: editedBooking.customerName || '',
+            numberOfPeople: editedBooking.numberOfPeople,
+            date: editedBooking.date,
+            time: timeSlots[editedBooking.timeIndex],
+            pickupLocation: editedBooking.pickupLocation,
+          }}
+          senderName={currentUser?.displayName || ''}
+        />
       )}
     </Dialog>
   );

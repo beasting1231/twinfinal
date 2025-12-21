@@ -1,12 +1,59 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Copy, ExternalLink, Check } from "lucide-react";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { db } from "../firebase/config";
 
 export function Forms() {
   const [copiedIframe, setCopiedIframe] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
+  const [hideAvailability, setHideAvailability] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
 
-  const formUrl = `${window.location.origin}/booking-request`;
-  const iframeCode = `<iframe src="${formUrl}" width="100%" height="800" frameborder="0"></iframe>`;
+  const baseFormUrl = `${window.location.origin}/booking-request`;
+  const embedUrl = `${window.location.origin}/embed/`;
+
+  // Load form settings on mount
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const settingsDoc = await getDoc(doc(db, "settings", "form"));
+        if (settingsDoc.exists()) {
+          setHideAvailability(settingsDoc.data().hideAvailability ?? false);
+        }
+      } catch (error) {
+        console.error("Error loading form settings:", error);
+      }
+    };
+    loadSettings();
+  }, []);
+
+  // Save settings when toggle changes
+  const handleToggleAvailability = async () => {
+    const newValue = !hideAvailability;
+    setHideAvailability(newValue);
+    setSavingSettings(true);
+    try {
+      await setDoc(doc(db, "settings", "form"), { hideAvailability: newValue }, { merge: true });
+    } catch (error) {
+      console.error("Error saving form settings:", error);
+      // Revert on error
+      setHideAvailability(!newValue);
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  // Include hideAvailability param in URL when enabled (for iframe cross-origin support)
+  const formUrl = hideAvailability
+    ? `${baseFormUrl}?hideAvailability=true`
+    : baseFormUrl;
+
+  // Embed URL uses the optimized lightweight bundle
+  const embedFormUrl = hideAvailability
+    ? `${embedUrl}?hideAvailability=true`
+    : embedUrl;
+
+  const iframeCode = `<iframe src="${embedFormUrl}" width="100%" height="800" frameborder="0"></iframe>`;
 
   const copyToClipboard = async (text: string, type: 'iframe' | 'url') => {
     try {
@@ -75,6 +122,33 @@ export function Forms() {
             {copiedIframe ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
             {copiedIframe ? 'Copied!' : 'Copy Embed Code'}
           </button>
+        </div>
+
+        {/* Form Settings Section */}
+        <div className="bg-white dark:bg-zinc-900 rounded-lg border border-gray-200 dark:border-zinc-800 p-6 mt-6">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-3">Form Settings</h3>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-gray-900 dark:text-white font-medium">Don't show availability</p>
+              <p className="text-gray-600 dark:text-zinc-400 text-sm">
+                When enabled, customers won't see available spots and can book for any number of people.
+              </p>
+            </div>
+            <button
+              onClick={handleToggleAvailability}
+              disabled={savingSettings}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                hideAvailability ? 'bg-blue-600' : 'bg-gray-300 dark:bg-zinc-600'
+              } ${savingSettings ? 'opacity-50' : ''}`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  hideAvailability ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
         </div>
       </div>
     </div>

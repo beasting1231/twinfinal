@@ -33,9 +33,6 @@ export function SearchBookingModal({
 
     return bookings
       .filter(booking => {
-        // Only search non-deleted bookings
-        if (booking.bookingStatus === "deleted") return false;
-
         const customerName = booking.customerName?.toLowerCase() || "";
         const phoneNumber = booking.phoneNumber?.toLowerCase() || "";
         const email = booking.email?.toLowerCase() || "";
@@ -133,16 +130,23 @@ export function SearchBookingModal({
                   formattedDate = dateStr;
                 }
 
+                const isDeleted = booking.bookingStatus === "deleted";
+
                 return (
                   <div
                     key={booking.id}
                     onClick={() => handleBookingClick(booking)}
-                    className="p-4 border border-gray-300 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-800 hover:bg-gray-100 dark:hover:bg-zinc-700 cursor-pointer transition-colors"
+                    className={`p-4 rounded-lg cursor-pointer transition-colors ${
+                      isDeleted
+                        ? "border-2 border-red-400 dark:border-red-600 bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50"
+                        : "border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-gray-100 dark:hover:bg-zinc-700"
+                    }`}
                   >
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
-                        <div className="font-semibold text-gray-900 dark:text-white">
+                        <div className={`font-semibold ${isDeleted ? "text-red-700 dark:text-red-400" : "text-gray-900 dark:text-white"}`}>
                           {booking.customerName}
+                          {isDeleted && <span className="ml-2 text-xs font-normal text-red-500 dark:text-red-400">(Deleted)</span>}
                         </div>
                         <div className="text-sm text-gray-600 dark:text-gray-400 mt-1 space-y-0.5">
                           {booking.bookingSource && (

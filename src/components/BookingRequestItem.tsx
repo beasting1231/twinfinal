@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Phone, Mail, Users, Calendar, Clock, PhoneCall, AlertTriangle } from "lucide-react";
+import { Phone, Mail, Users, Calendar, Clock, PhoneCall, AlertTriangle, MapPin } from "lucide-react";
 import type { BookingRequest } from "../types/index";
 import { useDraggable } from "@dnd-kit/core";
 
@@ -126,6 +126,16 @@ export function BookingRequestItem({ request, onContextMenu, onDateClick, canDra
             <Users className="w-3 h-3" />
             {request.numberOfPeople}
           </span>
+          {request.meetingPoint && (
+            <span className="px-2 py-0.5 bg-purple-600 text-white text-xs font-medium rounded-full flex items-center gap-1">
+              <MapPin className="w-3 h-3" />
+              {request.meetingPoint === "HW" && "Twin Base"}
+              {request.meetingPoint === "OST" && "Ost Station"}
+              {request.meetingPoint === "mhof" && "Mattenhof"}
+              {request.meetingPoint === "other" && "Other"}
+              {!["HW", "OST", "mhof", "other"].includes(request.meetingPoint) && request.meetingPoint}
+            </span>
+          )}
           {request.flightType && request.flightType !== "sensational" && (
             <span className="px-2 py-0.5 bg-blue-600 text-white text-xs font-medium rounded-full capitalize">
               {request.flightType}
