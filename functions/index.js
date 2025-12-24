@@ -429,6 +429,7 @@ exports.sendBookingConfirmationEmail = onDocumentCreated(
             name: "Twin Paragliding",
             address: "bookings@twinparagliding.com",
           },
+          replyTo: bookingData.email,
           to: notificationConfig.emailNotifications.recipients.join(", "),
           subject: "🔔 New Booking Request - Twin Paragliding",
           html: adminHtmlContent,

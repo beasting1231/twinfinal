@@ -60,7 +60,7 @@ export function Header({
               <Menu className="h-6 w-6" />
             </Button>
           </SheetTrigger>
-          <SheetContent side="left" className="bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-700 w-72">
+          <SheetContent side="left" className="bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-700 w-72 pt-[calc(env(safe-area-inset-top)+1rem)]">
             <SheetHeader>
               <SheetTitle className="text-gray-900 dark:text-white text-xl">Menu</SheetTitle>
             </SheetHeader>

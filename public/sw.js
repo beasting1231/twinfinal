@@ -1,3 +1,4 @@
+// BUILD_TIMESTAMP: __BUILD_TIME__
 const CACHE_NAME = 'twin-scheduler-v3';
 
 self.addEventListener('install', (event) => {

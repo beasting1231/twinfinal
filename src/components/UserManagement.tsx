@@ -126,7 +126,7 @@ export function UserManagement() {
   ];
 
   return (
-    <div className="flex-1 overflow-auto p-3 sm:p-6">
+    <div className="flex-1 overflow-auto p-3 sm:p-6 pb-48">
       <div className="max-w-4xl mx-auto overflow-visible">
         <div className="flex items-center justify-between mb-4 sm:mb-6">
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">User Management</h1>
@@ -150,9 +150,10 @@ export function UserManagement() {
               </tr>
             </thead>
             <tbody className="overflow-visible">
-              {users.map((user) => {
+              {users.map((user, index) => {
                 const currentRole = getCurrentRole(user);
                 const isOpen = openDropdownId === user.uid;
+                const isNearBottom = index >= users.length - 3;
 
                 return (
                   <tr
@@ -193,7 +194,7 @@ export function UserManagement() {
                               className="fixed inset-0 z-10"
                               onClick={() => setOpenDropdownId(null)}
                             />
-                            <div className="absolute z-20 mt-2 py-2 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg shadow-lg min-w-[160px] left-0">
+                            <div className={`absolute z-20 py-2 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg shadow-lg min-w-[160px] left-0 ${isNearBottom ? 'bottom-full mb-2' : 'mt-2'}`}>
                               {roles.map((roleOption) => (
                                 <button
                                   key={roleOption.label}

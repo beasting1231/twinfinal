@@ -71,6 +71,17 @@ export function BookingDetailsModal({
   const [initialAvailableSlots, setInitialAvailableSlots] = useState<number | null>(null);
   const [availabilityError, setAvailabilityError] = useState(false);
   const [showEmailPreview, setShowEmailPreview] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  const copyToClipboard = async (text: string, field: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedField(field);
+      setTimeout(() => setCopiedField(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
 
 
   // Create an availability check function that uses edited date data when in edit mode
@@ -492,9 +503,13 @@ export function BookingDetailsModal({
     setPilotPayments(prev =>
       prev.map(payment => {
         if (payment.pilotName === pilotName) {
-          // If changing payment method to ticket or CCP, default amount to -103
-          if (field === 'paymentMethod' && (value === 'ticket' || value === 'ccp')) {
-            return { ...payment, [field]: value, amount: -103 };
+          // If changing payment method, default amount based on method
+          if (field === 'paymentMethod') {
+            if (value === 'ticket' || value === 'ccp') {
+              return { ...payment, [field]: value, amount: -103 };
+            } else if (value === 'direkt') {
+              return { ...payment, [field]: value, amount: 180 };
+            }
           }
           return { ...payment, [field]: value };
         }
@@ -831,9 +846,16 @@ export function BookingDetailsModal({
                         <Phone className="w-4 h-4 text-gray-500 dark:text-zinc-500 flex-shrink-0" />
                         <div className="flex-1 min-w-0">
                           <div className="text-xs text-gray-500 dark:text-zinc-500 mb-0.5">Phone</div>
-                          <div className="text-gray-900 dark:text-white break-words">
-                            {editedBooking.phoneNumber}
-                          </div>
+                          <button
+                            onClick={() => copyToClipboard(editedBooking.phoneNumber!, 'phone')}
+                            className="text-gray-900 dark:text-white break-words text-left hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer"
+                          >
+                            {copiedField === 'phone' ? (
+                              <span className="text-green-600 dark:text-green-400">Copied to clipboard!</span>
+                            ) : (
+                              editedBooking.phoneNumber
+                            )}
+                          </button>
                         </div>
                         <div className="flex gap-2 flex-shrink-0">
                           <a
@@ -862,9 +884,16 @@ export function BookingDetailsModal({
                         <Mail className="w-4 h-4 text-gray-500 dark:text-zinc-500 flex-shrink-0" />
                         <div className="flex-1 min-w-0">
                           <div className="text-xs text-gray-500 dark:text-zinc-500 mb-0.5">Email</div>
-                          <div className="text-gray-900 dark:text-white break-words">
-                            {editedBooking.email}
-                          </div>
+                          <button
+                            onClick={() => copyToClipboard(editedBooking.email!, 'email')}
+                            className="text-gray-900 dark:text-white break-words text-left hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer"
+                          >
+                            {copiedField === 'email' ? (
+                              <span className="text-green-600 dark:text-green-400">Copied to clipboard!</span>
+                            ) : (
+                              editedBooking.email
+                            )}
+                          </button>
                         </div>
                         <div className="flex gap-2 flex-shrink-0">
                           <Popover>
