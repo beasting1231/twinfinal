@@ -26,6 +26,10 @@
     ],
     "rewrites": [
       {
+        "source": "/api/**",
+        "function": "emailApi"
+      },
+      {
         "source": "/embed/**",
         "destination": "/embed/embed.html"
       },

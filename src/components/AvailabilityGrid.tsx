@@ -182,6 +182,9 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
     return !isDayOlderThan24Hours(day);
   };
 
+  // Whether admin can override locks (when editing other users' availability)
+  const canAdminOverrideLock = role === 'admin' && !!selectedUserId;
+
   // Function to check if a cell should be locked (cannot be toggled to unavailable)
   // Locks cells when the user is available AND the time slot is fully or overbooked
   const isCellLocked = (day: Date, timeSlot: string): boolean => {
@@ -247,11 +250,11 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
       return;
     }
 
-    // Check if any slots are locked
+    // Check if any slots are locked (admins can override when editing others)
     const anyLocked = timeSlots.some((slot) => isCellLocked(day, slot));
 
-    if (anyLocked) {
-      // Don't allow day-level toggle if any slots are locked
+    if (anyLocked && !canAdminOverrideLock) {
+      // Don't allow day-level toggle if any slots are locked (unless admin override)
       return;
     }
 
@@ -432,6 +435,7 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
                         isAvailable={isAvailable(day, timeSlot)}
                         isLocked={isCellLocked(day, timeSlot)}
                         isDisabled={!canEditDay(day)}
+                        canOverrideLock={canAdminOverrideLock}
                         onToggle={() => handleToggleCell(dayIndex, timeSlot)}
                       />
                     </div>

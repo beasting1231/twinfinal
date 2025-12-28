@@ -11,6 +11,7 @@ import { Priority } from "./components/Priority";
 import { Forms } from "./components/Forms";
 import { NotificationSettings } from "./components/NotificationSettings";
 import { UserManagement } from "./components/UserManagement";
+import { Email } from "./components/Email";
 import { BookingRequestForm } from "./components/BookingRequestForm";
 import { useBookings } from "./hooks/useBookings";
 import { usePilots } from "./hooks/usePilots";
@@ -90,7 +91,7 @@ function PageWrapper({ children }: { children: React.ReactNode }) {
   const [weekStartDate, setWeekStartDate] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-zinc-950">
+    <div className="h-screen flex flex-col overflow-hidden bg-gray-50 dark:bg-zinc-950">
       <Header
         date={selectedDate}
         onDateChange={setSelectedDate}
@@ -179,6 +180,14 @@ function AppContent() {
         <ProtectedRoute>
           <PageWrapper>
             <UserManagement />
+          </PageWrapper>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/email" element={
+        <ProtectedRoute>
+          <PageWrapper>
+            <Email />
           </PageWrapper>
         </ProtectedRoute>
       } />

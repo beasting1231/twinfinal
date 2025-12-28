@@ -9,6 +9,7 @@ import { ChevronDown, ChevronUp, Calendar } from "lucide-react";
 import { format, parse } from "date-fns";
 import type { Pilot, Booking } from "../types/index";
 import { useEditing } from "../contexts/EditingContext";
+import { useAuth } from "../contexts/AuthContext";
 import { useRole } from "../hooks/useRole";
 import { BookingSourceAutocomplete } from "./BookingSourceAutocomplete";
 import { MeetingPointAutocomplete } from "./MeetingPointAutocomplete";
@@ -139,6 +140,16 @@ export function NewBookingModal({
     });
   }, [modalTimeSlots, pilots, bookings, selectedModalDate, isPilotAvailableForTimeSlot]);
 
+  const { startEditing, stopEditing } = useEditing();
+  const { currentUser } = useAuth();
+  const { role } = useRole();
+
+  // Determine the default booking source based on role
+  // Admins default to "twin", non-admins use their display name
+  const defaultBookingSource = role === 'admin'
+    ? "twin"
+    : (currentUser?.displayName || "");
+
   // Initialize form with initialData if provided, or reset to defaults
   useEffect(() => {
     if (open) {
@@ -150,7 +161,8 @@ export function NewBookingModal({
         setEmail(initialData.email || "");
         setNotes(initialData.notes || "");
         setFlightType(initialData.flightType || "sensational");
-        setBookingSource(initialData.bookingSource || "twin");
+        // For non-admins, always use their display name regardless of initialData
+        setBookingSource(role === 'admin' ? (initialData.bookingSource || "twin") : defaultBookingSource);
         // Keep defaults for fields not in initialData
         setPickupLocation("");
         setCommission("");
@@ -162,7 +174,7 @@ export function NewBookingModal({
         setCustomerName("");
         setNumberOfPeople("");
         setPickupLocation("");
-        setBookingSource("twin");
+        setBookingSource(defaultBookingSource);
         setPhoneNumber("");
         setEmail("");
         setNotes("");
@@ -173,10 +185,7 @@ export function NewBookingModal({
         setShowAdditionalOptions(false);
       }
     }
-  }, [open, initialData]);
-
-  const { startEditing, stopEditing } = useEditing();
-  const { role } = useRole();
+  }, [open, initialData, role, defaultBookingSource]);
 
   // Pause real-time updates when modal is open
   useEffect(() => {
@@ -368,7 +377,7 @@ export function NewBookingModal({
     setCustomerName("");
     setNumberOfPeople("");
     setPickupLocation("");
-    setBookingSource("twin");
+    setBookingSource(defaultBookingSource);
     setPhoneNumber("");
     setEmail("");
     setNotes("");
@@ -384,7 +393,7 @@ export function NewBookingModal({
     setCustomerName("");
     setNumberOfPeople("");
     setPickupLocation("");
-    setBookingSource("twin");
+    setBookingSource(defaultBookingSource);
     setPhoneNumber("");
     setEmail("");
     setNotes("");
@@ -551,11 +560,24 @@ export function NewBookingModal({
           />
 
           {/* Booking Source */}
-          <BookingSourceAutocomplete
-            value={bookingSource}
-            onChange={setBookingSource}
-            required
-          />
+          {role === 'admin' ? (
+            <BookingSourceAutocomplete
+              value={bookingSource}
+              onChange={setBookingSource}
+              required
+            />
+          ) : (
+            <div className="space-y-2">
+              <Label className="text-gray-900 dark:text-white">
+                Booking Source <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                value={bookingSource}
+                readOnly
+                className="bg-gray-100 dark:bg-zinc-800 cursor-not-allowed"
+              />
+            </div>
+          )}
 
           {/* Phone Number (Optional) */}
           <div className="space-y-2">

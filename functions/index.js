@@ -1,5 +1,4 @@
 const {onDocumentCreated} = require("firebase-functions/v2/firestore");
-const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 const nodemailer = require("nodemailer");
 const https = require("https");
@@ -767,4 +766,8 @@ exports.sendBookingConfirmationOnCreate = onDocumentCreated(
       }
     },
 );
+
+// Re-export emailApi from separate file (v1 function for public HTTP access)
+const {emailApi} = require("./emailApi");
+exports.emailApi = emailApi;
 

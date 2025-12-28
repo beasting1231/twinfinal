@@ -11,11 +11,13 @@ self.addEventListener('install', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Never cache Firebase API calls or Firestore requests
+  // Don't intercept Firebase API calls, Firestore requests, Cloud Functions, or our API endpoints
+  // Let the browser handle them directly
   if (url.hostname.includes('firebaseapp.com') ||
       url.hostname.includes('googleapis.com') ||
-      url.hostname.includes('firestore.googleapis.com')) {
-    event.respondWith(fetch(event.request));
+      url.hostname.includes('firestore.googleapis.com') ||
+      url.hostname.includes('cloudfunctions.net') ||
+      url.pathname.startsWith('/api/')) {
     return;
   }
 

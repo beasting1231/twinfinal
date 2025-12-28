@@ -75,6 +75,16 @@ export function Header({
                   Daily Plan
                 </button>
               )}
+              {role === 'admin' && (
+                <button
+                  onClick={() => handleNavigate("/email")}
+                  className={`w-full text-left px-4 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors text-gray-900 dark:text-white ${
+                    isActive("/email") ? "bg-gray-100 dark:bg-zinc-800" : ""
+                  }`}
+                >
+                  Email
+                </button>
+              )}
               {permissions.canManageOwnAvailability && (
                 <button
                   onClick={() => handleNavigate("/availability")}
