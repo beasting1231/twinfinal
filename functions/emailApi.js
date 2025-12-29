@@ -153,8 +153,8 @@ emailApp.post("/emails", async (req, res) => {
       })) {
         emails.push({
           uid: msg.uid,
-          flags: msg.flags,
           read: msg.flags.has("\\Seen"),
+          answered: msg.flags.has("\\Answered"),
           from: msg.envelope.from?.[0]?.name || msg.envelope.from?.[0]?.address || "",
           to: msg.envelope.to?.[0]?.address || "",
           subject: msg.envelope.subject || "(No subject)",
@@ -248,12 +248,97 @@ emailApp.post("/send", async (req, res) => {
   });
 
   try {
-    await userTransporter.sendMail({
+    // Check if body contains HTML (images or formatting)
+    const isHtml = body.includes("<img") || body.includes("<br") || body.includes("<p>");
+
+    const mailOptions = {
       from: settings.smtpUsername,
       to,
       subject,
-      text: body,
+      ...(isHtml ? {html: body, text: body.replace(/<[^>]*>/g, "")} : {text: body}),
+    };
+
+    // Send the email
+    const info = await userTransporter.sendMail(mailOptions);
+
+    // Build RFC 822 message to save to Sent folder
+    const sentDate = new Date().toUTCString();
+    let rawMessage;
+    if (isHtml) {
+      const boundary = `----=_Part_${Date.now()}_${Math.random().toString(36).substr(2)}`;
+      rawMessage = [
+        `From: ${settings.smtpUsername}`,
+        `To: ${to}`,
+        `Subject: ${subject}`,
+        `Date: ${sentDate}`,
+        `Message-ID: ${info.messageId || `<${Date.now()}@${settings.smtpHost}>`}`,
+        `MIME-Version: 1.0`,
+        `Content-Type: multipart/alternative; boundary="${boundary}"`,
+        ``,
+        `--${boundary}`,
+        `Content-Type: text/plain; charset=utf-8`,
+        ``,
+        body.replace(/<[^>]*>/g, ""),
+        ``,
+        `--${boundary}`,
+        `Content-Type: text/html; charset=utf-8`,
+        ``,
+        body,
+        ``,
+        `--${boundary}--`,
+      ].join("\r\n");
+    } else {
+      rawMessage = [
+        `From: ${settings.smtpUsername}`,
+        `To: ${to}`,
+        `Subject: ${subject}`,
+        `Date: ${sentDate}`,
+        `Message-ID: ${info.messageId || `<${Date.now()}@${settings.smtpHost}>`}`,
+        `Content-Type: text/plain; charset=utf-8`,
+        ``,
+        body,
+      ].join("\r\n");
+    }
+
+    // Save to Sent folder via IMAP
+    const client = new ImapFlow({
+      host: settings.imapHost,
+      port: parseInt(settings.imapPort) || 993,
+      secure: settings.imapSsl !== false,
+      auth: {
+        user: settings.imapUsername,
+        pass: settings.imapPassword,
+      },
+      logger: false,
     });
+
+    try {
+      await client.connect();
+
+      // Try common Sent folder names
+      const sentFolders = ["Sent", "[Gmail]/Sent Mail", "Sent Items", "Sent Messages", "INBOX.Sent"];
+      let saved = false;
+
+      for (const sentFolder of sentFolders) {
+        try {
+          await client.append(sentFolder, rawMessage, ["\\Seen"]);
+          saved = true;
+          break;
+        } catch {
+          // Try next folder name
+        }
+      }
+
+      if (!saved) {
+        console.warn("Could not save email to Sent folder - no matching folder found");
+      }
+
+      await client.logout();
+    } catch (imapError) {
+      // Log but don't fail - the email was still sent
+      console.warn("Could not save to Sent folder:", imapError.message);
+    }
+
     res.json({success: true});
   } catch (error) {
     console.error("SMTP send error:", error);
@@ -497,8 +582,8 @@ emailApp.post("/search", async (req, res) => {
       }, {uid: true})) {
         emails.push({
           uid: msg.uid,
-          flags: msg.flags,
           read: msg.flags.has("\\Seen"),
+          answered: msg.flags.has("\\Answered"),
           from: msg.envelope.from?.[0]?.name || msg.envelope.from?.[0]?.address || "",
           to: msg.envelope.to?.[0]?.address || "",
           subject: msg.envelope.subject || "(No subject)",
@@ -514,6 +599,37 @@ emailApp.post("/search", async (req, res) => {
     res.json({emails});
   } catch (error) {
     console.error("IMAP search error:", error);
+    res.status(500).json({error: error.message});
+  }
+});
+
+// Mark email as answered (for reply tracking)
+emailApp.post("/mark-answered", async (req, res) => {
+  const {settings, folderId, uid} = req.body;
+
+  if (!settings || !folderId || !uid) {
+    return res.status(400).json({error: "Missing required parameters"});
+  }
+
+  const client = new ImapFlow({
+    host: settings.imapHost,
+    port: parseInt(settings.imapPort) || 993,
+    secure: settings.imapSsl !== false,
+    auth: {
+      user: settings.imapUsername,
+      pass: settings.imapPassword,
+    },
+    logger: false,
+  });
+
+  try {
+    await client.connect();
+    await client.mailboxOpen(folderId);
+    await client.messageFlagsAdd(uid, ["\\Answered"], {uid: true});
+    await client.logout();
+    res.json({success: true});
+  } catch (error) {
+    console.error("Mark answered error:", error);
     res.status(500).json({error: error.message});
   }
 });

@@ -182,8 +182,8 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
     return !isDayOlderThan24Hours(day);
   };
 
-  // Whether admin can override locks (when editing other users' availability)
-  const canAdminOverrideLock = role === 'admin' && !!selectedUserId;
+  // Whether admin can override locks (admins can always override)
+  const canAdminOverrideLock = role === 'admin';
 
   // Function to check if a cell should be locked (cannot be toggled to unavailable)
   // Locks cells when the user is available AND the time slot is fully or overbooked

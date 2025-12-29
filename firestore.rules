@@ -48,8 +48,9 @@ service cloud.firestore {
       // Check that the pilot is assigned to this booking
       let isAssigned = userDisplayName in assignedPilots;
 
-      // Check that only pilotPayments field is being changed
-      let onlyPaymentsChanged = request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pilotPayments']);
+      // Check that only pilotPayments and history fields are being changed
+      // (history is added automatically with every update for audit trail)
+      let onlyPaymentsChanged = request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pilotPayments', 'history']);
 
       return isAssigned && onlyPaymentsChanged;
     }

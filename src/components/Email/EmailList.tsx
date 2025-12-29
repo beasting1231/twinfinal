@@ -1,18 +1,22 @@
 import { format, isToday } from "date-fns";
+import { Reply } from "lucide-react";
 
 export interface EmailSummary {
   id: string;
   from: string;
+  to?: string;
   subject: string;
   preview: string;
   date: Date;
   read: boolean;
+  answered?: boolean;
 }
 
 interface EmailListProps {
   emails: EmailSummary[];
   selectedEmailId: string | null;
   onEmailSelect: (emailId: string) => void;
+  currentFolder?: string;
 }
 
 // Extract initials from email sender
@@ -39,11 +43,21 @@ function getDisplayName(from: string): string {
   return emailMatch ? emailMatch[1] : from;
 }
 
+// Check if folder is a Sent folder
+function isSentFolder(folder?: string): boolean {
+  if (!folder) return false;
+  const lower = folder.toLowerCase();
+  return lower === "sent" || lower.includes("sent") || lower.includes("gesendet");
+}
+
 export function EmailList({
   emails,
   selectedEmailId,
   onEmailSelect,
+  currentFolder,
 }: EmailListProps) {
+  const showRecipient = isSentFolder(currentFolder);
+
   if (emails.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full py-8 text-stone-500">
@@ -56,8 +70,9 @@ export function EmailList({
     <div className="divide-y divide-stone-800/50">
       {emails.map((email) => {
         const isSelected = selectedEmailId === email.id;
-        const initials = getInitials(email.from);
-        const displayName = getDisplayName(email.from);
+        const person = showRecipient && email.to ? email.to : email.from;
+        const initials = getInitials(person);
+        const displayName = getDisplayName(person);
 
         return (
           <button
@@ -107,6 +122,10 @@ export function EmailList({
                 )}
               </div>
 
+              {/* Replied indicator */}
+              {email.answered && (
+                <Reply className="flex-shrink-0 h-3.5 w-3.5 text-stone-500 mt-1.5" />
+              )}
               {/* Unread indicator */}
               {!email.read && (
                 <div className="flex-shrink-0 w-2 h-2 rounded-full bg-blue-500 mt-2" />

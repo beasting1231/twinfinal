@@ -2,6 +2,7 @@ const {onDocumentCreated} = require("firebase-functions/v2/firestore");
 const admin = require("firebase-admin");
 const nodemailer = require("nodemailer");
 const https = require("https");
+const {ImapFlow} = require("imapflow");
 
 admin.initializeApp();
 
@@ -17,6 +18,76 @@ const transporter = nodemailer.createTransport({
     pass: "Fly-Twin0246",
   },
 });
+
+// IMAP config for saving to Sent folder
+const imapConfig = {
+  host: "imap.mail.hostpoint.ch",
+  port: 993,
+  secure: true,
+  auth: {
+    user: "bookings@twinparagliding.com",
+    pass: "Fly-Twin0246",
+  },
+  logger: false,
+};
+
+// Helper function to save email to Sent folder via IMAP
+async function saveToSentFolder(to, subject, htmlContent, fromName = "Twin Paragliding") {
+  const sentDate = new Date().toUTCString();
+  const boundary = `----=_Part_${Date.now()}_${Math.random().toString(36).substr(2)}`;
+
+  // Build RFC 822 message
+  const rawMessage = [
+    `From: "${fromName}" <bookings@twinparagliding.com>`,
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    `Date: ${sentDate}`,
+    `Message-ID: <${Date.now()}.${Math.random().toString(36).substr(2)}@twinparagliding.com>`,
+    `MIME-Version: 1.0`,
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    ``,
+    `--${boundary}`,
+    `Content-Type: text/plain; charset=utf-8`,
+    ``,
+    htmlContent.replace(/<[^>]*>/g, ""),
+    ``,
+    `--${boundary}`,
+    `Content-Type: text/html; charset=utf-8`,
+    ``,
+    htmlContent,
+    ``,
+    `--${boundary}--`,
+  ].join("\r\n");
+
+  const client = new ImapFlow(imapConfig);
+
+  try {
+    await client.connect();
+
+    // Try common Sent folder names
+    const sentFolders = ["Sent", "INBOX.Sent", "Sent Items", "Sent Messages"];
+    let saved = false;
+
+    for (const sentFolder of sentFolders) {
+      try {
+        await client.append(sentFolder, rawMessage, ["\\Seen"]);
+        saved = true;
+        console.log(`Email saved to ${sentFolder} folder`);
+        break;
+      } catch {
+        // Try next folder name
+      }
+    }
+
+    if (!saved) {
+      console.warn("Could not save email to Sent folder - no matching folder found");
+    }
+
+    await client.logout();
+  } catch (imapError) {
+    console.warn("Could not save to Sent folder:", imapError.message);
+  }
+}
 
 // Helper function to get meeting point display name
 function getMeetingPointName(meetingPoint) {
@@ -407,30 +478,34 @@ exports.sendBookingConfirmationEmail = onDocumentCreated(
       const adminHtmlContent = generateAdminEmailHTML(bookingData);
 
       const emailPromises = [];
+      const emailsToSave = []; // Track emails to save to Sent folder
 
-      // Email options for customer (always send)
+      // Email options for customer (always send, don't save to Sent)
+      const customerSubject = "🪂 Booking request - Twin Paragliding";
       const customerMailOptions = {
         from: {
           name: "Twin Paragliding",
           address: "bookings@twinparagliding.com",
         },
         to: bookingData.email,
-        subject: "🪂 Booking request - Twin Paragliding",
+        subject: customerSubject,
         html: customerHtmlContent,
       };
       emailPromises.push(transporter.sendMail(customerMailOptions));
 
-      // Send admin email notifications if enabled
+      // Send admin email notifications if enabled (don't save to Sent folder)
       if (notificationConfig.emailNotifications.enabled &&
           notificationConfig.emailNotifications.recipients.length > 0) {
+        const adminSubject = "🔔 New Booking Request - Twin Paragliding";
+        const adminTo = notificationConfig.emailNotifications.recipients.join(", ");
         const adminMailOptions = {
           from: {
             name: "Twin Paragliding",
             address: "bookings@twinparagliding.com",
           },
           replyTo: bookingData.email,
-          to: notificationConfig.emailNotifications.recipients.join(", "),
-          subject: "🔔 New Booking Request - Twin Paragliding",
+          to: adminTo,
+          subject: adminSubject,
           html: adminHtmlContent,
         };
         emailPromises.push(transporter.sendMail(adminMailOptions));
@@ -486,6 +561,12 @@ exports.sendBookingConfirmationEmail = onDocumentCreated(
         failures.forEach((f, i) => {
           console.error(`Failure ${i + 1}:`, f.reason?.message || f.reason);
         });
+      }
+
+      // Save sent emails to Sent folder (don't wait, fire and forget)
+      for (const emailData of emailsToSave) {
+        saveToSentFolder(emailData.to, emailData.subject, emailData.html)
+            .catch((err) => console.warn("Failed to save to Sent:", err.message));
       }
 
       return {success: failures.length === 0};
@@ -746,19 +827,24 @@ exports.sendBookingConfirmationOnCreate = onDocumentCreated(
         year: "numeric",
       });
 
+      const emailSubject = `Your Paragliding Booking - ${formattedDate}`;
       const mailOptions = {
         from: {
           name: "Twin Paragliding",
           address: "bookings@twinparagliding.com",
         },
         to: to,
-        subject: `Your Paragliding Booking - ${formattedDate}`,
+        subject: emailSubject,
         html: htmlContent,
       };
 
       try {
         await transporter.sendMail(mailOptions);
         console.log(`Booking confirmation sent to ${to}`);
+
+        // Save to Sent folder
+        await saveToSentFolder(to, emailSubject, htmlContent);
+
         await event.data.ref.update({status: "sent", sentAt: new Date()});
       } catch (error) {
         console.error("Error sending booking confirmation:", error);

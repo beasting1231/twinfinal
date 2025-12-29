@@ -6,7 +6,7 @@ import { ComposeModal, type ComposeData } from "./ComposeModal";
 import { EmailSettingsModal } from "./EmailSettingsModal";
 import { useEmailSettings } from "../../hooks/useEmailSettings";
 import { useEmail } from "../../hooks/useEmail";
-import { Loader2, Mail, Search, ChevronDown, Settings, Plus } from "lucide-react";
+import { Loader2, Mail, Search, ChevronDown, Settings, Plus, PenSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { EmailContent, EmailAction } from "./EmailViewer";
@@ -29,7 +29,7 @@ function useIsMobile(breakpoint = 768) {
   return isMobile;
 }
 
-type MobileView = "list" | "viewer";
+type MobileView = "list" | "viewer" | "compose";
 
 export function Email() {
   const { settings, loading: settingsLoading, saveSettings, isConfigured } = useEmailSettings();
@@ -49,6 +49,7 @@ export function Email() {
     archiveEmail,
     markAsUnread,
     markAsRead,
+    markAsAnswered,
     starEmail,
     moveToInbox,
     searchEmails,
@@ -179,6 +180,12 @@ export function Email() {
     return await sendEmail(to, subject, body);
   };
 
+  const handleMarkAnswered = useCallback((emailId: string) => {
+    if (selectedFolderId) {
+      markAsAnswered(selectedFolderId, emailId);
+    }
+  }, [selectedFolderId, markAsAnswered]);
+
   const handleSendEmail = async (email: { to: string; subject: string; body: string }) => {
     const success = await sendEmail(email.to, email.subject, email.body);
     if (success) {
@@ -305,6 +312,12 @@ export function Email() {
                     className="w-full pl-9 pr-3 py-2 bg-stone-900 border border-stone-800 rounded-full text-sm text-stone-100 placeholder:text-stone-500 focus:outline-none focus:border-stone-700 focus:ring-1 focus:ring-stone-700"
                   />
                 </div>
+                <button
+                  onClick={() => setMobileView("compose")}
+                  className="flex-shrink-0 h-9 w-9 flex items-center justify-center rounded-full bg-stone-800 hover:bg-stone-700 text-stone-300 hover:text-stone-100 transition-colors"
+                >
+                  <PenSquare className="h-4 w-4" />
+                </button>
               </div>
               {/* Folder Selector */}
               <div className="border-b border-stone-800/50">
@@ -379,6 +392,7 @@ export function Email() {
                     emails={filteredEmails}
                     selectedEmailId={selectedEmailId}
                     onEmailSelect={handleEmailSelect}
+                    currentFolder={selectedFolderId || undefined}
                   />
                 )}
               </div>
@@ -394,8 +408,23 @@ export function Email() {
                 currentFolder={selectedFolderId || undefined}
                 onSendEmail={handleSendEmailFromViewer}
                 onAction={handleEmailAction}
+                onMarkAnswered={handleMarkAnswered}
                 onBack={handleBackToList}
                 isMobile
+              />
+            </div>
+          )}
+
+          {/* Mobile Compose */}
+          {mobileView === "compose" && (
+            <div className="flex-1 flex flex-col h-full">
+              <EmailViewer
+                email={null}
+                loading={false}
+                onSendEmail={handleSendEmailFromViewer}
+                onBack={handleBackToList}
+                isMobile
+                composeNewEmail
               />
             </div>
           )}
@@ -495,6 +524,7 @@ export function Email() {
             currentFolder={selectedFolderId || undefined}
             onSendEmail={handleSendEmailFromViewer}
             onAction={handleEmailAction}
+            onMarkAnswered={handleMarkAnswered}
           />
         </div>
 

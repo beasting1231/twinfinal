@@ -311,19 +311,23 @@ export function useEmail(settings: EmailSettings | null) {
           emails: Array<{
             uid: number;
             from: string;
+            to: string;
             subject: string;
             date: string;
             read: boolean;
+            answered?: boolean;
           }>;
         }>("/emails", "POST", { settings, folderId, limit: 50 });
 
         const mappedEmails: EmailSummary[] = result.emails.map((e) => ({
           id: String(e.uid),
           from: e.from,
+          to: e.to,
           subject: e.subject,
           preview: "",
           date: new Date(e.date),
           read: e.read,
+          answered: e.answered,
         }));
 
         setEmails(mappedEmails);
@@ -419,19 +423,23 @@ export function useEmail(settings: EmailSettings | null) {
           emails: Array<{
             uid: number;
             from: string;
+            to: string;
             subject: string;
             date: string;
             read: boolean;
+            answered?: boolean;
           }>;
         }>("/emails", "POST", { settings, folderId, limit: 50 });
 
         const mappedEmails: EmailSummary[] = result.emails.map((e) => ({
           id: String(e.uid),
           from: e.from,
+          to: e.to,
           subject: e.subject,
           preview: "",
           date: new Date(e.date),
           read: e.read,
+          answered: e.answered,
         }));
 
         setEmails(mappedEmails);
@@ -614,6 +622,33 @@ export function useEmail(settings: EmailSettings | null) {
     [settings]
   );
 
+  // Mark email as answered
+  const markAsAnswered = useCallback(
+    async (folderId: string, uid: string): Promise<boolean> => {
+      if (!settings) return false;
+
+      try {
+        await apiCall<{ success: boolean }>("/mark-answered", "POST", {
+          settings,
+          folderId,
+          uid,
+        });
+        // Update local state
+        setEmails((prev) => {
+          const updated = prev.map((e) => (e.id === uid ? { ...e, answered: true } : e));
+          // Also update the cache
+          setCachedEmailList(folderId, updated);
+          return updated;
+        });
+        return true;
+      } catch (err: unknown) {
+        console.error("Error marking as answered:", err);
+        return false;
+      }
+    },
+    [settings]
+  );
+
   // Search emails by content using IMAP SEARCH
   const searchEmails = useCallback(
     async (folderId: string, query: string): Promise<EmailSummary[]> => {
@@ -624,19 +659,23 @@ export function useEmail(settings: EmailSettings | null) {
           emails: Array<{
             uid: number;
             from: string;
+            to: string;
             subject: string;
             date: string;
             read: boolean;
+            answered?: boolean;
           }>;
         }>("/search", "POST", { settings, folderId, query });
 
         return result.emails.map((e) => ({
           id: String(e.uid),
           from: e.from,
+          to: e.to,
           subject: e.subject,
           preview: "",
           date: new Date(e.date),
           read: e.read,
+          answered: e.answered,
         }));
       } catch (err: unknown) {
         console.error("Error searching emails:", err);
@@ -672,6 +711,7 @@ export function useEmail(settings: EmailSettings | null) {
     archiveEmail,
     markAsUnread,
     markAsRead,
+    markAsAnswered,
     starEmail,
     moveToInbox,
     searchEmails,

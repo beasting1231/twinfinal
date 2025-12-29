@@ -10,9 +10,10 @@ import {
   GoogleAuthProvider,
   signInWithPopup
 } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import { auth, db } from "../firebase/config";
 import type { UserRole } from "../types";
+import { APP_VERSION } from "../version";
 
 interface AuthContextType {
   currentUser: User | null;
@@ -100,10 +101,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
             const userData = userDoc.data();
             console.log("✅ User role found:", userData.role);
             setUserRole(userData.role || null);
+
+            // Update app version and last active timestamp
+            await setDoc(userDocRef, {
+              appVersion: APP_VERSION,
+              lastActiveAt: new Date().toISOString(),
+            }, { merge: true });
           } else {
             console.log("⚠️ No user profile found in Firestore - creating new profile");
             // Create a new user profile with default values
-            const { setDoc } = await import("firebase/firestore");
             await setDoc(userDocRef, {
               uid: user.uid,
               email: user.email,
@@ -112,6 +118,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
               femalePilot: false, // Default to false, user can change during onboarding
               onboardingComplete: false, // User needs to complete onboarding
               createdAt: new Date().toISOString(),
+              appVersion: APP_VERSION,
+              lastActiveAt: new Date().toISOString(),
             });
             console.log("✅ User profile created successfully");
             setUserRole(null);

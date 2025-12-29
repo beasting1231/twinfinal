@@ -8,7 +8,14 @@ import { useTheme } from "../../contexts/ThemeContext";
 import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
 import { Button } from "../ui/button";
+import { Download } from "lucide-react";
 import type { UserProfile } from "../../types/index";
+
+// Type for the beforeinstallprompt event
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+}
 
 export function Account() {
   const { currentUser } = useAuth();
@@ -19,6 +26,53 @@ export function Account() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // PWA install state
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [isInstalled, setIsInstalled] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
+
+  // Listen for the beforeinstallprompt event
+  useEffect(() => {
+    // Check if already installed (standalone mode)
+    const isStandalone = window.matchMedia("(display-mode: standalone)").matches
+      || (window.navigator as any).standalone === true;
+    setIsInstalled(isStandalone);
+
+    // Detect iOS
+    const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    setIsIOS(iOS);
+
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setInstallPrompt(e as BeforeInstallPromptEvent);
+    };
+
+    const handleAppInstalled = () => {
+      setIsInstalled(true);
+      setInstallPrompt(null);
+    };
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    window.addEventListener("appinstalled", handleAppInstalled);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", handleAppInstalled);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!installPrompt) return;
+
+    await installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+
+    if (outcome === "accepted") {
+      setInstallPrompt(null);
+    }
+  };
 
   // Load user profile from Firestore
   useEffect(() => {
@@ -157,7 +211,7 @@ export function Account() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-6">
+    <div className="max-w-2xl mx-auto p-6 pb-24">
       <div className="bg-white dark:bg-zinc-900 rounded-lg border border-gray-200 dark:border-zinc-800 p-8">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Account Settings</h1>
 
@@ -187,6 +241,46 @@ export function Account() {
               />
             </div>
           </div>
+
+          {/* Install App Section */}
+          {!isInstalled && (
+            <div className="space-y-2">
+              <div className="p-4 bg-gray-50 dark:bg-zinc-950 rounded-lg border border-gray-200 dark:border-zinc-800">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium text-gray-900 dark:text-zinc-200">
+                      Install App
+                    </label>
+                    <p className="text-xs text-gray-600 dark:text-zinc-500">
+                      Add to your home screen for quick access
+                    </p>
+                  </div>
+                  {installPrompt && (
+                    <Button
+                      onClick={handleInstallClick}
+                      variant="outline"
+                      size="sm"
+                      className="flex items-center gap-2"
+                    >
+                      <Download className="w-4 h-4" />
+                      Install
+                    </Button>
+                  )}
+                </div>
+                {!installPrompt && (
+                  <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-950/50 rounded-lg border border-blue-200 dark:border-blue-900">
+                    <p className="text-xs text-blue-800 dark:text-blue-300">
+                      {isIOS ? (
+                        <><strong>iOS:</strong> Tap the share button <span className="inline-block px-1">⎙</span> at the bottom of Safari, then tap "Add to Home Screen"</>
+                      ) : (
+                        <><strong>Android:</strong> Tap the menu <span className="inline-block px-1">⋮</span> in Chrome, then tap "Add to Home Screen" or "Install App"</>
+                      )}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Username Section */}
           <div className="space-y-2">

@@ -73,6 +73,8 @@ export interface UserProfile {
   role?: UserRole; // User's role for access control
   createdAt?: Date;
   updatedAt?: Date;
+  appVersion?: string; // Last app version user was seen on
+  lastActiveAt?: string; // ISO timestamp of last activity
 }
 
 export interface Pilot {
