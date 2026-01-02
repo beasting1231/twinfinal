@@ -299,7 +299,7 @@ export function Email() {
 
           {/* Mobile List View */}
           {mobileView === "list" && (
-            <div className="flex-1 flex flex-col h-full">
+            <div className="flex-1 flex flex-col min-h-0">
               {/* Search Header */}
               <div className="flex items-center gap-2 px-3 py-3 border-b border-stone-800">
                 <div className="flex-1 relative">
@@ -401,7 +401,7 @@ export function Email() {
 
           {/* Mobile Viewer */}
           {mobileView === "viewer" && (
-            <div className="flex-1 flex flex-col h-full">
+            <div className="flex-1 flex flex-col min-h-0">
               <EmailViewer
                 email={emailContent}
                 loading={emailLoading}
@@ -417,7 +417,7 @@ export function Email() {
 
           {/* Mobile Compose */}
           {mobileView === "compose" && (
-            <div className="flex-1 flex flex-col h-full">
+            <div className="flex-1 flex flex-col min-h-0">
               <EmailViewer
                 email={null}
                 loading={false}

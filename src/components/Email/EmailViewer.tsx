@@ -1153,7 +1153,7 @@ export function EmailViewer({ email, loading, currentFolder, onSendEmail, onActi
       )}
 
       {/* Email Content */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-hidden">
         {email.html ? (
           <iframe
             ref={iframeRef}

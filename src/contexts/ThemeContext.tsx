@@ -54,11 +54,13 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
             console.log("📱 Theme from Firestore:", savedTheme);
             if (savedTheme === "light" || savedTheme === "dark") {
               finalTheme = savedTheme;
+              // Sync localStorage with Firestore to prevent desync issues
+              localStorage.setItem("theme", savedTheme);
             }
           }
         } catch (error) {
           console.error("Error loading theme:", error);
-          // Fall back to localStorage
+          // Fall back to localStorage only on error
           const localTheme = localStorage.getItem("theme") as Theme | null;
           console.log("💾 Theme from localStorage (fallback):", localTheme);
           if (localTheme === "light" || localTheme === "dark") {
