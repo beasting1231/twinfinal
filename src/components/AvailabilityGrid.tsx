@@ -6,7 +6,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useRole } from "../hooks/useRole";
 import { getTimeSlotsByDate } from "../utils/timeSlots";
 import { useMemo, useState, useRef, useEffect } from "react";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { collection, query, where, getDocs, doc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase/config";
 import type { UserProfile } from "../types/index";
 
@@ -25,6 +25,44 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
   const dailyTimeSlots = useMemo(() => {
     return days.map(day => getTimeSlotsByDate(day));
   }, [days]);
+
+  // State for additional time slots per date (declared before useMemo that uses it)
+  const [additionalSlotsByDate, setAdditionalSlotsByDate] = useState<Record<string, string[]>>({});
+
+  // Helper function to convert time string to minutes for sorting
+  const timeToMinutes = (time: string): number => {
+    const [hours, minutes] = time.split(':').map(Number);
+    return hours * 60 + minutes;
+  };
+
+  // Combined time slots for each day (default + additional), sorted by time
+  const combinedDailyTimeSlots = useMemo(() => {
+    return days.map((day, dayIndex) => {
+      const dateStr = format(day, "yyyy-MM-dd");
+      const defaultSlots = dailyTimeSlots[dayIndex];
+      const additionalSlots = additionalSlotsByDate[dateStr] || [];
+
+      // Create entries for default slots
+      const defaultEntries = defaultSlots.map((time, index) => ({
+        time,
+        originalIndex: index,
+        isAdditional: false,
+      }));
+
+      // Create entries for additional slots
+      const additionalEntries = additionalSlots.map((time, index) => ({
+        time,
+        originalIndex: 1000 + index,
+        isAdditional: true,
+      }));
+
+      // Combine and sort by time
+      const combined = [...defaultEntries, ...additionalEntries];
+      combined.sort((a, b) => timeToMinutes(a.time) - timeToMinutes(b.time));
+
+      return combined;
+    });
+  }, [days, dailyTimeSlots, additionalSlotsByDate]);
 
   // No longer need to create a union of all time slots - each day will render its own slots independently
 
@@ -166,6 +204,35 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
     fetchAllPilotsAvailability();
   }, [weekStartDate, currentUser, justSaved]);
 
+  // Fetch additional time slots for each day in the week
+  useEffect(() => {
+    const dateStrings = days.map(day => format(day, "yyyy-MM-dd"));
+
+    // Set up listeners for each day's timeOverrides
+    const unsubscribes = dateStrings.map(dateStr => {
+      const docRef = doc(db, "timeOverrides", dateStr);
+      return onSnapshot(docRef, (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          const additionalSlots = data.additionalSlots || [];
+          setAdditionalSlotsByDate(prev => ({
+            ...prev,
+            [dateStr]: additionalSlots
+          }));
+        } else {
+          setAdditionalSlotsByDate(prev => ({
+            ...prev,
+            [dateStr]: []
+          }));
+        }
+      });
+    });
+
+    return () => {
+      unsubscribes.forEach(unsub => unsub());
+    };
+  }, [days]);
+
   // Function to check if a day is more than 24 hours in the past
   const isDayOlderThan24Hours = (day: Date): boolean => {
     // Set to end of day to be generous
@@ -243,7 +310,8 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
 
   const handleToggleColumn = async (dayIndex: number) => {
     const day = days[dayIndex];
-    const timeSlots = dailyTimeSlots[dayIndex];
+    const combinedSlots = combinedDailyTimeSlots[dayIndex];
+    const timeSlotStrings = combinedSlots.map(slot => slot.time);
 
     // Check if editing is allowed for this day
     if (!canEditDay(day)) {
@@ -251,7 +319,7 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
     }
 
     // Check if any slots are locked (admins can override when editing others)
-    const anyLocked = timeSlots.some((slot) => isCellLocked(day, slot));
+    const anyLocked = timeSlotStrings.some((slot) => isCellLocked(day, slot));
 
     if (anyLocked && !canAdminOverrideLock) {
       // Don't allow day-level toggle if any slots are locked (unless admin override)
@@ -259,14 +327,14 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
     }
 
     // Check if all slots are available
-    const allAvailable = timeSlots.every((slot) => isAvailable(day, slot));
+    const allAvailable = timeSlotStrings.every((slot) => isAvailable(day, slot));
 
     if (allAvailable) {
       // Sign out all slots (will auto-unassign from any bookings)
-      await toggleDay(day, timeSlots);
+      await toggleDay(day, timeSlotStrings);
     } else {
       // Sign in all slots
-      await toggleDay(day, timeSlots);
+      await toggleDay(day, timeSlotStrings);
     }
   };
 
@@ -397,7 +465,7 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
           {days.map((day, dayIndex) => {
             const dayName = format(day, 'EEE').toUpperCase();
             const monthDay = format(day, 'MMM d').toUpperCase();
-            const timeSlots = dailyTimeSlots[dayIndex];
+            const combinedSlots = combinedDailyTimeSlots[dayIndex];
             const isToday = format(day, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
 
             return (
@@ -421,22 +489,23 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
                 {/* Time Slots for this day */}
                 {isInitialLoading ? (
                   // Loading skeleton
-                  timeSlots.map((_, slotIndex) => (
+                  combinedSlots.map((_, slotIndex) => (
                     <div key={`skeleton-${dayIndex}-${slotIndex}`} className="h-14">
                       <div className="w-full h-14 bg-gray-200 dark:bg-zinc-800 rounded-lg animate-pulse" />
                     </div>
                   ))
                 ) : (
                   // Actual availability cells
-                  timeSlots.map((timeSlot, slotIndex) => (
-                    <div key={`cell-${dayIndex}-${slotIndex}`} className="h-14">
+                  combinedSlots.map((slot) => (
+                    <div key={`cell-${dayIndex}-${slot.originalIndex}`} className="h-14">
                       <AvailabilityCell
-                        timeSlot={timeSlot}
-                        isAvailable={isAvailable(day, timeSlot)}
-                        isLocked={isCellLocked(day, timeSlot)}
+                        timeSlot={slot.time}
+                        isAvailable={isAvailable(day, slot.time)}
+                        isLocked={isCellLocked(day, slot.time)}
                         isDisabled={!canEditDay(day)}
                         canOverrideLock={canAdminOverrideLock}
-                        onToggle={() => handleToggleCell(dayIndex, timeSlot)}
+                        isAdditional={slot.isAdditional}
+                        onToggle={() => handleToggleCell(dayIndex, slot.time)}
                       />
                     </div>
                   ))

@@ -4,10 +4,11 @@ interface AvailabilityCellProps {
   isLocked?: boolean;
   isDisabled?: boolean;
   canOverrideLock?: boolean; // Allows clicking even when locked (for admins)
+  isAdditional?: boolean; // True for additional time slots (not default)
   onToggle: () => void;
 }
 
-export function AvailabilityCell({ timeSlot, isAvailable, isLocked = false, isDisabled = false, canOverrideLock = false, onToggle }: AvailabilityCellProps) {
+export function AvailabilityCell({ timeSlot, isAvailable, isLocked = false, isDisabled = false, canOverrideLock = false, isAdditional = false, onToggle }: AvailabilityCellProps) {
   const handleClick = () => {
     const canClick = canOverrideLock || (!isLocked && !isDisabled);
     if (canClick) {
@@ -35,7 +36,10 @@ export function AvailabilityCell({ timeSlot, isAvailable, isLocked = false, isDi
           : "bg-red-300 dark:bg-red-700/60 hover:bg-red-400 dark:hover:bg-red-600/60 border-red-500 dark:border-red-600/70 text-red-900 dark:text-red-100"
       }`}
     >
-      {timeSlot}
+      <span className="flex items-center justify-center gap-1">
+        {isAdditional && <span className="text-emerald-600 dark:text-emerald-400 font-bold">+</span>}
+        <span className={isAdditional ? "text-emerald-700 dark:text-emerald-300" : ""}>{timeSlot}</span>
+      </span>
     </button>
   );
 }
