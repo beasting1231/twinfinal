@@ -5,6 +5,9 @@ interface TimeSlotContextMenuProps {
   position: { x: number; y: number };
   onAddPilot: () => void;
   onChangeTime: () => void;
+  onAddTime: () => void;
+  onRemoveTime?: () => void;
+  isAdditionalSlot?: boolean;
   onClose: () => void;
 }
 
@@ -13,6 +16,9 @@ export function TimeSlotContextMenu({
   position,
   onAddPilot,
   onChangeTime,
+  onAddTime,
+  onRemoveTime,
+  isAdditionalSlot = false,
   onClose,
 }: TimeSlotContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -83,6 +89,26 @@ export function TimeSlotContextMenu({
       >
         Change Time
       </button>
+      <button
+        onClick={() => {
+          onAddTime();
+          onClose();
+        }}
+        className="w-full px-4 py-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
+      >
+        Add Time
+      </button>
+      {isAdditionalSlot && onRemoveTime && (
+        <button
+          onClick={() => {
+            onRemoveTime();
+            onClose();
+          }}
+          className="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+        >
+          Remove Time
+        </button>
+      )}
     </div>
   );
 }
