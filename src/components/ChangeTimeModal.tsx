@@ -31,10 +31,26 @@ export function ChangeTimeModal({
   const handleSave = () => {
     const trimmedTime = newTime.trim();
 
-    // Validate time format (H:MM or HH:MM)
-    if (trimmedTime && !/^\d{1,2}:\d{2}$/.test(trimmedTime)) {
-      alert("Please enter a valid time format (e.g., 8:30 or 14:00)");
-      return;
+    if (trimmedTime) {
+      // Validate time format (H:MM or HH:MM)
+      const timeMatch = trimmedTime.match(/^(\d{1,2}):(\d{2})$/);
+      if (!timeMatch) {
+        alert("Please enter a valid time format (e.g., 8:30 or 14:00)");
+        return;
+      }
+
+      const hours = parseInt(timeMatch[1], 10);
+      const minutes = parseInt(timeMatch[2], 10);
+
+      // Validate hours (0-23) and minutes (0-59)
+      if (hours < 0 || hours > 23) {
+        alert("Hours must be between 0 and 23");
+        return;
+      }
+      if (minutes < 0 || minutes > 59) {
+        alert("Minutes must be between 0 and 59");
+        return;
+      }
     }
 
     onChangeTime(trimmedTime || null);
