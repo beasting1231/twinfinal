@@ -1348,7 +1348,36 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     const dateString = format(selectedDate, 'yyyy-MM-dd');
     const timeOverridesRef = doc(db, 'timeOverrides', dateString);
 
+    // Find the timeIndex for this additional slot
+    const slotIndex = additionalSlots.indexOf(timeToRemove);
+    if (slotIndex === -1) {
+      console.error('Time slot not found in additionalSlots');
+      return;
+    }
+    const timeIndex = 1000 + slotIndex;
+
+    // Find all bookings at this time slot
+    const bookingsToDelete = bookings.filter(
+      b => b.timeIndex === timeIndex && b.date === dateString
+    );
+
+    // Confirm deletion if there are bookings
+    if (bookingsToDelete.length > 0) {
+      const confirmDelete = window.confirm(
+        `This will also delete ${bookingsToDelete.length} booking(s) at ${timeToRemove}. Are you sure?`
+      );
+      if (!confirmDelete) return;
+    }
+
     try {
+      // Delete all bookings at this time slot
+      for (const booking of bookingsToDelete) {
+        if (booking.id) {
+          await deleteDoc(doc(db, 'bookings', booking.id));
+        }
+      }
+
+      // Remove the time slot
       const newAdditionalSlots = additionalSlots.filter(t => t !== timeToRemove);
 
       if (Object.keys(timeOverrides).length === 0 && newAdditionalSlots.length === 0) {
