@@ -10,7 +10,8 @@ import type { Booking, Pilot, PilotPayment, ReceiptFile } from "../types/index";
 import { useAuth } from "../contexts/AuthContext";
 import { useEditing } from "../contexts/EditingContext";
 import { useRole } from "../hooks/useRole";
-import { Camera, Upload, Eye, Trash2, Calendar, Clock, MapPin, Users, Phone, Mail, FileText, User, PhoneCall, ChevronDown, ChevronUp, Loader2, History, Send, PenLine } from "lucide-react";
+import { Camera, Upload, Eye, Trash2, Calendar, Clock, MapPin, Users, Phone, Mail, FileText, User, PhoneCall, ChevronDown, ChevronUp, Loader2, History, Send, PenLine, Copy, Check } from "lucide-react";
+import { toBlob } from "html-to-image";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { db, storage } from "../firebase/config";
@@ -27,6 +28,7 @@ interface BookingDetailsModalProps {
   pilots: Pilot[];
   isPilotAvailableForTimeSlot: (pilotUid: string, timeSlot: string) => boolean;
   timeSlots: string[];
+  timeOverrides?: Record<number, string>;
   onUpdate?: (id: string, booking: Partial<Booking>) => void;
   onDelete?: (id: string) => void;
   onNavigateToDate?: (date: Date) => void;
@@ -40,6 +42,7 @@ export function BookingDetailsModal({
   pilots,
   isPilotAvailableForTimeSlot,
   timeSlots,
+  timeOverrides = {},
   onUpdate,
   onDelete,
   onNavigateToDate,
@@ -72,6 +75,259 @@ export function BookingDetailsModal({
   const [availabilityError, setAvailabilityError] = useState(false);
   const [showEmailPreview, setShowEmailPreview] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [isCapturingScreenshot, setIsCapturingScreenshot] = useState(false);
+  const [screenshotCopied, setScreenshotCopied] = useState(false);
+
+  const captureBookingScreenshot = async () => {
+    if (!booking?.id) return;
+
+    setIsCapturingScreenshot(true);
+    try {
+      // Find the booking cell element by data-booking-id
+      const bookingElement = document.querySelector(`[data-booking-id="${booking.id}"]`) as HTMLElement;
+
+      // Find the time slot element by data-time-index
+      const timeSlotElement = document.querySelector(`[data-time-index="${booking.timeIndex}"]`) as HTMLElement;
+
+      // Find the date cell element
+      const dateCellElement = document.querySelector(`[data-date-cell="true"]`) as HTMLElement;
+
+      if (!bookingElement) {
+        console.error('Booking element not found');
+        alert('Could not find booking cell on the grid. Make sure the booking is visible.');
+        return;
+      }
+
+      if (!timeSlotElement) {
+        console.error('Time slot element not found');
+        alert('Could not find time slot on the grid. Make sure the booking is visible.');
+        return;
+      }
+
+      if (!dateCellElement) {
+        console.error('Date cell element not found');
+        alert('Could not find date cell on the grid. Make sure the booking is visible.');
+        return;
+      }
+
+      // Capture all three elements separately as blobs
+      const pixelRatio = 2;
+
+      // Filter function to exclude the pax badge from time slot
+      const filterOutPaxBadge = (node: Element | Node) => {
+        try {
+          // Exclude the pax count span (it has specific classes)
+          if (node instanceof HTMLElement && node.tagName === 'SPAN' && node.classList?.contains('absolute')) {
+            return false;
+          }
+        } catch {
+          // Ignore filter errors
+        }
+        return true;
+      };
+
+      // Capture elements one by one with error handling
+      let dateCellBlob: Blob | null = null;
+      let timeSlotBlob: Blob | null = null;
+      let bookingBlob: Blob | null = null;
+
+      try {
+        dateCellBlob = await toBlob(dateCellElement, { pixelRatio });
+      } catch (e) {
+        console.error('Failed to capture date cell:', e);
+      }
+
+      try {
+        timeSlotBlob = await toBlob(timeSlotElement, { pixelRatio, filter: filterOutPaxBadge });
+      } catch (e) {
+        console.error('Failed to capture time slot:', e);
+      }
+
+      try {
+        bookingBlob = await toBlob(bookingElement, { pixelRatio });
+      } catch (e) {
+        console.error('Failed to capture booking:', e);
+      }
+
+      if (!dateCellBlob || !timeSlotBlob || !bookingBlob) {
+        // If individual captures failed, try with lower quality settings
+        try {
+          if (!dateCellBlob) {
+            dateCellBlob = await toBlob(dateCellElement, { pixelRatio: 1, skipFonts: true });
+          }
+          if (!timeSlotBlob) {
+            timeSlotBlob = await toBlob(timeSlotElement, { pixelRatio: 1, skipFonts: true, filter: filterOutPaxBadge });
+          }
+          if (!bookingBlob) {
+            bookingBlob = await toBlob(bookingElement, { pixelRatio: 1, skipFonts: true });
+          }
+        } catch (retryError) {
+          console.error('Retry also failed:', retryError);
+        }
+      }
+
+      if (!dateCellBlob || !timeSlotBlob || !bookingBlob) {
+        throw new Error(`Failed to capture: date=${!!dateCellBlob}, time=${!!timeSlotBlob}, booking=${!!bookingBlob}`);
+      }
+
+      // Convert blobs to images
+      const loadImage = (blob: Blob): Promise<HTMLImageElement> => {
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = reject;
+          img.src = URL.createObjectURL(blob);
+        });
+      };
+
+      const [dateCellImg, timeSlotImg, bookingImg] = await Promise.all([
+        loadImage(dateCellBlob),
+        loadImage(timeSlotBlob),
+        loadImage(bookingBlob)
+      ]);
+
+      // Create canvas to combine all images
+      // Layout: [date cell] on top of [time slot] on the left
+      //         [numbered headers 1,2,3...] on top of [booking] on the right
+      const gap = 8 * pixelRatio;
+      const padding = 8 * pixelRatio;
+      const borderRadius = 8 * pixelRatio;
+      const numberOfPeople = booking.numberOfPeople || booking.span || 1;
+
+      // Header dimensions (matching the date cell height)
+      const headerHeight = dateCellImg.height;
+      const headerCellWidth = bookingImg.width / numberOfPeople;
+
+      const leftColumnWidth = Math.max(dateCellImg.width, timeSlotImg.width);
+      const leftColumnHeight = dateCellImg.height + gap + timeSlotImg.height;
+      const rightColumnHeight = headerHeight + gap + bookingImg.height;
+      const canvasWidth = leftColumnWidth + gap + bookingImg.width + (padding * 2);
+      const canvasHeight = Math.max(leftColumnHeight, rightColumnHeight) + (padding * 2);
+
+      const canvas = document.createElement('canvas');
+      canvas.width = canvasWidth;
+      canvas.height = canvasHeight;
+      const ctx = canvas.getContext('2d');
+
+      if (!ctx) {
+        throw new Error('Failed to get canvas context');
+      }
+
+      // Fill background
+      ctx.fillStyle = '#09090b'; // zinc-950
+      ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+      // Calculate vertical positions
+      const leftColumnStartY = padding + (canvasHeight - padding * 2 - leftColumnHeight) / 2;
+      const rightColumnStartY = padding + (canvasHeight - padding * 2 - rightColumnHeight) / 2;
+
+      // Draw date cell (centered horizontally in left column)
+      const dateCellX = padding + (leftColumnWidth - dateCellImg.width) / 2;
+      ctx.drawImage(dateCellImg, dateCellX, leftColumnStartY);
+
+      // Draw time slot below date cell (centered horizontally in left column)
+      const timeSlotX = padding + (leftColumnWidth - timeSlotImg.width) / 2;
+      const timeSlotY = leftColumnStartY + dateCellImg.height + gap;
+      ctx.drawImage(timeSlotImg, timeSlotX, timeSlotY);
+
+      // Draw numbered headers above booking cell
+      const rightColumnX = padding + leftColumnWidth + gap;
+      for (let i = 0; i < numberOfPeople; i++) {
+        const headerX = rightColumnX + (i * headerCellWidth) + (i > 0 ? gap * i / numberOfPeople : 0);
+        const actualHeaderWidth = headerCellWidth - (gap * (numberOfPeople - 1) / numberOfPeople);
+
+        // Draw rounded rectangle background
+        ctx.fillStyle = '#27272a'; // zinc-800
+        ctx.beginPath();
+        ctx.roundRect(headerX, rightColumnStartY, actualHeaderWidth, headerHeight, borderRadius);
+        ctx.fill();
+
+        // Draw number text
+        ctx.fillStyle = '#ffffff';
+        ctx.font = `bold ${14 * pixelRatio}px system-ui, -apple-system, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(i + 1), headerX + actualHeaderWidth / 2, rightColumnStartY + headerHeight / 2);
+      }
+
+      // Draw booking image below headers
+      const bookingY = rightColumnStartY + headerHeight + gap;
+      ctx.drawImage(bookingImg, rightColumnX, bookingY);
+
+      // Clean up object URLs
+      URL.revokeObjectURL(dateCellImg.src);
+      URL.revokeObjectURL(timeSlotImg.src);
+      URL.revokeObjectURL(bookingImg.src);
+
+      // Convert canvas to blob
+      const finalBlob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error('Failed to create blob from canvas'));
+        }, 'image/png');
+      });
+
+      // Try different methods to share/copy the image
+      let success = false;
+
+      // Method 1: Try clipboard API (works on desktop)
+      if (navigator.clipboard && typeof ClipboardItem !== 'undefined') {
+        try {
+          await navigator.clipboard.write([
+            new ClipboardItem({
+              'image/png': finalBlob
+            })
+          ]);
+          success = true;
+        } catch (clipboardError) {
+          console.log('Clipboard API failed, trying alternatives...', clipboardError);
+        }
+      }
+
+      // Method 2: Try Web Share API (works on mobile)
+      if (!success && navigator.share && navigator.canShare) {
+        try {
+          const file = new File([finalBlob], `booking-${booking.id}.png`, { type: 'image/png' });
+          if (navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+            });
+            success = true;
+          }
+        } catch (shareError) {
+          // User cancelled or share failed
+          if ((shareError as Error).name !== 'AbortError') {
+            console.log('Web Share API failed, trying download...', shareError);
+          } else {
+            success = true; // User cancelled, but that's okay
+          }
+        }
+      }
+
+      // Method 3: Download the image as fallback
+      if (!success) {
+        const url = URL.createObjectURL(finalBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `booking-${booking.id}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        success = true;
+      }
+
+      if (success) {
+        setScreenshotCopied(true);
+        setTimeout(() => setScreenshotCopied(false), 2000);
+      }
+    } catch (error) {
+      console.error('Failed to capture screenshot:', error);
+      alert('Failed to capture screenshot. Please try again.');
+    } finally {
+      setIsCapturingScreenshot(false);
+    }
+  };
 
   const copyToClipboard = async (text: string, field: string) => {
     try {
@@ -692,10 +948,11 @@ export function BookingDetailsModal({
             {!isEditing ? (
               // DISPLAY MODE - Beautiful card layout
               <div className="space-y-3">
-                {/* Status Badge Dropdown */}
+                {/* Status Badge and Screenshot Button */}
                 <div className="flex items-center justify-between mb-4 relative">
-                  <button
-                    onClick={() => canEditBookingDetails && setShowStatusDropdown(!showStatusDropdown)}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => canEditBookingDetails && setShowStatusDropdown(!showStatusDropdown)}
                     disabled={!canEditBookingDetails}
                     className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
                       !canEditBookingDetails
@@ -712,6 +969,23 @@ export function BookingDetailsModal({
                     }`}
                   >
                     {editedBooking.bookingStatus.charAt(0).toUpperCase() + editedBooking.bookingStatus.slice(1)}
+                  </button>
+                  </div>
+
+                  {/* Screenshot Button */}
+                  <button
+                    onClick={captureBookingScreenshot}
+                    disabled={isCapturingScreenshot}
+                    className="p-2 rounded-lg bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-700 dark:text-zinc-300 transition-colors disabled:opacity-50"
+                    title="Copy booking cell screenshot"
+                  >
+                    {isCapturingScreenshot ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : screenshotCopied ? (
+                      <Check className="w-4 h-4 text-green-600 dark:text-green-400" />
+                    ) : (
+                      <Copy className="w-4 h-4" />
+                    )}
                   </button>
 
                   {showStatusDropdown && (
@@ -802,12 +1076,14 @@ export function BookingDetailsModal({
                       })}
                     </div>
                   </div>
-                  <div className="bg-gray-50 dark:bg-zinc-900/50 border border-gray-300 dark:border-zinc-800 rounded-xl p-4">
-                    <div className="flex items-center gap-2 text-gray-500 dark:text-zinc-500 mb-2">
+                  <div className={`border rounded-xl p-4 ${timeOverrides[editedBooking.timeIndex] ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-300 dark:border-orange-700' : 'bg-gray-50 dark:bg-zinc-900/50 border-gray-300 dark:border-zinc-800'}`}>
+                    <div className={`flex items-center gap-2 mb-2 ${timeOverrides[editedBooking.timeIndex] ? 'text-orange-600 dark:text-orange-400' : 'text-gray-500 dark:text-zinc-500'}`}>
                       <Clock className="w-4 h-4" />
                       <span className="text-xs">Time</span>
                     </div>
-                    <div className="text-gray-900 dark:text-white font-medium">{timeSlots[editedBooking.timeIndex]}</div>
+                    <div className={`font-medium ${timeOverrides[editedBooking.timeIndex] ? 'text-orange-700 dark:text-orange-300' : 'text-gray-900 dark:text-white'}`}>
+                      {timeOverrides[editedBooking.timeIndex] || timeSlots[editedBooking.timeIndex]}
+                    </div>
                   </div>
                 </div>
 
@@ -1806,7 +2082,7 @@ export function BookingDetailsModal({
             customerName: editedBooking.customerName || '',
             numberOfPeople: editedBooking.numberOfPeople,
             date: editedBooking.date,
-            time: timeSlots[editedBooking.timeIndex],
+            time: timeOverrides[editedBooking.timeIndex] || timeSlots[editedBooking.timeIndex],
             pickupLocation: editedBooking.pickupLocation,
           }}
           senderName={currentUser?.displayName || ''}

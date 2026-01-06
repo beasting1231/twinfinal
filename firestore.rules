@@ -187,5 +187,13 @@ service cloud.firestore {
       // Only the Cloud Function (admin SDK) can read/update/delete
       allow read, update, delete: if false;
     }
+
+    // Time overrides collection (for changing displayed time slots)
+    match /timeOverrides/{dateId} {
+      // All authenticated users can read (to see changed times)
+      allow read: if request.auth != null;
+      // Only admins can create, update, or delete time overrides
+      allow create, update, delete: if request.auth != null && hasRole('admin');
+    }
   }
 }

@@ -13,13 +13,13 @@ import { ScheduleBookingRequestContextMenu } from "./ScheduleBookingRequestConte
 import { BookingRequestItem } from "./BookingRequestItem";
 import { TimeSlotContextMenu } from "./TimeSlotContextMenu";
 import { AddPilotModal } from "./AddPilotModal";
+import { ChangeTimeModal } from "./ChangeTimeModal";
 import { DeletedBookingContextMenu } from "./DeletedBookingContextMenu";
 import { DeletedBookingItem } from "./DeletedBookingItem";
 import { CollapsibleDriverMap } from "./CollapsibleDriverMap";
 import { CollapsibleDriverOwnMap } from "./CollapsibleDriverOwnMap";
 import { LocationToggle } from "./LocationToggle";
 import { SearchBookingModal } from "./SearchBookingModal";
-import { Search } from "lucide-react";
 import { useBookingSourceColors } from "../hooks/useBookingSourceColors";
 import { useDriverAssignments } from "../hooks/useDriverAssignments";
 import { useBookingRequests } from "../hooks/useBookingRequests";
@@ -28,7 +28,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useRole } from "../hooks/useRole";
 import type { Booking, Pilot, BookingRequest } from "../types/index";
 import { format } from "date-fns";
-import { doc, updateDoc, collection, query, where, onSnapshot } from "firebase/firestore";
+import { doc, updateDoc, setDoc, deleteDoc, collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { DndContext, useSensor, useSensors, PointerSensor, useDraggable, useDroppable } from "@dnd-kit/core";
 import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
@@ -317,6 +317,16 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     timeSlot: string;
   } | null>(null);
 
+  // Change time modal state
+  const [changeTimeModal, setChangeTimeModal] = useState<{
+    isOpen: boolean;
+    timeIndex: number;
+    timeSlot: string;
+  } | null>(null);
+
+  // Time overrides state - maps timeIndex to new time string
+  const [timeOverrides, setTimeOverrides] = useState<Record<number, string>>({});
+
   // State for all pilots (not just those available on the selected date)
   const [allPilots, setAllPilots] = useState<Pilot[]>([]);
 
@@ -354,6 +364,23 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
 
     return () => unsubscribe();
   }, []);
+
+  // Fetch time overrides for the selected date
+  useEffect(() => {
+    const dateString = format(selectedDate, 'yyyy-MM-dd');
+    const timeOverridesRef = doc(db, 'timeOverrides', dateString);
+
+    const unsubscribe = onSnapshot(timeOverridesRef, (docSnapshot) => {
+      if (docSnapshot.exists()) {
+        const data = docSnapshot.data();
+        setTimeOverrides(data.overrides || {});
+      } else {
+        setTimeOverrides({});
+      }
+    });
+
+    return () => unsubscribe();
+  }, [selectedDate]);
 
   // Configure drag sensors for better interaction - disable on mobile
   const sensors = useSensors(
@@ -406,6 +433,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
   const initialDistanceRef = useRef<number | null>(null);
   const initialScaleRef = useRef<number>(1);
   const rafRef = useRef<number | null>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTriggeredRef = useRef<boolean>(false);
 
   // Measure grid height for zoom compensation
   useEffect(() => {
@@ -1133,6 +1162,47 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     });
   };
 
+  // Handle long press on time slot for mobile (admin only)
+  const handleTimeSlotTouchStart = (timeIndex: number, timeSlot: string) => (e: React.TouchEvent) => {
+    if (role !== 'admin') return;
+
+    // Clear any existing timer
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+    }
+    longPressTriggeredRef.current = false;
+
+    const touch = e.touches[0];
+    const x = touch.clientX;
+    const y = touch.clientY;
+
+    // Set timer for long press (500ms)
+    longPressTimerRef.current = setTimeout(() => {
+      longPressTriggeredRef.current = true;
+      setTimeSlotContextMenu({
+        isOpen: true,
+        position: { x, y },
+        timeIndex,
+        timeSlot,
+      });
+    }, 500);
+  };
+
+  const handleTimeSlotTouchEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const handleTimeSlotTouchMove = () => {
+    // Cancel long press if user moves finger
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
   // Handle adding a pilot to a time slot
   const handleAddPilot = async (pilotUid: string) => {
     if (!addPilotModal) return;
@@ -1173,6 +1243,39 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     } catch (error) {
       console.error('Error adding pilot availability:', error);
       alert('Failed to add pilot. Please try again.');
+    }
+  };
+
+  // Handle changing a time slot's displayed time
+  const handleChangeTime = async (newTime: string | null) => {
+    if (!changeTimeModal) return;
+
+    const { timeIndex } = changeTimeModal;
+    const dateString = format(selectedDate, 'yyyy-MM-dd');
+    const timeOverridesRef = doc(db, 'timeOverrides', dateString);
+
+    try {
+      if (newTime === null) {
+        // Remove the override for this time index
+        const newOverrides = { ...timeOverrides };
+        delete newOverrides[timeIndex];
+
+        if (Object.keys(newOverrides).length === 0) {
+          // Delete the entire document if no overrides left
+          await deleteDoc(timeOverridesRef);
+        } else {
+          await setDoc(timeOverridesRef, { overrides: newOverrides, date: dateString });
+        }
+      } else {
+        // Set or update the override
+        const newOverrides = { ...timeOverrides, [timeIndex]: newTime };
+        await setDoc(timeOverridesRef, { overrides: newOverrides, date: dateString });
+      }
+
+      setChangeTimeModal(null);
+    } catch (error) {
+      console.error('Error changing time:', error);
+      alert('Failed to change time. Please try again.');
     }
   };
 
@@ -1485,14 +1588,15 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
           {/* Header Row - Shows pilots present today */}
           {role !== 'agency' ? (
             <div
+              data-date-cell="true"
               className="h-7 flex items-center justify-center bg-blue-600 hover:bg-blue-700 rounded-lg cursor-pointer transition-colors"
               onClick={() => setIsSearchModalOpen(true)}
               title="Search bookings"
             >
-              <Search className="w-4 h-4 text-white" />
+              <span className="text-white text-xs font-medium">{format(selectedDate, 'd MMM')}</span>
             </div>
           ) : (
-            <div className="h-7 bg-zinc-900 rounded-lg" />
+            <div data-date-cell="true" className="h-7 bg-zinc-900 rounded-lg" />
           )}
           {Array.from({ length: maxColumnsNeeded }, (_, index) => {
             const pilot = pilots[index];
@@ -1654,15 +1758,40 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
             // Sort cells: booked first, then available, then noPilot, then invisible
             cellsForRow.sort((a, b) => a.sortOrder - b.sortOrder);
 
+            // Calculate total pax for this time slot
+            const totalPaxAtThisTime = bookingsAtThisTime.reduce((total, booking) => {
+              return total + (booking.numberOfPeople || 1);
+            }, 0);
+
+            const hasTimeOverride = timeOverrides[timeIndex] !== undefined;
+            const displayTime = hasTimeOverride ? timeOverrides[timeIndex] : timeSlot;
+
             return [
               // Time Slot Label
               <div
                 key={`time-${timeIndex}`}
-                className={`h-14 flex items-center justify-center bg-gray-200 dark:bg-zinc-900 text-gray-900 dark:text-white rounded-lg font-medium text-sm ${role === 'admin' ? 'cursor-context-menu' : ''} ${moveMode.isActive || requestMoveMode.isActive || deletedBookingMoveMode.isActive ? 'cursor-pointer hover:bg-blue-200 dark:hover:bg-blue-900/50' : ''}`}
+                data-time-index={timeIndex}
+                className={`h-14 flex items-center justify-center rounded-lg font-medium text-sm relative ${
+                  hasTimeOverride
+                    ? 'bg-orange-400 dark:bg-orange-600 text-white'
+                    : 'bg-gray-200 dark:bg-zinc-900 text-gray-900 dark:text-white'
+                } ${role === 'admin' ? 'cursor-context-menu' : ''} ${moveMode.isActive || requestMoveMode.isActive || deletedBookingMoveMode.isActive ? 'cursor-pointer hover:bg-blue-200 dark:hover:bg-blue-900/50' : ''}`}
                 onContextMenu={role === 'admin' ? handleTimeSlotContextMenu(timeIndex, timeSlot) : undefined}
+                onTouchStart={role === 'admin' ? handleTimeSlotTouchStart(timeIndex, timeSlot) : undefined}
+                onTouchEnd={role === 'admin' ? handleTimeSlotTouchEnd : undefined}
+                onTouchMove={role === 'admin' ? handleTimeSlotTouchMove : undefined}
                 onClick={moveMode.isActive || requestMoveMode.isActive || deletedBookingMoveMode.isActive ? () => handleMoveModeDestination(timeIndex) : undefined}
               >
-                {timeSlot}
+                {displayTime}
+                {totalPaxAtThisTime > 0 && (
+                  <span className={`absolute top-1 right-1 text-xs font-medium rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 ${
+                    hasTimeOverride
+                      ? 'bg-orange-600 dark:bg-orange-800 text-orange-100'
+                      : 'bg-gray-400 dark:bg-zinc-700 text-gray-700 dark:text-zinc-400'
+                  }`}>
+                    {totalPaxAtThisTime}
+                  </span>
+                )}
               </div>,
 
               // Render sorted cells
@@ -2075,6 +2204,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
         pilots={pilots}
         isPilotAvailableForTimeSlot={isPilotAvailableForTimeSlot}
         timeSlots={timeSlots}
+        timeOverrides={timeOverrides}
         onUpdate={onUpdateBooking}
         onDelete={onDeleteBooking}
         onNavigateToDate={onNavigateToDate}
@@ -2353,6 +2483,14 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
             });
             setTimeSlotContextMenu(null);
           }}
+          onChangeTime={() => {
+            setChangeTimeModal({
+              isOpen: true,
+              timeIndex: timeSlotContextMenu.timeIndex,
+              timeSlot: timeSlotContextMenu.timeSlot,
+            });
+            setTimeSlotContextMenu(null);
+          }}
           onClose={() => setTimeSlotContextMenu(null)}
         />
       )}
@@ -2401,6 +2539,21 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
           pilots={allPilots}
           timeSlot={addPilotModal.timeSlot}
           onAddPilot={handleAddPilot}
+        />
+      )}
+
+      {/* Change Time Modal */}
+      {changeTimeModal && (
+        <ChangeTimeModal
+          open={changeTimeModal.isOpen}
+          onOpenChange={(open) => {
+            if (!open) {
+              setChangeTimeModal(null);
+            }
+          }}
+          originalTime={changeTimeModal.timeSlot}
+          currentOverride={timeOverrides[changeTimeModal.timeIndex]}
+          onChangeTime={handleChangeTime}
         />
       )}
 

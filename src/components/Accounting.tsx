@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { format, parseISO, startOfDay } from "date-fns";
 import { useBookings } from "../hooks/useBookings";
 import { useDriverAssignments } from "../hooks/useDriverAssignments";
@@ -9,7 +9,7 @@ import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { getTimeSlotsByDate } from "../utils/timeSlots";
 import { FilterDropdown } from "./FilterDropdown";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase/config";
 
 interface AccountingRow {
@@ -49,6 +49,41 @@ export function Accounting() {
   const [selectedDrivers, setSelectedDrivers] = useState<string[]>([]);
   const [selectedVehicles, setSelectedVehicles] = useState<string[]>([]);
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
+
+  // Time overrides state - maps date string to time index overrides
+  const [timeOverridesByDate, setTimeOverridesByDate] = useState<Record<string, Record<number, string>>>({});
+
+  // Fetch time overrides for all unique dates in the bookings
+  useEffect(() => {
+    if (!bookings || bookings.length === 0) return;
+
+    // Get unique dates from bookings
+    const uniqueDates = [...new Set(bookings.map(b => b.date))];
+
+    // Subscribe to time overrides for each date
+    const unsubscribes = uniqueDates.map(dateStr => {
+      const timeOverridesRef = doc(db, 'timeOverrides', dateStr);
+      return onSnapshot(timeOverridesRef, (docSnapshot) => {
+        if (docSnapshot.exists()) {
+          const data = docSnapshot.data();
+          setTimeOverridesByDate(prev => ({
+            ...prev,
+            [dateStr]: data.overrides || {}
+          }));
+        } else {
+          setTimeOverridesByDate(prev => {
+            const newState = { ...prev };
+            delete newState[dateStr];
+            return newState;
+          });
+        }
+      });
+    });
+
+    return () => {
+      unsubscribes.forEach(unsub => unsub());
+    };
+  }, [bookings]);
 
   // Process bookings into accounting rows
   const accountingData = useMemo(() => {
@@ -105,7 +140,10 @@ export function Accounting() {
       // Get booking details
       const dateObj = parseISO(booking.date);
       const timeSlotsForDate = getTimeSlotsByDate(dateObj);
-      const timeSlot = timeSlotsForDate[booking.timeIndex] || `${booking.timeIndex}:00`;
+      const defaultTimeSlot = timeSlotsForDate[booking.timeIndex] || `${booking.timeIndex}:00`;
+      // Use time override if available
+      const dateOverrides = timeOverridesByDate[booking.date] || {};
+      const timeSlot = dateOverrides[booking.timeIndex] || defaultTimeSlot;
       const turnKey = `${booking.date}@${booking.timeIndex}`;
       const turnNumber = booking.timeIndex + 1; // Turn number is based on time slot position
       const totalPax = totalPaxByTurn.get(turnKey) || 0;
@@ -150,7 +188,7 @@ export function Accounting() {
     });
 
     return rows;
-  }, [bookings, driverAssignments]);
+  }, [bookings, driverAssignments, timeOverridesByDate]);
 
   // Filter accounting data for pilots - they should only see their own rows
   const visibleAccountingData = useMemo(() => {

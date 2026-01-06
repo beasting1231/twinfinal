@@ -4,6 +4,7 @@ interface TimeSlotContextMenuProps {
   isOpen: boolean;
   position: { x: number; y: number };
   onAddPilot: () => void;
+  onChangeTime: () => void;
   onClose: () => void;
 }
 
@@ -11,28 +12,31 @@ export function TimeSlotContextMenu({
   isOpen,
   position,
   onAddPilot,
+  onChangeTime,
   onClose,
 }: TimeSlotContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Close menu when clicking outside
+  // Close menu when clicking/tapping outside
   useEffect(() => {
     if (!isOpen) return;
 
-    const handleClickOutside = (e: MouseEvent) => {
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         onClose();
       }
     };
 
-    // Use setTimeout to prevent immediate closing from the same click that opened the menu
+    // Use setTimeout to prevent immediate closing from the same click/touch that opened the menu
     const timeoutId = setTimeout(() => {
       document.addEventListener("mousedown", handleClickOutside);
-    }, 0);
+      document.addEventListener("touchstart", handleClickOutside);
+    }, 100);
 
     return () => {
       clearTimeout(timeoutId);
       document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
     };
   }, [isOpen, onClose]);
 
@@ -69,6 +73,15 @@ export function TimeSlotContextMenu({
         className="w-full px-4 py-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
       >
         Add Pilot
+      </button>
+      <button
+        onClick={() => {
+          onChangeTime();
+          onClose();
+        }}
+        className="w-full px-4 py-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
+      >
+        Change Time
       </button>
     </div>
   );
