@@ -53,7 +53,10 @@ export function Accounting() {
   // Time overrides state - maps date string to time index overrides
   const [timeOverridesByDate, setTimeOverridesByDate] = useState<Record<string, Record<number, string>>>({});
 
-  // Fetch time overrides for all unique dates in the bookings
+  // Additional time slots state - maps date string to array of additional time slots
+  const [additionalSlotsByDate, setAdditionalSlotsByDate] = useState<Record<string, string[]>>({});
+
+  // Fetch time overrides and additional slots for all unique dates in the bookings
   useEffect(() => {
     if (!bookings || bookings.length === 0) return;
 
@@ -70,8 +73,17 @@ export function Accounting() {
             ...prev,
             [dateStr]: data.overrides || {}
           }));
+          setAdditionalSlotsByDate(prev => ({
+            ...prev,
+            [dateStr]: data.additionalSlots || []
+          }));
         } else {
           setTimeOverridesByDate(prev => {
+            const newState = { ...prev };
+            delete newState[dateStr];
+            return newState;
+          });
+          setAdditionalSlotsByDate(prev => {
             const newState = { ...prev };
             delete newState[dateStr];
             return newState;
@@ -140,12 +152,26 @@ export function Accounting() {
       // Get booking details
       const dateObj = parseISO(booking.date);
       const timeSlotsForDate = getTimeSlotsByDate(dateObj);
-      const defaultTimeSlot = timeSlotsForDate[booking.timeIndex] || `${booking.timeIndex}:00`;
-      // Use time override if available
       const dateOverrides = timeOverridesByDate[booking.date] || {};
-      const timeSlot = dateOverrides[booking.timeIndex] || defaultTimeSlot;
+      const additionalSlots = additionalSlotsByDate[booking.date] || [];
+
+      // Handle additional time slots (timeIndex >= 1000)
+      let timeSlot: string;
+      let turnNumber: number;
+      if (booking.timeIndex >= 1000) {
+        // Additional slot - look up from additionalSlots array
+        const additionalIndex = booking.timeIndex - 1000;
+        timeSlot = additionalSlots[additionalIndex] || `Extra ${additionalIndex + 1}`;
+        // For turn number, mark as "Extra" by using negative or special value
+        // We'll display the actual time as the "turn" identifier
+        turnNumber = -1; // Will be displayed as "Extra" in the UI
+      } else {
+        // Regular slot
+        const defaultTimeSlot = timeSlotsForDate[booking.timeIndex] || `${booking.timeIndex}:00`;
+        timeSlot = dateOverrides[booking.timeIndex] || defaultTimeSlot;
+        turnNumber = booking.timeIndex + 1;
+      }
       const turnKey = `${booking.date}@${booking.timeIndex}`;
-      const turnNumber = booking.timeIndex + 1; // Turn number is based on time slot position
       const totalPax = totalPaxByTurn.get(turnKey) || 0;
 
       // Get all drivers and vehicles for this turn
@@ -188,7 +214,7 @@ export function Accounting() {
     });
 
     return rows;
-  }, [bookings, driverAssignments, timeOverridesByDate]);
+  }, [bookings, driverAssignments, timeOverridesByDate, additionalSlotsByDate]);
 
   // Filter accounting data for pilots - they should only see their own rows
   const visibleAccountingData = useMemo(() => {
@@ -331,7 +357,7 @@ export function Accounting() {
             typeof row.payment === "number" ? row.payment.toFixed(2) : row.payment,
             formatPaymentMethod(row.paymentMethod),
             row.bookingSource,
-            isFirstRowOfTurn ? row.turn : "",
+            isFirstRowOfTurn ? (row.turn === -1 ? "Extra" : row.turn) : "",
             isFirstRowOfTurn ? row.pax : "",
             isFirstRowOfTurn ? (row.drivers.length > 0 ? row.drivers.join("; ") : "-") : "",
             isFirstRowOfTurn ? (row.vehicles.length > 0 ? row.vehicles.join("; ") : "-") : "",
@@ -553,7 +579,7 @@ export function Accounting() {
                       {role !== "pilot" && (
                         <>
                           <td className="px-4 py-3 text-center text-gray-900 dark:text-white whitespace-nowrap">
-                            {isFirstRowOfTurn ? row.turn : ""}
+                            {isFirstRowOfTurn ? (row.turn === -1 ? "Extra" : row.turn) : ""}
                           </td>
                           <td className="px-4 py-3 text-center text-gray-900 dark:text-white whitespace-nowrap">
                             {isFirstRowOfTurn ? row.pax : ""}
