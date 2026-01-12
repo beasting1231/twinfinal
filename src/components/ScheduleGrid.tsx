@@ -498,6 +498,36 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     }
   }, [pilots.length, timeSlots.length, bookings.length, scale]);
 
+  // Handle sticky time column when zoomed (CSS sticky breaks with transform)
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || scale === 1) return;
+
+    const handleScroll = () => {
+      const scrollLeft = container.scrollLeft;
+      const stickyElements = container.querySelectorAll('[data-sticky-column="true"]');
+
+      stickyElements.forEach((el) => {
+        const element = el as HTMLElement;
+        // Compensate for the scroll position, accounting for scale
+        element.style.transform = `translateX(${scrollLeft / scale}px)`;
+      });
+    };
+
+    container.addEventListener('scroll', handleScroll);
+    // Initial call in case already scrolled
+    handleScroll();
+
+    return () => {
+      container.removeEventListener('scroll', handleScroll);
+      // Reset transforms when scale returns to 1
+      const stickyElements = container.querySelectorAll('[data-sticky-column="true"]');
+      stickyElements.forEach((el) => {
+        (el as HTMLElement).style.transform = '';
+      });
+    };
+  }, [scale]);
+
   // Check if the selected date is more than 24 hours in the past
   const isSelectedDateOlderThan24Hours = useMemo(() => {
     // Set to end of day to be generous
@@ -1704,8 +1734,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
         <div className="grid gap-2" style={{ gridTemplateColumns: `80px repeat(${maxColumnsNeeded}, 220px) 48px 98px${showSecondDriverColumn ? ' 98px' : ''}` }}>
           {/* Header Row - Shows pilots present today */}
           {role !== 'agency' ? (
-            <div className={`h-7 ${scale === 1 ? 'sticky left-0 z-10' : ''} relative`}>
-              {scale === 1 && <div className="absolute top-0 bottom-0" style={{ left: '-16px', right: '-8px', backgroundColor: 'black' }} />}
+            <div data-sticky-column="true" className={`h-7 ${scale === 1 ? 'sticky left-0' : ''} z-10 relative`}>
+              <div className="absolute top-0 bottom-0" style={{ left: '-16px', right: '-8px', backgroundColor: 'black' }} />
               <div
                 data-date-cell="true"
                 className="h-full w-full flex items-center justify-center bg-blue-600 hover:bg-blue-700 rounded-lg cursor-pointer transition-colors relative"
@@ -1716,8 +1746,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
               </div>
             </div>
           ) : (
-            <div className={`h-7 ${scale === 1 ? 'sticky left-0 z-10' : ''} relative`}>
-              {scale === 1 && <div className="absolute top-0 bottom-0" style={{ left: '-16px', right: '-8px', backgroundColor: 'black' }} />}
+            <div data-sticky-column="true" className={`h-7 ${scale === 1 ? 'sticky left-0' : ''} z-10 relative`}>
+              <div className="absolute top-0 bottom-0" style={{ left: '-16px', right: '-8px', backgroundColor: 'black' }} />
               <div data-date-cell="true" className="h-full w-full bg-zinc-900 rounded-lg relative" />
             </div>
           )}
@@ -1896,9 +1926,10 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
               // Time Slot Label
               <div
                 key={`time-${timeIndex}-${displayIndex}`}
-                className={`h-14 ${scale === 1 ? 'sticky left-0 z-10' : ''} relative`}
+                data-sticky-column="true"
+                className={`h-14 ${scale === 1 ? 'sticky left-0' : ''} z-10 relative`}
               >
-                {scale === 1 && <div className="absolute top-0 bottom-0" style={{ left: '-16px', right: '-8px', backgroundColor: 'black' }} />}
+                <div className="absolute top-0 bottom-0" style={{ left: '-16px', right: '-8px', backgroundColor: 'black' }} />
                 <div
                   data-time-index={timeIndex}
                   className={`h-full w-full flex items-center justify-center rounded-lg font-medium text-sm relative ${
