@@ -1735,7 +1735,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
           {/* Header Row - Shows pilots present today */}
           {role !== 'agency' ? (
             <div data-sticky-column="true" className={`h-7 ${scale === 1 ? 'sticky left-0' : ''} z-10 relative`}>
-              <div className="absolute top-0 bottom-0" style={{ left: '-16px', right: '-8px', backgroundColor: 'black' }} />
+              <div className="absolute top-0 bottom-0 bg-gray-50 dark:bg-zinc-950" style={{ left: '-16px', right: '-8px' }} />
               <div
                 data-date-cell="true"
                 className="h-full w-full flex items-center justify-center bg-blue-600 hover:bg-blue-700 rounded-lg cursor-pointer transition-colors relative"
@@ -1747,7 +1747,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
             </div>
           ) : (
             <div data-sticky-column="true" className={`h-7 ${scale === 1 ? 'sticky left-0' : ''} z-10 relative`}>
-              <div className="absolute top-0 bottom-0" style={{ left: '-16px', right: '-8px', backgroundColor: 'black' }} />
+              <div className="absolute top-0 bottom-0 bg-gray-50 dark:bg-zinc-950" style={{ left: '-16px', right: '-8px' }} />
               <div data-date-cell="true" className="h-full w-full bg-zinc-900 rounded-lg relative" />
             </div>
           )}
@@ -1929,7 +1929,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                 data-sticky-column="true"
                 className={`h-14 ${scale === 1 ? 'sticky left-0' : ''} z-10 relative`}
               >
-                <div className="absolute top-0 bottom-0" style={{ left: '-16px', right: '-8px', backgroundColor: 'black' }} />
+                <div className="absolute top-0 bottom-0 bg-gray-50 dark:bg-zinc-950" style={{ left: '-16px', right: '-8px' }} />
                 <div
                   data-time-index={timeIndex}
                   className={`h-full w-full flex items-center justify-center rounded-lg font-medium text-sm relative ${
