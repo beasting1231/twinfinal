@@ -1699,13 +1699,13 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
       <div
         ref={gridRef}
         className={`inline-block origin-top-left ${!isPinching ? 'transition-transform duration-100' : ''}`}
-        style={{ zoom: scale }}
+        style={{ transform: `scale(${scale})` }}
       >
         <div className="grid gap-2" style={{ gridTemplateColumns: `80px repeat(${maxColumnsNeeded}, 220px) 48px 98px${showSecondDriverColumn ? ' 98px' : ''}` }}>
           {/* Header Row - Shows pilots present today */}
           {role !== 'agency' ? (
-            <div className="h-7 sticky left-0 z-10 relative">
-              <div className="absolute top-0 bottom-0" style={{ left: '-16px', right: '-8px', backgroundColor: 'black' }} />
+            <div className={`h-7 ${scale === 1 ? 'sticky left-0 z-10' : ''} relative`}>
+              {scale === 1 && <div className="absolute top-0 bottom-0" style={{ left: '-16px', right: '-8px', backgroundColor: 'black' }} />}
               <div
                 data-date-cell="true"
                 className="h-full w-full flex items-center justify-center bg-blue-600 hover:bg-blue-700 rounded-lg cursor-pointer transition-colors relative"
@@ -1716,8 +1716,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
               </div>
             </div>
           ) : (
-            <div className="h-7 sticky left-0 z-10 relative">
-              <div className="absolute top-0 bottom-0" style={{ left: '-16px', right: '-8px', backgroundColor: 'black' }} />
+            <div className={`h-7 ${scale === 1 ? 'sticky left-0 z-10' : ''} relative`}>
+              {scale === 1 && <div className="absolute top-0 bottom-0" style={{ left: '-16px', right: '-8px', backgroundColor: 'black' }} />}
               <div data-date-cell="true" className="h-full w-full bg-zinc-900 rounded-lg relative" />
             </div>
           )}
@@ -1896,9 +1896,9 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
               // Time Slot Label
               <div
                 key={`time-${timeIndex}-${displayIndex}`}
-                className="h-14 sticky left-0 z-10 relative"
+                className={`h-14 ${scale === 1 ? 'sticky left-0 z-10' : ''} relative`}
               >
-                <div className="absolute top-0 bottom-0" style={{ left: '-16px', right: '-8px', backgroundColor: 'black' }} />
+                {scale === 1 && <div className="absolute top-0 bottom-0" style={{ left: '-16px', right: '-8px', backgroundColor: 'black' }} />}
                 <div
                   data-time-index={timeIndex}
                   className={`h-full w-full flex items-center justify-center rounded-lg font-medium text-sm relative ${

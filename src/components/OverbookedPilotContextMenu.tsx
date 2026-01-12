@@ -22,9 +22,7 @@ export function OverbookedPilotContextMenu({
   onClose,
 }: OverbookedPilotContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
   const [isPositioned, setIsPositioned] = useState(false);
-  const [customName, setCustomName] = useState("");
 
   useEffect(() => {
     if (!isOpen) return;
@@ -52,13 +50,10 @@ export function OverbookedPilotContextMenu({
     };
   }, [isOpen, onClose]);
 
-  // Reset positioning state and custom name when menu opens
+  // Reset positioning state when menu opens
   useEffect(() => {
     if (isOpen) {
       setIsPositioned(false);
-      setCustomName("");
-      // Focus input after a brief delay to allow positioning
-      setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [isOpen]);
 
@@ -111,28 +106,6 @@ export function OverbookedPilotContextMenu({
         {/* Header */}
         <div className="px-3 py-1.5 text-xs font-medium text-orange-600 dark:text-orange-400 border-b border-gray-300 dark:border-zinc-700">
           Assign Overbooked Pilot
-        </div>
-
-        {/* Custom Name Input */}
-        <div className="px-3 py-2 border-b border-gray-300 dark:border-zinc-700">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (customName.trim()) {
-                onSelectPilot(customName.trim());
-                onClose();
-              }
-            }}
-          >
-            <input
-              ref={inputRef}
-              type="text"
-              value={customName}
-              onChange={(e) => setCustomName(e.target.value)}
-              placeholder="Type custom name..."
-              className="w-full px-2 py-1.5 text-sm bg-gray-100 dark:bg-zinc-700 border border-gray-300 dark:border-zinc-600 rounded text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-            />
-          </form>
         </div>
 
         {/* Un-assign Option */}
