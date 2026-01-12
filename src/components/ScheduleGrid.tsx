@@ -503,53 +503,27 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     const container = containerRef.current;
     if (!container || scale === 1) return;
 
-    let rafId: number | null = null;
-    let lastScrollLeft = -1;
-
-    // Cache sticky elements and add will-change hint for GPU acceleration
-    const stickyElements = container.querySelectorAll('[data-sticky-column="true"]') as NodeListOf<HTMLElement>;
-    stickyElements.forEach((el) => {
-      el.style.willChange = 'transform';
-    });
-
-    const updatePositions = () => {
-      const scrollLeft = container.scrollLeft;
-      // Skip if scroll position hasn't changed
-      if (scrollLeft === lastScrollLeft) {
-        rafId = null;
-        return;
-      }
-      lastScrollLeft = scrollLeft;
-
-      const offset = scrollLeft / scale;
-      stickyElements.forEach((el) => {
-        // Use translate3d for GPU acceleration on mobile
-        el.style.transform = `translate3d(${offset}px, 0, 0)`;
-      });
-      rafId = null;
-    };
-
     const handleScroll = () => {
-      // Use requestAnimationFrame to batch updates and sync with display refresh
-      if (rafId === null) {
-        rafId = requestAnimationFrame(updatePositions);
-      }
+      const scrollLeft = container.scrollLeft;
+      const stickyElements = container.querySelectorAll('[data-sticky-column="true"]');
+
+      stickyElements.forEach((el) => {
+        const element = el as HTMLElement;
+        // Compensate for the scroll position, accounting for scale
+        element.style.transform = `translateX(${scrollLeft / scale}px)`;
+      });
     };
 
-    // Use passive listener for better scroll performance on mobile
-    container.addEventListener('scroll', handleScroll, { passive: true });
+    container.addEventListener('scroll', handleScroll);
     // Initial call in case already scrolled
-    updatePositions();
+    handleScroll();
 
     return () => {
       container.removeEventListener('scroll', handleScroll);
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId);
-      }
-      // Reset transforms and will-change when scale returns to 1
+      // Reset transforms when scale returns to 1
+      const stickyElements = container.querySelectorAll('[data-sticky-column="true"]');
       stickyElements.forEach((el) => {
-        el.style.transform = '';
-        el.style.willChange = '';
+        (el as HTMLElement).style.transform = '';
       });
     };
   }, [scale]);
