@@ -317,6 +317,7 @@ export const BookingAvailable = memo(function BookingAvailable({
             setDragNodeRef(node);
           }
         }}
+        data-booking-id={bookingId}
         className={`w-full h-full rounded-lg pt-2 px-2 flex flex-col justify-between transition-all overflow-hidden relative ${onBookedClick ? 'cursor-pointer' : 'cursor-default'} ${canDrag && bookingId ? 'cursor-grab active:cursor-grabbing' : ''} ${isHighlighted ? 'animate-pulse-slow' : ''}`}
         style={{
           backgroundColor,
@@ -345,6 +346,13 @@ export const BookingAvailable = memo(function BookingAvailable({
       >
         {/* Status indicator bar */}
         <div className={`absolute top-0 right-0 w-[5px] h-full ${statusColors[bookingStatus]}`} />
+
+        {/* Pax count circle */}
+        {span > 0 && !hideDetails && (
+          <span className="absolute bottom-1 left-1 text-xs font-medium rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 bg-gray-600 dark:bg-zinc-700 text-white dark:text-zinc-300">
+            {span}
+          </span>
+        )}
 
         {/* Notes indicator icon */}
         {notes && notes.trim() && (

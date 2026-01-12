@@ -1704,16 +1704,22 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
         <div className="grid gap-2" style={{ gridTemplateColumns: `80px repeat(${maxColumnsNeeded}, 220px) 48px 98px${showSecondDriverColumn ? ' 98px' : ''}` }}>
           {/* Header Row - Shows pilots present today */}
           {role !== 'agency' ? (
-            <div
-              data-date-cell="true"
-              className="h-7 flex items-center justify-center bg-blue-600 hover:bg-blue-700 rounded-lg cursor-pointer transition-colors"
-              onClick={() => setIsSearchModalOpen(true)}
-              title="Search bookings"
-            >
-              <span className="text-white text-xs font-medium">{format(selectedDate, 'd MMM')}</span>
+            <div className="h-7 sticky left-0 z-10 relative">
+              <div className="absolute top-0 bottom-0" style={{ left: '-16px', right: '-8px', backgroundColor: 'black' }} />
+              <div
+                data-date-cell="true"
+                className="h-full w-full flex items-center justify-center bg-blue-600 hover:bg-blue-700 rounded-lg cursor-pointer transition-colors relative"
+                onClick={() => setIsSearchModalOpen(true)}
+                title="Search bookings"
+              >
+                <span className="text-white text-xs font-medium">{format(selectedDate, 'd MMM')}</span>
+              </div>
             </div>
           ) : (
-            <div data-date-cell="true" className="h-7 bg-zinc-900 rounded-lg" />
+            <div className="h-7 sticky left-0 z-10 relative">
+              <div className="absolute top-0 bottom-0" style={{ left: '-16px', right: '-8px', backgroundColor: 'black' }} />
+              <div data-date-cell="true" className="h-full w-full bg-zinc-900 rounded-lg relative" />
+            </div>
           )}
           {Array.from({ length: maxColumnsNeeded }, (_, index) => {
             const pilot = pilots[index];
@@ -1890,32 +1896,37 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
               // Time Slot Label
               <div
                 key={`time-${timeIndex}-${displayIndex}`}
-                data-time-index={timeIndex}
-                className={`h-14 flex items-center justify-center rounded-lg font-medium text-sm relative ${
-                  isAdditional
-                    ? 'bg-green-500 dark:bg-green-600 text-white'
-                    : hasTimeOverride
-                    ? 'bg-orange-400 dark:bg-orange-600 text-white'
-                    : 'bg-gray-200 dark:bg-zinc-900 text-gray-900 dark:text-white'
-                } ${role === 'admin' ? 'cursor-context-menu' : ''} ${moveMode.isActive || requestMoveMode.isActive || deletedBookingMoveMode.isActive ? 'cursor-pointer hover:bg-blue-200 dark:hover:bg-blue-900/50' : ''}`}
-                onContextMenu={role === 'admin' ? handleTimeSlotContextMenu(timeIndex, timeSlot, isAdditional) : undefined}
-                onTouchStart={role === 'admin' ? handleTimeSlotTouchStart(timeIndex, timeSlot, isAdditional) : undefined}
-                onTouchEnd={role === 'admin' ? handleTimeSlotTouchEnd : undefined}
-                onTouchMove={role === 'admin' ? handleTimeSlotTouchMove : undefined}
-                onClick={moveMode.isActive || requestMoveMode.isActive || deletedBookingMoveMode.isActive ? () => handleMoveModeDestination(timeIndex) : undefined}
+                className="h-14 sticky left-0 z-10 relative"
               >
-                {slotDisplayTime}
-                {totalPaxAtThisTime > 0 && (
-                  <span className={`absolute top-1 right-1 text-xs font-medium rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 ${
+                <div className="absolute top-0 bottom-0" style={{ left: '-16px', right: '-8px', backgroundColor: 'black' }} />
+                <div
+                  data-time-index={timeIndex}
+                  className={`h-full w-full flex items-center justify-center rounded-lg font-medium text-sm relative ${
                     isAdditional
-                      ? 'bg-green-700 dark:bg-green-800 text-green-100'
+                      ? 'bg-green-500 dark:bg-green-600 text-white'
                       : hasTimeOverride
-                      ? 'bg-orange-600 dark:bg-orange-800 text-orange-100'
-                      : 'bg-gray-400 dark:bg-zinc-700 text-gray-700 dark:text-zinc-400'
-                  }`}>
-                    {totalPaxAtThisTime}
-                  </span>
-                )}
+                      ? 'bg-orange-400 dark:bg-orange-600 text-white'
+                      : 'bg-gray-200 dark:bg-zinc-900 text-gray-900 dark:text-white'
+                  } ${role === 'admin' ? 'cursor-context-menu' : ''} ${moveMode.isActive || requestMoveMode.isActive || deletedBookingMoveMode.isActive ? 'cursor-pointer hover:bg-blue-200 dark:hover:bg-blue-900/50' : ''}`}
+                  onContextMenu={role === 'admin' ? handleTimeSlotContextMenu(timeIndex, timeSlot, isAdditional) : undefined}
+                  onTouchStart={role === 'admin' ? handleTimeSlotTouchStart(timeIndex, timeSlot, isAdditional) : undefined}
+                  onTouchEnd={role === 'admin' ? handleTimeSlotTouchEnd : undefined}
+                  onTouchMove={role === 'admin' ? handleTimeSlotTouchMove : undefined}
+                  onClick={moveMode.isActive || requestMoveMode.isActive || deletedBookingMoveMode.isActive ? () => handleMoveModeDestination(timeIndex) : undefined}
+                >
+                  {slotDisplayTime}
+                  {totalPaxAtThisTime > 0 && (
+                    <span className={`absolute top-1 right-1 text-xs font-medium rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 ${
+                      isAdditional
+                        ? 'bg-green-700 dark:bg-green-800 text-green-100'
+                        : hasTimeOverride
+                        ? 'bg-orange-600 dark:bg-orange-800 text-orange-100'
+                        : 'bg-gray-400 dark:bg-zinc-700 text-gray-700 dark:text-zinc-400'
+                    }`}>
+                      {totalPaxAtThisTime}
+                    </span>
+                  )}
+                </div>
               </div>,
 
               // Render sorted cells
