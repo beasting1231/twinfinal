@@ -38,8 +38,10 @@ export function BookingRequestForm() {
   const [pilotAvailability, setPilotAvailability] = useState<Map<string, Set<string>>>(new Map());
   const [loading, setLoading] = useState(true);
   const [hideAvailability, setHideAvailability] = useState(false);
+  const [onlySensational, setOnlySensational] = useState(false);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [customFormData, setCustomFormData] = useState<{ name: string; commissionRate: number; onlySensational: boolean } | null>(null);
 
   // Parse the selected date
   const selectedDate = useMemo(() => {
@@ -61,27 +63,52 @@ export function BookingRequestForm() {
   // Skip availability restrictions if far future OR if admin has hidden availability
   const skipAvailabilityRestrictions = isFarFuture || hideAvailability;
 
-  // Fetch form settings (hideAvailability)
+  // Fetch form settings (hideAvailability) and custom form data
   // Also check URL param as fallback for cross-origin iframes
   useEffect(() => {
     const loadFormSettings = async () => {
-      // First check URL parameter (for iframe cross-origin support)
       const urlParams = new URLSearchParams(window.location.search);
       const urlHideAvailability = urlParams.get('hideAvailability') === 'true';
+      const formId = urlParams.get('formId');
 
+      // If there's a custom formId, load that form's data
+      if (formId) {
+        try {
+          const formDoc = await getDoc(doc(db, "bookingForms", formId));
+          if (formDoc.exists()) {
+            const data = formDoc.data();
+            const formOnlySensational = data.onlySensational ?? false;
+            const formHideAvailability = data.hideAvailability ?? false;
+            setCustomFormData({
+              name: data.name,
+              commissionRate: data.commissionRate || 0,
+              onlySensational: formOnlySensational,
+            });
+            // Use the custom form's settings - don't fall through to main form settings
+            setOnlySensational(formOnlySensational);
+            setHideAvailability(formHideAvailability);
+            setSettingsLoaded(true);
+            return;
+          }
+        } catch (error) {
+          console.error("Error loading custom form data:", error);
+        }
+      }
+
+      // Check URL parameter for hideAvailability (for iframe cross-origin support)
       if (urlHideAvailability) {
         setHideAvailability(true);
         setSettingsLoaded(true);
         return;
       }
 
-      // Otherwise try to fetch from Firestore
+      // Otherwise try to fetch from Firestore settings (main form)
       try {
         const settingsDoc = await getDoc(doc(db, "settings", "form"));
         if (settingsDoc.exists()) {
           const data = settingsDoc.data();
-          const hide = data.hideAvailability ?? false;
-          setHideAvailability(hide);
+          setHideAvailability(data.hideAvailability ?? false);
+          setOnlySensational(data.onlySensational ?? false);
         }
       } catch (error) {
         console.error("Error loading form settings:", error);
@@ -307,7 +334,11 @@ export function BookingRequestForm() {
         ? `${formData.phoneCountryCode} ${formData.phone}`.trim()
         : "";
 
-      await addDoc(collection(db, "bookingRequests"), {
+      // Determine booking source and commission based on form type
+      const bookingSource = customFormData ? `${customFormData.name} form` : "Online";
+      const numberOfPeople = Number(formData.numberOfPeople);
+
+      const bookingRequestData: Record<string, unknown> = {
         customerName: formData.customerName,
         email: formData.email,
         phone: fullPhoneNumber,
@@ -315,14 +346,22 @@ export function BookingRequestForm() {
         date: formData.date,
         time: selectedTimeSlot,
         timeIndex: parseInt(formData.timeIndex),
-        numberOfPeople: Number(formData.numberOfPeople),
+        numberOfPeople,
         meetingPoint: formData.meetingPoint,
         flightType: formData.flightType,
         notes: formData.notes,
-        bookingSource: "Online",
+        bookingSource,
         status: "pending",
         createdAt: new Date(),
-      });
+      };
+
+      // Add commission data if this is a custom form with commission
+      if (customFormData && customFormData.commissionRate > 0) {
+        bookingRequestData.commission = customFormData.commissionRate * numberOfPeople;
+        bookingRequestData.commissionStatus = "unpaid";
+      }
+
+      await addDoc(collection(db, "bookingRequests"), bookingRequestData);
 
       // Store customer name and show success screen
       setSubmittedCustomerName(formData.customerName);
@@ -646,63 +685,67 @@ export function BookingRequestForm() {
             </div>
           </div>
 
-          {/* Meeting Point */}
-          <div className="space-y-2">
-            <label htmlFor="meetingPoint" className="text-sm font-medium text-gray-700">
-              Meeting Point *
-            </label>
-            <Select
-              value={formData.meetingPoint}
-              onValueChange={(value) => setFormData((prev) => ({ ...prev, meetingPoint: value }))}
-              required
-            >
-              <SelectTrigger className="!bg-white !border-gray-300 !text-gray-900">
-                <SelectValue placeholder="Select meeting point" />
-              </SelectTrigger>
-              <SelectContent className="!bg-white !border-gray-200 !text-gray-900">
-                <SelectItem value="HW" className="!text-gray-900 focus:!bg-gray-100 focus:!text-gray-900">
-                  Meet at our base near the landing field in the centre
-                </SelectItem>
-                <SelectItem value="OST" className="!text-gray-900 focus:!bg-gray-100 focus:!text-gray-900">
-                  Train Station Interlaken Ost (Outside BIG coop supermarket)
-                </SelectItem>
-                <SelectItem value="mhof" className="!text-gray-900 focus:!bg-gray-100 focus:!text-gray-900">
-                  Mattenhof Resort (Free Parking)
-                </SelectItem>
-                <SelectItem value="other" className="!text-gray-900 focus:!bg-gray-100 focus:!text-gray-900">
-                  Other meeting point in or near Interlaken
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Flight Type */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700">
-              Flight Type *
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              {([
-                { type: "sensational", price: "CHF 180" },
-                { type: "classic", price: "CHF 170" },
-                { type: "early bird", price: "CHF 180" }
-              ] as const).map(({ type, price }) => (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => setFormData((prev) => ({ ...prev, flightType: type }))}
-                  className={`px-3 py-3 rounded-lg font-medium transition-colors ${
-                    formData.flightType === type
-                      ? "bg-gray-900 text-white"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
-                >
-                  <div className="capitalize text-sm">{type}</div>
-                  <div className="text-xs mt-1 opacity-80">{price}</div>
-                </button>
-              ))}
+          {/* Meeting Point - hidden for custom forms, wait for settings to load */}
+          {settingsLoaded && !customFormData && (
+            <div className="space-y-2">
+              <label htmlFor="meetingPoint" className="text-sm font-medium text-gray-700">
+                Meeting Point *
+              </label>
+              <Select
+                value={formData.meetingPoint}
+                onValueChange={(value) => setFormData((prev) => ({ ...prev, meetingPoint: value }))}
+                required
+              >
+                <SelectTrigger className="!bg-white !border-gray-300 !text-gray-900">
+                  <SelectValue placeholder="Select meeting point" />
+                </SelectTrigger>
+                <SelectContent className="!bg-white !border-gray-200 !text-gray-900">
+                  <SelectItem value="HW" className="!text-gray-900 focus:!bg-gray-100 focus:!text-gray-900">
+                    Meet at our base near the landing field in the centre
+                  </SelectItem>
+                  <SelectItem value="OST" className="!text-gray-900 focus:!bg-gray-100 focus:!text-gray-900">
+                    Train Station Interlaken Ost (Outside BIG coop supermarket)
+                  </SelectItem>
+                  <SelectItem value="mhof" className="!text-gray-900 focus:!bg-gray-100 focus:!text-gray-900">
+                    Mattenhof Resort (Free Parking)
+                  </SelectItem>
+                  <SelectItem value="other" className="!text-gray-900 focus:!bg-gray-100 focus:!text-gray-900">
+                    Other meeting point in or near Interlaken
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-          </div>
+          )}
+
+          {/* Flight Type - hide completely when onlySensational is enabled, wait for settings to load */}
+          {settingsLoaded && !onlySensational && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">
+                Flight Type *
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {([
+                  { type: "sensational", price: "CHF 180" },
+                  { type: "classic", price: "CHF 170" },
+                  { type: "early bird", price: "CHF 180" }
+                ] as const).map(({ type, price }) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => setFormData((prev) => ({ ...prev, flightType: type }))}
+                    className={`px-3 py-3 rounded-lg font-medium transition-colors ${
+                      formData.flightType === type
+                        ? "bg-gray-900 text-white"
+                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    }`}
+                  >
+                    <div className="capitalize text-sm">{type}</div>
+                    <div className="text-xs mt-1 opacity-80">{price}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Notes */}
           <div className="space-y-2">

@@ -79,6 +79,9 @@
       if ('serviceWorker' in navigator) {
         let refreshing = false;
 
+        // Don't show update toast on booking form pages (for external customers)
+        const isBookingFormPage = window.location.pathname.includes('/booking-request') || window.location.pathname.includes('/embed');
+
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then((registration) => {
             // Check for updates every time the app is opened
@@ -101,8 +104,8 @@
                     // First install, page will load fresh content
                     return;
                   }
-                  // Update detected, show toast and reload
-                  if (!refreshing) {
+                  // Update detected, show toast and reload (skip on booking form pages)
+                  if (!refreshing && !isBookingFormPage) {
                     refreshing = true;
                     showUpdateToastAndReload();
                   }
@@ -113,8 +116,8 @@
 
           // Handle controller change (when new SW takes over)
           navigator.serviceWorker.addEventListener('controllerchange', () => {
-            // New service worker has taken control, show toast and reload
-            if (navigator.serviceWorker.controller && !refreshing) {
+            // New service worker has taken control, show toast and reload (skip on booking form pages)
+            if (navigator.serviceWorker.controller && !refreshing && !isBookingFormPage) {
               refreshing = true;
               showUpdateToastAndReload();
             }
