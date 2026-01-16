@@ -1742,7 +1742,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                 onClick={() => setIsSearchModalOpen(true)}
                 title="Search bookings"
               >
-                <span className="text-white text-xs font-medium">{format(selectedDate, 'd MMM')}</span>
+                <span className="text-white text-xs font-medium">{format(selectedDate, 'EEE d MMM')}</span>
               </div>
             </div>
           ) : (
@@ -2358,6 +2358,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
             notes: bookingRequestToBook.notes,
             flightType: bookingRequestToBook.flightType,
             bookingSource: bookingRequestToBook.bookingSource || "Online",
+            commission: bookingRequestToBook.commission,
+            commissionStatus: bookingRequestToBook.commissionStatus,
           } : undefined}
         />
       )}
