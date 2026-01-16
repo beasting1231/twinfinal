@@ -783,9 +783,9 @@ export function EmailViewer({ email, loading, currentFolder, onSendEmail, onActi
     : format(email.date, "MMM d, yyyy 'at' h:mm a");
 
   return (
-    <div className="flex flex-col h-full bg-stone-950">
+    <div className="flex flex-col h-full overflow-hidden bg-stone-950">
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-2 md:px-4 py-2 border-b border-stone-800">
+      <div className="flex-shrink-0 flex items-center justify-between px-2 md:px-4 py-2 border-b border-stone-800">
         <div className="flex items-center gap-1">
           {/* Back button on mobile */}
           {isMobile && onBack && (
@@ -926,7 +926,7 @@ export function EmailViewer({ email, loading, currentFolder, onSendEmail, onActi
       </div>
 
       {/* Email Header - Compact */}
-      <div className="border-b border-stone-800">
+      <div className="flex-shrink-0 border-b border-stone-800">
         <button
           onClick={() => setHeaderExpanded(!headerExpanded)}
           className="w-full px-4 py-2.5 flex items-center gap-2 text-left hover:bg-stone-900/30 transition-colors"
@@ -965,7 +965,7 @@ export function EmailViewer({ email, loading, currentFolder, onSendEmail, onActi
 
       {/* Inline Compose Area (Reply/Forward) */}
       {composeMode !== "none" && (
-        <div className="border-b border-stone-800 bg-stone-900/30">
+        <div className="flex-shrink-0 border-b border-stone-800 bg-stone-900/30">
           <div className="flex items-center gap-2 px-3 py-2 border-b border-stone-800/50">
             <span className="text-xs text-stone-500">To:</span>
             <div
@@ -1153,7 +1153,7 @@ export function EmailViewer({ email, loading, currentFolder, onSendEmail, onActi
       )}
 
       {/* Email Content */}
-      <div className="flex-1 relative">
+      <div className="flex-1 min-h-0 relative">
         {email.html ? (
           <iframe
             ref={iframeRef}
