@@ -1153,16 +1153,16 @@ export function EmailViewer({ email, loading, currentFolder, onSendEmail, onActi
       )}
 
       {/* Email Content */}
-      <div className="flex-1 min-h-0 overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-auto">
         {email.html ? (
           <iframe
             ref={iframeRef}
             title="Email content"
-            className="w-full h-full border-0 bg-stone-950"
+            className="w-full h-full min-h-[400px] border-0 bg-stone-950"
             sandbox="allow-same-origin"
           />
         ) : (
-          <div className="p-4 overflow-y-auto h-full">
+          <div className="p-4 h-full">
             <div className="text-sm text-stone-300 whitespace-pre-wrap leading-relaxed">
               {email.body}
             </div>
