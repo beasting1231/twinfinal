@@ -295,11 +295,11 @@ export function Email() {
   if (isMobile) {
     return (
       <TooltipProvider delayDuration={200}>
-        <div className="flex-1 flex flex-col overflow-hidden bg-stone-950">
+        <div className="flex-1 flex flex-col h-full overflow-hidden bg-stone-950">
 
           {/* Mobile List View */}
           {mobileView === "list" && (
-            <div className="flex-1 flex flex-col min-h-0">
+            <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden">
               {/* Search Header */}
               <div className="flex items-center gap-2 px-3 py-3 border-b border-stone-800">
                 <div className="flex-1 relative">
@@ -401,7 +401,7 @@ export function Email() {
 
           {/* Mobile Viewer */}
           {mobileView === "viewer" && (
-            <div className="flex-1 flex flex-col min-h-0">
+            <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden">
               <EmailViewer
                 email={emailContent}
                 loading={emailLoading}
@@ -417,7 +417,7 @@ export function Email() {
 
           {/* Mobile Compose */}
           {mobileView === "compose" && (
-            <div className="flex-1 flex flex-col min-h-0">
+            <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden">
               <EmailViewer
                 email={null}
                 loading={false}
