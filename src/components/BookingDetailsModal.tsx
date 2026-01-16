@@ -113,61 +113,86 @@ export function BookingDetailsModal({
       // Capture all three elements separately as blobs
       const pixelRatio = 2;
 
-      // Filter function to exclude the pax badge from time slot
-      const filterOutPaxBadge = (node: Element | Node) => {
-        try {
-          // Exclude the pax count span (it has specific classes)
-          if (node instanceof HTMLElement && node.tagName === 'SPAN' && node.classList?.contains('absolute')) {
-            return false;
+      // Store original styles and apply light mode styles directly to DOM
+      const originalStyles: Map<HTMLElement, { color: string; backgroundColor: string; display: string }> = new Map();
+
+      const applyLightStyles = (element: HTMLElement) => {
+        const elements = [element, ...Array.from(element.querySelectorAll('*'))];
+        elements.forEach(el => {
+          if (el instanceof HTMLElement) {
+            // Store original inline styles
+            originalStyles.set(el, {
+              color: el.style.color,
+              backgroundColor: el.style.backgroundColor,
+              display: el.style.display
+            });
+            // Apply light mode styles
+            el.style.setProperty('color', '#18181b', 'important'); // zinc-900
+            // Check if element has dark background class
+            const classes = el.className || '';
+            if (classes.includes('bg-zinc') || classes.includes('bg-gray') || classes.includes('bg-slate')) {
+              el.style.setProperty('background-color', '#d4d4d8', 'important'); // zinc-300
+            }
           }
-        } catch {
-          // Ignore filter errors
+        });
+
+        // Hide the pilot badges grid (last grid element in booking cell)
+        const pilotGrid = element.querySelector('.grid');
+        if (pilotGrid instanceof HTMLElement) {
+          pilotGrid.style.setProperty('display', 'none', 'important');
         }
-        return true;
       };
 
-      // Capture elements one by one with error handling
+      const restoreStyles = () => {
+        originalStyles.forEach((styles, el) => {
+          el.style.color = styles.color;
+          el.style.backgroundColor = styles.backgroundColor;
+          el.style.display = styles.display;
+        });
+        originalStyles.clear();
+      };
+
+      // Capture elements (time slot will be drawn manually on canvas)
       let dateCellBlob: Blob | null = null;
-      let timeSlotBlob: Blob | null = null;
       let bookingBlob: Blob | null = null;
 
       try {
-        dateCellBlob = await toBlob(dateCellElement, { pixelRatio });
+        // Apply light mode styles to booking element before capture
+        applyLightStyles(bookingElement);
+
+        const [dateResult, bookingResult] = await Promise.allSettled([
+          toBlob(dateCellElement, { pixelRatio }),
+          toBlob(bookingElement, { pixelRatio })
+        ]);
+
+        if (dateResult.status === 'fulfilled') dateCellBlob = dateResult.value;
+        if (bookingResult.status === 'fulfilled') bookingBlob = bookingResult.value;
       } catch (e) {
-        console.error('Failed to capture date cell:', e);
+        console.error('Failed to capture elements:', e);
+      } finally {
+        // Restore original styles immediately
+        restoreStyles();
       }
 
-      try {
-        timeSlotBlob = await toBlob(timeSlotElement, { pixelRatio, filter: filterOutPaxBadge });
-      } catch (e) {
-        console.error('Failed to capture time slot:', e);
-      }
-
-      try {
-        bookingBlob = await toBlob(bookingElement, { pixelRatio });
-      } catch (e) {
-        console.error('Failed to capture booking:', e);
-      }
-
-      if (!dateCellBlob || !timeSlotBlob || !bookingBlob) {
-        // If individual captures failed, try with lower quality settings
+      if (!dateCellBlob || !bookingBlob) {
+        // If some captures failed, try again with lower quality
         try {
+          applyLightStyles(bookingElement);
           if (!dateCellBlob) {
             dateCellBlob = await toBlob(dateCellElement, { pixelRatio: 1, skipFonts: true });
-          }
-          if (!timeSlotBlob) {
-            timeSlotBlob = await toBlob(timeSlotElement, { pixelRatio: 1, skipFonts: true, filter: filterOutPaxBadge });
           }
           if (!bookingBlob) {
             bookingBlob = await toBlob(bookingElement, { pixelRatio: 1, skipFonts: true });
           }
         } catch (retryError) {
           console.error('Retry also failed:', retryError);
+        } finally {
+          restoreStyles();
         }
       }
 
-      if (!dateCellBlob || !timeSlotBlob || !bookingBlob) {
-        throw new Error(`Failed to capture: date=${!!dateCellBlob}, time=${!!timeSlotBlob}, booking=${!!bookingBlob}`);
+      if (!dateCellBlob || !bookingBlob) {
+        throw new Error(`Failed to capture: date=${!!dateCellBlob}, booking=${!!bookingBlob}`);
       }
 
       // Convert blobs to images
@@ -180,9 +205,8 @@ export function BookingDetailsModal({
         });
       };
 
-      const [dateCellImg, timeSlotImg, bookingImg] = await Promise.all([
+      const [dateCellImg, bookingImg] = await Promise.all([
         loadImage(dateCellBlob),
-        loadImage(timeSlotBlob),
         loadImage(bookingBlob)
       ]);
 
@@ -194,12 +218,16 @@ export function BookingDetailsModal({
       const borderRadius = 8 * pixelRatio;
       const numberOfPeople = booking.numberOfPeople || booking.span || 1;
 
+      // Time slot dimensions (drawn manually, height matches booking cell)
+      const timeSlotWidth = dateCellImg.width;
+      const timeSlotHeight = bookingImg.height;
+
       // Header dimensions (matching the date cell height)
       const headerHeight = dateCellImg.height;
       const headerCellWidth = bookingImg.width / numberOfPeople;
 
-      const leftColumnWidth = Math.max(dateCellImg.width, timeSlotImg.width);
-      const leftColumnHeight = dateCellImg.height + gap + timeSlotImg.height;
+      const leftColumnWidth = Math.max(dateCellImg.width, timeSlotWidth);
+      const leftColumnHeight = dateCellImg.height + gap + timeSlotHeight;
       const rightColumnHeight = headerHeight + gap + bookingImg.height;
       const canvasWidth = leftColumnWidth + gap + bookingImg.width + (padding * 2);
       const canvasHeight = Math.max(leftColumnHeight, rightColumnHeight) + (padding * 2);
@@ -213,8 +241,8 @@ export function BookingDetailsModal({
         throw new Error('Failed to get canvas context');
       }
 
-      // Fill background
-      ctx.fillStyle = '#09090b'; // zinc-950
+      // Fill background (always light mode for screenshots)
+      ctx.fillStyle = '#f4f4f5'; // zinc-100
       ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
       // Calculate vertical positions
@@ -225,10 +253,25 @@ export function BookingDetailsModal({
       const dateCellX = padding + (leftColumnWidth - dateCellImg.width) / 2;
       ctx.drawImage(dateCellImg, dateCellX, leftColumnStartY);
 
-      // Draw time slot below date cell (centered horizontally in left column)
-      const timeSlotX = padding + (leftColumnWidth - timeSlotImg.width) / 2;
+      // Draw time slot manually below date cell (dark grey background, white text)
+      const timeSlotX = padding + (leftColumnWidth - timeSlotWidth) / 2;
       const timeSlotY = leftColumnStartY + dateCellImg.height + gap;
-      ctx.drawImage(timeSlotImg, timeSlotX, timeSlotY);
+
+      // Get the time string from timeSlots array
+      const timeString = timeSlots[booking.timeIndex] || '';
+
+      // Draw rounded rectangle background
+      ctx.fillStyle = '#52525b'; // zinc-600 (dark grey)
+      ctx.beginPath();
+      ctx.roundRect(timeSlotX, timeSlotY, timeSlotWidth, timeSlotHeight, borderRadius);
+      ctx.fill();
+
+      // Draw time text
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `${14 * pixelRatio}px system-ui, -apple-system, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(timeString, timeSlotX + timeSlotWidth / 2, timeSlotY + timeSlotHeight / 2);
 
       // Draw numbered headers above booking cell
       const rightColumnX = padding + leftColumnWidth + gap;
@@ -236,14 +279,14 @@ export function BookingDetailsModal({
         const headerX = rightColumnX + (i * headerCellWidth) + (i > 0 ? gap * i / numberOfPeople : 0);
         const actualHeaderWidth = headerCellWidth - (gap * (numberOfPeople - 1) / numberOfPeople);
 
-        // Draw rounded rectangle background
-        ctx.fillStyle = '#27272a'; // zinc-800
+        // Draw rounded rectangle background (always light mode for screenshots)
+        ctx.fillStyle = '#e4e4e7'; // zinc-200
         ctx.beginPath();
         ctx.roundRect(headerX, rightColumnStartY, actualHeaderWidth, headerHeight, borderRadius);
         ctx.fill();
 
         // Draw number text
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = '#18181b'; // zinc-900
         ctx.font = `bold ${14 * pixelRatio}px system-ui, -apple-system, sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -256,7 +299,6 @@ export function BookingDetailsModal({
 
       // Clean up object URLs
       URL.revokeObjectURL(dateCellImg.src);
-      URL.revokeObjectURL(timeSlotImg.src);
       URL.revokeObjectURL(bookingImg.src);
 
       // Convert canvas to blob
