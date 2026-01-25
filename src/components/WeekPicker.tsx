@@ -33,7 +33,7 @@ export function WeekPicker({ weekStartDate, onWeekChange }: WeekPickerProps) {
         variant="outline"
         size="icon"
         onClick={handlePrevWeek}
-        className="h-10 w-10 border-zinc-700 hover:bg-zinc-800 hover:border-zinc-600"
+        className="h-10 w-10 border-gray-300 dark:border-zinc-700 hover:bg-gray-100 dark:hover:bg-zinc-800 hover:border-gray-400 dark:hover:border-zinc-600"
       >
         <ChevronLeft className="h-4 w-4" />
       </Button>
@@ -42,14 +42,14 @@ export function WeekPicker({ weekStartDate, onWeekChange }: WeekPickerProps) {
           <Button
             variant="outline"
             className={cn(
-              "justify-center text-center font-normal min-w-[200px] border-zinc-700 hover:bg-zinc-800 hover:border-zinc-600"
+              "justify-center text-center font-normal min-w-[200px] border-gray-300 dark:border-zinc-700 hover:bg-gray-100 dark:hover:bg-zinc-800 hover:border-gray-400 dark:hover:border-zinc-600"
             )}
           >
             {displayText}
             <CalendarIcon className="ml-2 h-4 w-4" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-0 bg-zinc-900 border-zinc-800" align="center">
+        <PopoverContent className="w-auto p-0 bg-white dark:bg-zinc-900 border-gray-300 dark:border-zinc-800" align="center">
           <Calendar
             mode="single"
             selected={weekStartDate}
@@ -69,7 +69,7 @@ export function WeekPicker({ weekStartDate, onWeekChange }: WeekPickerProps) {
         variant="outline"
         size="icon"
         onClick={handleNextWeek}
-        className="h-10 w-10 border-zinc-700 hover:bg-zinc-800 hover:border-zinc-600"
+        className="h-10 w-10 border-gray-300 dark:border-zinc-700 hover:bg-gray-100 dark:hover:bg-zinc-800 hover:border-gray-400 dark:hover:border-zinc-600"
       >
         <ChevronRight className="h-4 w-4" />
       </Button>
