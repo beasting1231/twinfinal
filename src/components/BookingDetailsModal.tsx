@@ -797,6 +797,50 @@ export function BookingDetailsModal({
     }
   };
 
+  const handleNoShow = () => {
+    if (!booking.id || !onUpdate) return;
+
+    // Ask if pilots will be paid
+    const willPilotsBePaid = confirm("Will the pilots be paid for this flight?");
+
+    if (willPilotsBePaid) {
+      // Set payment to -103 with method "ticket" for all assigned pilots
+      const updatedPayments: PilotPayment[] = editedBooking.assignedPilots.map(pilotUid => {
+        const pilot = pilots.find(p => p.uid === pilotUid);
+        const pilotName = pilot?.displayName || "Unknown";
+
+        // Check if payment already exists
+        const existingPayment = pilotPayments.find(p => p.pilotName === pilotName);
+
+        return {
+          pilotName,
+          amount: -103,
+          paymentMethod: "ticket" as const,
+          receiptFiles: existingPayment?.receiptFiles || [],
+        };
+      });
+
+      // Update the booking with no show status and payments
+      onUpdate(booking.id, {
+        bookingStatus: 'no show',
+        pilotPayments: updatedPayments
+      });
+      setEditedBooking({ ...editedBooking, bookingStatus: 'no show', pilotPayments: updatedPayments });
+      setPilotPayments(updatedPayments);
+    } else {
+      // Unassign all pilots
+      onUpdate(booking.id, {
+        bookingStatus: 'no show',
+        assignedPilots: [],
+        pilotPayments: []
+      });
+      setEditedBooking({ ...editedBooking, bookingStatus: 'no show', assignedPilots: [], pilotPayments: [] });
+      setPilotPayments([]);
+    }
+
+    setShowStatusDropdown(false);
+  };
+
   const handlePaymentUpdate = (pilotName: string, field: keyof PilotPayment, value: any) => {
     setPilotPayments(prev =>
       prev.map(payment => {
@@ -1007,6 +1051,8 @@ export function BookingDetailsModal({
                         ? 'bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400 border border-green-300 dark:border-green-500/30 hover:bg-green-200 dark:hover:bg-green-500/30'
                         : editedBooking.bookingStatus === 'pending'
                         ? 'bg-yellow-100 dark:bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 border border-yellow-300 dark:border-yellow-500/30 hover:bg-yellow-200 dark:hover:bg-yellow-500/30'
+                        : editedBooking.bookingStatus === 'no show'
+                        ? 'bg-orange-100 dark:bg-orange-500/20 text-orange-700 dark:text-orange-400 border border-orange-300 dark:border-orange-500/30 hover:bg-orange-200 dark:hover:bg-orange-500/30'
                         : 'bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400 border border-red-300 dark:border-red-500/30 hover:bg-red-200 dark:hover:bg-red-500/30'
                     }`}
                   >
@@ -1084,6 +1130,12 @@ export function BookingDetailsModal({
                           className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium cursor-pointer transition-all hover:scale-105 bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400 border border-red-300 dark:border-red-500/30 hover:bg-red-200 dark:hover:bg-red-500/30"
                         >
                           Cancelled
+                        </button>
+                        <button
+                          onClick={handleNoShow}
+                          className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium cursor-pointer transition-all hover:scale-105 bg-orange-100 dark:bg-orange-500/20 text-orange-700 dark:text-orange-400 border border-orange-300 dark:border-orange-500/30 hover:bg-orange-200 dark:hover:bg-orange-500/30"
+                        >
+                          No Show
                         </button>
                       </div>
                     </>

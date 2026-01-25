@@ -27,7 +27,7 @@ import { useBookingRequests } from "../hooks/useBookingRequests";
 import { useAllPilots } from "../hooks/useAllPilots";
 import { useAuth } from "../contexts/AuthContext";
 import { useRole } from "../hooks/useRole";
-import type { Booking, Pilot, BookingRequest } from "../types/index";
+import type { Booking, Pilot, BookingRequest, AvailabilityStatus } from "../types/index";
 import { format } from "date-fns";
 import { doc, updateDoc, setDoc, deleteDoc, collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase/config";
@@ -41,6 +41,7 @@ interface ScheduleGridProps {
   bookings?: Booking[];
   allBookingsForSearch?: Booking[];
   isPilotAvailableForTimeSlot: (pilotUid: string, timeSlot: string) => boolean;
+  getPilotAvailabilityStatus?: (pilotUid: string, timeSlot: string) => AvailabilityStatus;
   saveCustomPilotOrder?: (newOrder: string[]) => Promise<void>;
   loading?: boolean;
   currentUserDisplayName?: string;
@@ -89,7 +90,7 @@ function DraggablePilotHeader({ pilot, index, isAdmin, isDragging }: { pilot: Pi
   );
 }
 
-export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBookings = [], allBookingsForSearch = [], isPilotAvailableForTimeSlot, saveCustomPilotOrder, loading = false, currentUserDisplayName, onAddBooking, onUpdateBooking, onDeleteBooking, onNavigateToDate }: ScheduleGridProps) {
+export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBookings = [], allBookingsForSearch = [], isPilotAvailableForTimeSlot, getPilotAvailabilityStatus, saveCustomPilotOrder, loading = false, currentUserDisplayName, onAddBooking, onUpdateBooking, onDeleteBooking, onNavigateToDate }: ScheduleGridProps) {
   // Filter out deleted bookings from the main grid
   const bookings = useMemo(() => {
     return allBookings.filter(booking => booking.bookingStatus !== "deleted");
@@ -274,6 +275,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     pilotIndex: number;
     timeIndex: number;
     isSignedOut: boolean;
+    currentStatus: AvailabilityStatus;
   } | null>(null);
 
   // Driver/Vehicle modal state
@@ -1069,13 +1071,19 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     const isPilotAvailable = pilot && isPilotAvailableForTimeSlot(pilot.uid, timeSlot);
     const isSignedOut = !isPilotAvailable;
 
-    console.log("Setting availability context menu", { isPilotAvailable, isSignedOut });
+    // Get the current availability status
+    const currentStatus: AvailabilityStatus = getPilotAvailabilityStatus
+      ? getPilotAvailabilityStatus(pilot.uid, timeSlot)
+      : (isPilotAvailable ? "available" : "unavailable");
+
+    console.log("Setting availability context menu", { isPilotAvailable, isSignedOut, currentStatus });
     setAvailabilityContextMenu({
       isOpen: true,
       position,
       pilotIndex,
       timeIndex,
       isSignedOut,
+      currentStatus,
     });
   };
 
@@ -1167,6 +1175,57 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
       setAvailabilityContextMenu(null);
     } catch (error) {
       console.error("Error signing out:", error);
+    }
+  };
+
+  // Handle setting availability to "on request" (orange status)
+  const handleOnRequest = async () => {
+    if (!availabilityContextMenu) return;
+
+    const { pilotIndex, timeIndex } = availabilityContextMenu;
+    const pilot = pilots[pilotIndex];
+    const timeSlot = timeSlots[timeIndex];
+
+    if (!pilot || !currentUserDisplayName) return;
+
+    try {
+      const { addDoc, collection, query, where, getDocs, updateDoc, doc } = await import("firebase/firestore");
+      const { db } = await import("../firebase/config");
+      const { format } = await import("date-fns");
+
+      const dateStr = format(selectedDate, "yyyy-MM-dd");
+
+      // Check if there's already an availability record
+      const q = query(
+        collection(db, "availability"),
+        where("userId", "==", pilot.uid),
+        where("date", "==", dateStr),
+        where("timeSlot", "==", timeSlot)
+      );
+
+      const snapshot = await getDocs(q);
+
+      if (snapshot.empty) {
+        // Create new record with onRequest status
+        await addDoc(collection(db, "availability"), {
+          userId: pilot.uid,
+          date: dateStr,
+          timeSlot: timeSlot,
+          status: "onRequest",
+          signedInAt: new Date().toISOString(),
+        });
+      } else {
+        // Update existing record to set status to onRequest
+        const updatePromises = snapshot.docs.map((docSnapshot) =>
+          updateDoc(doc(db, "availability", docSnapshot.id), { status: "onRequest" })
+        );
+        await Promise.all(updatePromises);
+      }
+
+      console.log("Set to on request successfully");
+      setAvailabilityContextMenu(null);
+    } catch (error) {
+      console.error("Error setting on request:", error);
     }
   };
 
@@ -1673,7 +1732,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     return (
       <div className="flex-1 overflow-auto p-4 bg-gray-50 dark:bg-zinc-950">
         <div className="inline-block">
-          <div className="grid gap-2" style={{ gridTemplateColumns: `80px repeat(5, 220px) 48px 98px 98px` }}>
+          <div className="grid gap-2" style={{ gridTemplateColumns: `80px repeat(5, 160px) 48px 98px 98px` }}>
             {/* Header Row Skeleton */}
             <div className="h-7" />
             <div className="h-7 bg-gray-200 dark:bg-zinc-900 rounded-lg animate-pulse" />
@@ -1691,18 +1750,18 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
             {timeSlots.map((_timeSlot, index) => (
               <div key={index} className="contents">
                 {/* Time label skeleton */}
-                <div className="h-14 bg-gray-200 dark:bg-zinc-900 rounded-lg animate-pulse" />
+                <div className="h-20 bg-gray-200 dark:bg-zinc-900 rounded-lg animate-pulse" />
                 {/* Skeleton cells */}
-                <div className="h-14 bg-gray-100 dark:bg-zinc-800 rounded-lg animate-pulse" />
-                <div className="h-14 bg-gray-100 dark:bg-zinc-800 rounded-lg animate-pulse" />
-                <div className="h-14 bg-gray-100 dark:bg-zinc-800 rounded-lg animate-pulse" />
-                <div className="h-14 bg-gray-100 dark:bg-zinc-800 rounded-lg animate-pulse" />
-                <div className="h-14 bg-gray-100 dark:bg-zinc-800 rounded-lg animate-pulse" />
+                <div className="h-20 bg-gray-100 dark:bg-zinc-800 rounded-lg animate-pulse" />
+                <div className="h-20 bg-gray-100 dark:bg-zinc-800 rounded-lg animate-pulse" />
+                <div className="h-20 bg-gray-100 dark:bg-zinc-800 rounded-lg animate-pulse" />
+                <div className="h-20 bg-gray-100 dark:bg-zinc-800 rounded-lg animate-pulse" />
+                <div className="h-20 bg-gray-100 dark:bg-zinc-800 rounded-lg animate-pulse" />
                 {/* Spacer */}
-                <div className="h-14 w-full" />
+                <div className="h-20 w-full" />
                 {/* Driver cells */}
-                <div className="h-14 bg-gray-100 dark:bg-zinc-800 rounded-lg animate-pulse" />
-                <div className="h-14 bg-gray-100 dark:bg-zinc-800 rounded-lg animate-pulse" />
+                <div className="h-20 bg-gray-100 dark:bg-zinc-800 rounded-lg animate-pulse" />
+                <div className="h-20 bg-gray-100 dark:bg-zinc-800 rounded-lg animate-pulse" />
               </div>
             ))}
           </div>
@@ -1731,7 +1790,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
         className={`inline-block origin-top-left ${!isPinching ? 'transition-transform duration-100' : ''}`}
         style={{ transform: `scale(${scale})` }}
       >
-        <div className="grid gap-2" style={{ gridTemplateColumns: `80px repeat(${maxColumnsNeeded}, 220px) 48px 98px${showSecondDriverColumn ? ' 98px' : ''}` }}>
+        <div className="grid gap-2" style={{ gridTemplateColumns: `80px repeat(${maxColumnsNeeded}, 160px) 48px 98px${showSecondDriverColumn ? ' 98px' : ''}` }}>
           {/* Header Row - Shows pilots present today */}
           {role !== 'agency' ? (
             <div data-sticky-column="true" className={`h-7 ${scale === 1 ? 'sticky left-0' : ''} z-10 relative`}>
@@ -1927,7 +1986,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
               <div
                 key={`time-${timeIndex}-${displayIndex}`}
                 data-sticky-column="true"
-                className={`h-14 ${scale === 1 ? 'sticky left-0' : ''} z-10 relative`}
+                className={`h-20 ${scale === 1 ? 'sticky left-0' : ''} z-10 relative`}
               >
                 <div className="absolute top-0 bottom-0 bg-gray-50 dark:bg-zinc-950" style={{ left: '-16px', right: '-8px' }} />
                 <div
@@ -1970,7 +2029,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                     return (
                       <div
                         key={`invisible-${timeIndex}-${cellIdx}`}
-                        className="h-14"
+                        className="h-20"
                         style={{ gridColumn: `span 1` }}
                       />
                     );
@@ -1998,7 +2057,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                   return (
                     <div
                       key={`booking-${timeIndex}-${cell.booking.id || cellIdx}`}
-                      className="h-14"
+                      className="h-20"
                       style={{ gridColumn: `span ${span}` }}
                     >
                       <BookingAvailable
@@ -2046,6 +2105,11 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                   const currentUserPilotIndex = currentUserPilot ? pilots.findIndex(p => p.uid === currentUserPilot.uid) : -1;
                   const isCurrentUserAvailableAtThisTime = currentUserPilot && isPilotAvailableForTimeSlot(currentUserPilot.uid, timeSlot);
 
+                  // Check if this cell is "on request" and if the user can book on it
+                  const cellAvailabilityStatus = cell.pilot ? getPilotAvailabilityStatus?.(cell.pilot.uid, timeSlot) : undefined;
+                  const isOnRequestCell = cellAvailabilityStatus === "onRequest";
+                  const canBookOnRequestCell = role === "admin" || role === "pilot";
+
                   // Left-click on available cell - check if in move mode first
                   const handleAvailableLeftClick = () => {
                     // If in move mode, handle destination click
@@ -2066,13 +2130,14 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                   return (
                     <div
                       key={`pilot-${timeIndex}-${cell.pilot?.uid || cellIdx}`}
-                      className="h-14"
+                      className="h-20"
                       style={{ gridColumn: `span 1` }}
                     >
                       <BookingAvailable
                         pilotId={cell.pilot?.displayName || ""}
                         timeSlot={timeSlot}
                         status={cell.status}
+                        pilotAvailabilityStatus={cell.pilot ? getPilotAvailabilityStatus?.(cell.pilot.uid, timeSlot) : undefined}
                         span={1}
                         isCurrentUserPilot={isCurrentUserPilot}
                         isFemalePilot={cell.pilot?.femalePilot}
@@ -2096,7 +2161,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                             ? handleNoPilotContextMenu(currentUserPilotIndex, timeIndex)
                             : undefined
                         }
-                        droppableId={cell.status === "available" ? `droppable-${timeIndex}-${cell.pilotIndex ?? 0}` : undefined}
+                        droppableId={cell.status === "available" && (!isOnRequestCell || canBookOnRequestCell) ? `droppable-${timeIndex}-${cell.pilotIndex ?? 0}` : undefined}
                         draggedItemPax={draggedBooking ? (draggedBooking.numberOfPeople || draggedBooking.span || 1) : draggedRequest ? draggedRequest.numberOfPeople : draggedDeletedBooking ? (draggedDeletedBooking.numberOfPeople || draggedDeletedBooking.span || 1) : undefined}
                         hasEnoughSpace={
                           (draggedBooking || draggedRequest || draggedDeletedBooking) && cell.status === "available"
@@ -2104,6 +2169,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                             : true
                         }
                         isMoveModeActive={moveMode.isActive || requestMoveMode.isActive || deletedBookingMoveMode.isActive}
+                        canBookOnRequest={role === "admin" || role === "pilot"}
                       />
                     </div>
                   );
@@ -2115,13 +2181,13 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
               // Spacer between bookings and drivers
               <div
                 key={`spacer-${timeIndex}`}
-                className="h-14 w-full"
+                className="h-20 w-full"
               />,
 
               // Driver/Vehicle Cell - Always show, reads from driverAssignments (independent of bookings)
               <div
                 key={`driver-vehicle-${timeIndex}`}
-                className="h-14"
+                className="h-20"
               >
                 {(() => {
                   // Always use driverAssignments, never booking fields
@@ -2145,7 +2211,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
               ...(showSecondDriverColumn ? [
                 <div
                   key={`driver-vehicle-2-${timeIndex}`}
-                  className="h-14"
+                  className="h-20"
                 >
                   {(() => {
                     // Always use driverAssignments, never booking fields
@@ -2173,7 +2239,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
       {/* Booking Requests Inbox and Driver Location Map - Only show to admins */}
       {role === 'admin' && (
       <div
-        className="flex flex-col gap-4 max-w-4xl"
+        className="flex flex-col gap-4 max-w-4xl sticky left-4"
         style={{
           marginTop: `${24 + (gridHeight * (scale - 1))}px`
         }}
@@ -2305,7 +2371,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
       {/* Driver's Own Location Map - Only show to drivers */}
       {role === 'driver' && (
       <div
-        className="flex flex-col gap-4 max-w-4xl"
+        className="flex flex-col gap-4 max-w-4xl sticky left-4"
         style={{
           marginTop: `${24 + (gridHeight * (scale - 1))}px`
         }}
@@ -2503,10 +2569,13 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
           isOpen={availabilityContextMenu.isOpen}
           position={availabilityContextMenu.position}
           isSignedOut={availabilityContextMenu.isSignedOut}
+          currentStatus={availabilityContextMenu.currentStatus}
           canSignOut={true}
+          canSetOnRequest={role === "admin" || role === "pilot"}
           pilotName={pilots[availabilityContextMenu.pilotIndex]?.displayName}
           onSignIn={handleSignIn}
           onSignOut={handleSignOut}
+          onOnRequest={handleOnRequest}
           onClose={() => setAvailabilityContextMenu(null)}
         />
       )}
@@ -2644,6 +2713,12 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
           isOpen={timeSlotContextMenu.isOpen}
           position={timeSlotContextMenu.position}
           isAdditionalSlot={timeSlotContextMenu.isAdditional}
+          canManageAvailability={role === "admin" || role === "pilot"}
+          currentAvailabilityStatus={
+            currentUser?.uid
+              ? getPilotAvailabilityStatus?.(currentUser.uid, timeSlotContextMenu.timeSlot) || "unavailable"
+              : "unavailable"
+          }
           onAddPilot={() => {
             setAddPilotModal({
               isOpen: true,
@@ -2666,6 +2741,138 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
           }}
           onRemoveTime={() => {
             handleRemoveTimeSlot(timeSlotContextMenu.timeSlot);
+            setTimeSlotContextMenu(null);
+          }}
+          onSignIn={async () => {
+            // Sign in (set to available) for this time slot
+            if (!currentUser?.uid) {
+              setTimeSlotContextMenu(null);
+              return;
+            }
+
+            try {
+              const { addDoc, collection, query, where, getDocs, updateDoc, doc } = await import("firebase/firestore");
+              const { db } = await import("../firebase/config");
+              const { format } = await import("date-fns");
+
+              const dateStr = format(selectedDate, "yyyy-MM-dd");
+              const timeSlot = timeSlotContextMenu.timeSlot;
+
+              // Check if there's already an availability record
+              const q = query(
+                collection(db, "availability"),
+                where("userId", "==", currentUser.uid),
+                where("date", "==", dateStr),
+                where("timeSlot", "==", timeSlot)
+              );
+
+              const snapshot = await getDocs(q);
+
+              if (snapshot.empty) {
+                // Create new record with available status
+                await addDoc(collection(db, "availability"), {
+                  userId: currentUser.uid,
+                  date: dateStr,
+                  timeSlot: timeSlot,
+                  status: "available",
+                  signedInAt: new Date().toISOString(),
+                });
+              } else {
+                // Update existing record to set status to available
+                const updatePromises = snapshot.docs.map((docSnapshot) =>
+                  updateDoc(doc(db, "availability", docSnapshot.id), { status: "available" })
+                );
+                await Promise.all(updatePromises);
+              }
+
+              console.log("Signed in successfully from time slot menu");
+            } catch (error) {
+              console.error("Error signing in:", error);
+            }
+
+            setTimeSlotContextMenu(null);
+          }}
+          onSignOut={async () => {
+            // Sign out (delete availability record) for this time slot
+            if (!currentUser?.uid) {
+              setTimeSlotContextMenu(null);
+              return;
+            }
+
+            try {
+              const { collection, query, where, getDocs, deleteDoc } = await import("firebase/firestore");
+              const { db } = await import("../firebase/config");
+              const { format } = await import("date-fns");
+
+              const dateStr = format(selectedDate, "yyyy-MM-dd");
+              const timeSlot = timeSlotContextMenu.timeSlot;
+
+              // Delete availability record
+              const q = query(
+                collection(db, "availability"),
+                where("userId", "==", currentUser.uid),
+                where("date", "==", dateStr),
+                where("timeSlot", "==", timeSlot)
+              );
+
+              const snapshot = await getDocs(q);
+              const deletePromises = snapshot.docs.map((docSnapshot) => deleteDoc(docSnapshot.ref));
+              await Promise.all(deletePromises);
+
+              console.log("Signed out successfully from time slot menu");
+            } catch (error) {
+              console.error("Error signing out:", error);
+            }
+
+            setTimeSlotContextMenu(null);
+          }}
+          onOnRequest={async () => {
+            // Set current user's availability to "on request" for this time slot
+            if (!currentUser?.uid) {
+              setTimeSlotContextMenu(null);
+              return;
+            }
+
+            try {
+              const { addDoc, collection, query, where, getDocs, updateDoc, doc } = await import("firebase/firestore");
+              const { db } = await import("../firebase/config");
+              const { format } = await import("date-fns");
+
+              const dateStr = format(selectedDate, "yyyy-MM-dd");
+              const timeSlot = timeSlotContextMenu.timeSlot;
+
+              // Check if there's already an availability record
+              const q = query(
+                collection(db, "availability"),
+                where("userId", "==", currentUser.uid),
+                where("date", "==", dateStr),
+                where("timeSlot", "==", timeSlot)
+              );
+
+              const snapshot = await getDocs(q);
+
+              if (snapshot.empty) {
+                // Create new record with onRequest status
+                await addDoc(collection(db, "availability"), {
+                  userId: currentUser.uid,
+                  date: dateStr,
+                  timeSlot: timeSlot,
+                  status: "onRequest",
+                  signedInAt: new Date().toISOString(),
+                });
+              } else {
+                // Update existing record to set status to onRequest
+                const updatePromises = snapshot.docs.map((docSnapshot) =>
+                  updateDoc(doc(db, "availability", docSnapshot.id), { status: "onRequest" })
+                );
+                await Promise.all(updatePromises);
+              }
+
+              console.log("Set to on request successfully from time slot menu");
+            } catch (error) {
+              console.error("Error setting on request:", error);
+            }
+
             setTimeSlotContextMenu(null);
           }}
           onClose={() => setTimeSlotContextMenu(null)}

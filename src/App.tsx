@@ -1,14 +1,17 @@
 import { useState, useMemo } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { startOfWeek, format } from "date-fns";
+import { startOfWeek, startOfMonth, format } from "date-fns";
 import { Header } from "./components/Header";
 import { ScheduleGrid } from "./components/ScheduleGrid";
 import { AvailabilityGrid } from "./components/AvailabilityGrid";
+import { AvailabilityMonthGrid } from "./components/AvailabilityMonthGrid";
 import { Account } from "./components/Account/Account";
 import { BookingSources } from "./components/BookingSources";
 import { Accounting } from "./components/Accounting";
 import { Priority } from "./components/Priority";
 import { Forms } from "./components/Forms";
+import { GiftVouchers } from "./components/GiftVouchers";
+import { GiftVoucherForm } from "./components/GiftVoucherForm";
 import { NotificationSettings } from "./components/NotificationSettings";
 import { UserManagement } from "./components/UserManagement";
 import { Email } from "./components/Email";
@@ -36,7 +39,7 @@ function DailyPlanPage() {
     return bookings.filter(booking => booking.date === selectedDateStr);
   }, [bookings, selectedDate]);
 
-  const { pilots, loading: pilotsLoading, isPilotAvailableForTimeSlot, saveCustomPilotOrder } = usePilots(selectedDate);
+  const { pilots, loading: pilotsLoading, isPilotAvailableForTimeSlot, getPilotAvailabilityStatus, saveCustomPilotOrder } = usePilots(selectedDate);
   const isLoading = pilotsLoading || bookingsLoading;
   const timeSlots = useMemo(() => getTimeSlotsByDate(selectedDate), [selectedDate]);
 
@@ -55,6 +58,7 @@ function DailyPlanPage() {
         bookings={filteredBookings}
         allBookingsForSearch={bookings}
         isPilotAvailableForTimeSlot={isPilotAvailableForTimeSlot}
+        getPilotAvailabilityStatus={getPilotAvailabilityStatus}
         saveCustomPilotOrder={saveCustomPilotOrder}
         loading={isLoading}
         currentUserDisplayName={currentUser?.displayName || currentUser?.email || undefined}
@@ -71,6 +75,8 @@ function DailyPlanPage() {
 function AvailabilityPage() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [weekStartDate, setWeekStartDate] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
+  const [monthStartDate, setMonthStartDate] = useState(startOfMonth(new Date()));
+  const [availabilityViewMode, setAvailabilityViewMode] = useState<'week' | 'month'>('week');
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-zinc-950">
@@ -79,8 +85,16 @@ function AvailabilityPage() {
         onDateChange={setSelectedDate}
         weekStartDate={weekStartDate}
         onWeekChange={setWeekStartDate}
+        monthStartDate={monthStartDate}
+        onMonthChange={setMonthStartDate}
+        availabilityViewMode={availabilityViewMode}
+        onAvailabilityViewModeChange={setAvailabilityViewMode}
       />
-      <AvailabilityGrid weekStartDate={weekStartDate} />
+      {availabilityViewMode === 'week' ? (
+        <AvailabilityGrid weekStartDate={weekStartDate} />
+      ) : (
+        <AvailabilityMonthGrid monthStartDate={monthStartDate} />
+      )}
     </div>
   );
 }
@@ -111,8 +125,9 @@ function AppContent() {
 
   return (
     <Routes>
-      {/* Public route */}
+      {/* Public routes */}
       <Route path="/booking-request" element={<BookingRequestForm />} />
+      <Route path="/gift-voucher" element={<GiftVoucherForm />} />
 
       {/* Login route */}
       <Route path="/login" element={<Login />} />
@@ -166,6 +181,14 @@ function AppContent() {
         <ProtectedRoute>
           <PageWrapper>
             <Forms />
+          </PageWrapper>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/gift-vouchers" element={
+        <ProtectedRoute>
+          <PageWrapper>
+            <GiftVouchers />
           </PageWrapper>
         </ProtectedRoute>
       } />

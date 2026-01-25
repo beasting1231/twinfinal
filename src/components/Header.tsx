@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/sheet";
 import { DatePicker } from "./DatePicker";
 import { WeekPicker } from "./WeekPicker";
+import { MonthPicker } from "./MonthPicker";
 import { useAuth } from "../contexts/AuthContext";
 import { useRole } from "../hooks/useRole";
 
@@ -19,13 +20,21 @@ interface HeaderProps {
   onDateChange?: (date: Date) => void;
   weekStartDate?: Date;
   onWeekChange?: (date: Date) => void;
+  monthStartDate?: Date;
+  onMonthChange?: (date: Date) => void;
+  availabilityViewMode?: 'week' | 'month';
+  onAvailabilityViewModeChange?: (mode: 'week' | 'month') => void;
 }
 
 export function Header({
   date,
   onDateChange,
   weekStartDate,
-  onWeekChange
+  onWeekChange,
+  monthStartDate,
+  onMonthChange,
+  availabilityViewMode = 'week',
+  onAvailabilityViewModeChange
 }: HeaderProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const navigate = useNavigate();
@@ -135,6 +144,16 @@ export function Header({
                   Forms
                 </button>
               )}
+              {role === 'admin' && (
+                <button
+                  onClick={() => handleNavigate("/gift-vouchers")}
+                  className={`w-full text-left px-4 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors text-gray-900 dark:text-white ${
+                    isActive("/gift-vouchers") ? "bg-gray-100 dark:bg-zinc-800" : ""
+                  }`}
+                >
+                  Gift Vouchers
+                </button>
+              )}
               {permissions.canManageNotifications && (
                 <button
                   onClick={() => handleNavigate("/notifications")}
@@ -189,12 +208,30 @@ export function Header({
           </SheetContent>
         </Sheet>
 
-        {/* Center: Date/Week Picker */}
-        <div className="flex-1 flex justify-center">
+        {/* Center: Date/Week/Month Picker */}
+        <div className="flex-1 flex justify-center items-center gap-2">
           {location.pathname === "/" && date && onDateChange ? (
             <DatePicker date={date} onDateChange={onDateChange} />
-          ) : location.pathname === "/availability" && weekStartDate && onWeekChange ? (
-            <WeekPicker weekStartDate={weekStartDate} onWeekChange={onWeekChange} />
+          ) : location.pathname === "/availability" ? (
+            <>
+              {/* View mode selector */}
+              {onAvailabilityViewModeChange && (
+                <select
+                  value={availabilityViewMode}
+                  onChange={(e) => onAvailabilityViewModeChange(e.target.value as 'week' | 'month')}
+                  className="bg-white dark:bg-zinc-900 border-2 border-gray-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm font-medium shadow-sm hover:border-gray-400 dark:hover:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors cursor-pointer"
+                >
+                  <option value="week">Week</option>
+                  <option value="month">Month</option>
+                </select>
+              )}
+              {/* Show appropriate picker based on view mode */}
+              {availabilityViewMode === 'week' && weekStartDate && onWeekChange ? (
+                <WeekPicker weekStartDate={weekStartDate} onWeekChange={onWeekChange} />
+              ) : availabilityViewMode === 'month' && monthStartDate && onMonthChange ? (
+                <MonthPicker monthStartDate={monthStartDate} onMonthChange={onMonthChange} />
+              ) : null}
+            </>
           ) : null}
         </div>
 

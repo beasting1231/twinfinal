@@ -41,12 +41,13 @@ export interface Booking {
   phoneNumber?: string;
   email?: string;
   notes?: string;
+  officeNotes?: string;
   commission?: number | null;
   commissionStatus?: "paid" | "unpaid";
   femalePilotsRequired?: number;
   flightType?: "sensational" | "classic" | "early bird";
   assignedPilots: string[];
-  bookingStatus: "unconfirmed" | "confirmed" | "pending" | "cancelled" | "deleted";
+  bookingStatus: "unconfirmed" | "confirmed" | "pending" | "cancelled" | "deleted" | "no show";
   span: number;
   pilotPayments?: PilotPayment[];
   driver?: string;
@@ -75,6 +76,7 @@ export interface UserProfile {
   updatedAt?: Date;
   appVersion?: string; // Last app version user was seen on
   lastActiveAt?: string; // ISO timestamp of last activity
+  mwst?: boolean; // Whether pilot charges MWST (VAT)
 }
 
 export interface Pilot {
@@ -86,6 +88,8 @@ export interface Pilot {
 }
 
 export type BookingStatus = "available" | "booked" | "noPilot";
+
+export type AvailabilityStatus = "available" | "onRequest" | "unavailable";
 
 export interface DriverAssignment {
   id?: string;
@@ -120,6 +124,8 @@ export interface BookingRequest {
   flightType?: "sensational" | "classic" | "early bird";
   notes?: string;
   bookingSource?: string; // e.g., "Online" for requests from the booking form
+  commission?: number; // Commission amount for bookings from custom forms
+  commissionStatus?: "paid" | "unpaid"; // Commission payment status
   status: "pending" | "approved" | "rejected" | "waitlist";
   createdAt: Date;
 }

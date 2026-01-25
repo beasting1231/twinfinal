@@ -309,6 +309,7 @@ export function useBookings() {
 
       await updateDoc(doc(db, "bookings", id), {
         bookingStatus: "deleted",
+        assignedPilots: [], // Unassign all pilots when deleting
         deletedBy: currentUser?.uid || "",
         deletedByName: currentUser?.displayName || currentUser?.email || "",
         deletedAt: serverTimestamp(),
