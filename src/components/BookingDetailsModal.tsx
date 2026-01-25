@@ -804,7 +804,7 @@ export function BookingDetailsModal({
     setShowStatusDropdown(false);
   };
 
-  const handleNoShowPilotPayment = (willPay: boolean) => {
+  const handleNoShowPilotPayment = async (willPay: boolean) => {
     if (!booking.id || !onUpdate) return;
 
     if (willPay) {
@@ -825,7 +825,7 @@ export function BookingDetailsModal({
       });
 
       // Update the booking with no show status and payments
-      onUpdate(booking.id, {
+      await onUpdate(booking.id, {
         bookingStatus: 'no show',
         pilotPayments: updatedPayments
       });
@@ -833,7 +833,7 @@ export function BookingDetailsModal({
       setPilotPayments(updatedPayments);
     } else {
       // Unassign all pilots
-      onUpdate(booking.id, {
+      await onUpdate(booking.id, {
         bookingStatus: 'no show',
         assignedPilots: [],
         pilotPayments: []
@@ -843,6 +843,7 @@ export function BookingDetailsModal({
     }
 
     setShowNoShowDialog(false);
+    onOpenChange(false); // Close the booking details modal
   };
 
   const handlePaymentUpdate = (pilotName: string, field: keyof PilotPayment, value: any) => {
@@ -2191,32 +2192,25 @@ export function BookingDetailsModal({
       {showNoShowDialog && (
         <Dialog open={showNoShowDialog} onOpenChange={setShowNoShowDialog}>
           <DialogContent className="max-w-md bg-white dark:bg-zinc-950 border-gray-300 dark:border-zinc-800 text-gray-900 dark:text-white">
-            <DialogHeader>
-              <DialogTitle className="text-gray-900 dark:text-white text-xl font-semibold">No Show - Pilot Payment</DialogTitle>
-            </DialogHeader>
-            <div className="py-4">
-              <p className="text-gray-700 dark:text-zinc-300 text-base mb-6">
-                Will the pilots be paid for this flight?
+            <div className="py-6">
+              <p className="text-gray-900 dark:text-white text-lg font-medium mb-6 text-center">
+                Are the pilots getting paid?
               </p>
               <div className="flex gap-3">
                 <Button
                   onClick={() => handleNoShowPilotPayment(true)}
-                  className="flex-1 bg-green-600 hover:bg-green-700 text-white font-medium py-3"
+                  className="flex-1 bg-green-600 hover:bg-green-700 text-white font-medium py-3 text-base"
                 >
-                  Yes, Pay Pilots
+                  Yes
                 </Button>
                 <Button
                   onClick={() => handleNoShowPilotPayment(false)}
                   variant="outline"
-                  className="flex-1 border-2 border-gray-300 dark:border-zinc-700 text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 font-medium py-3"
+                  className="flex-1 border-2 border-gray-300 dark:border-zinc-700 text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 font-medium py-3 text-base"
                 >
-                  No, Don't Pay
+                  No
                 </Button>
               </div>
-              <p className="text-xs text-gray-500 dark:text-zinc-500 mt-4">
-                • If yes: Payment set to -103 CHF (ticket method)<br/>
-                • If no: All pilots will be unassigned
-              </p>
             </div>
           </DialogContent>
         </Dialog>
