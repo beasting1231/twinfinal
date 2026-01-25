@@ -814,6 +814,9 @@ export function BookingDetailsModal({
     console.log("Assigned pilots:", editedBooking.assignedPilots);
     console.log("Booking ID:", booking.id);
 
+    // Close the no show dialog first
+    setShowNoShowDialog(false);
+
     if (willPay) {
       // Set payment to -103 with method "ticket" for all assigned pilots
       const updatedPayments: PilotPayment[] = editedBooking.assignedPilots.map(pilotUid => {
@@ -833,6 +836,9 @@ export function BookingDetailsModal({
 
       console.log("Updated payments to save:", updatedPayments);
 
+      // IMPORTANT: Stop editing BEFORE updating so Firestore snapshot isn't queued
+      stopEditing();
+
       // Update the booking with no show status and payments
       await onUpdate(booking.id, {
         bookingStatus: 'no show',
@@ -841,10 +847,16 @@ export function BookingDetailsModal({
 
       console.log("Booking updated successfully");
 
-      setEditedBooking({ ...editedBooking, bookingStatus: 'no show', pilotPayments: updatedPayments });
-      setPilotPayments(updatedPayments);
+      // Wait a bit for Firestore to propagate the change
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Now close the modal
+      onOpenChange(false);
     } else {
       console.log("Not paying pilots - unassigning all");
+
+      // IMPORTANT: Stop editing BEFORE updating so Firestore snapshot isn't queued
+      stopEditing();
 
       // Unassign all pilots
       await onUpdate(booking.id, {
@@ -852,12 +864,13 @@ export function BookingDetailsModal({
         assignedPilots: [],
         pilotPayments: []
       });
-      setEditedBooking({ ...editedBooking, bookingStatus: 'no show', assignedPilots: [], pilotPayments: [] });
-      setPilotPayments([]);
-    }
 
-    setShowNoShowDialog(false);
-    onOpenChange(false); // Close the booking details modal
+      // Wait a bit for Firestore to propagate the change
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Now close the modal
+      onOpenChange(false);
+    }
   };
 
   const handlePaymentUpdate = (pilotName: string, field: keyof PilotPayment, value: any) => {
