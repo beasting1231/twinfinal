@@ -75,7 +75,7 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
   // For non-admins, always use currentUser
   const targetUserId = role === 'admin' && selectedUserId ? selectedUserId : undefined;
 
-  const { isAvailable, toggleAvailability, toggleDay, loading, saving, justSaved } = useAvailability(targetUserId);
+  const { isAvailable, getAvailabilityStatus, toggleAvailability, toggleDay, loading, saving, justSaved } = useAvailability(targetUserId);
   const { bookings } = useBookings();
 
   // State to track all pilots' availability data (currently unused but kept for potential future use)
@@ -501,6 +501,7 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
                       <AvailabilityCell
                         timeSlot={slot.time}
                         isAvailable={isAvailable(day, slot.time)}
+                        status={getAvailabilityStatus(day, slot.time)}
                         isLocked={isCellLocked(day, slot.time)}
                         isDisabled={!canEditDay(day)}
                         canOverrideLock={canAdminOverrideLock}

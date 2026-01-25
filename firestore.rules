@@ -96,6 +96,14 @@ service cloud.firestore {
       allow read, update, delete: if request.auth != null && hasRole('admin');
     }
 
+    // Gift vouchers collection
+    match /giftVouchers/{voucherId} {
+      // Anyone can create a gift voucher order (public form)
+      allow create: if true;
+      // Only admin can read/update/delete
+      allow read, update, delete: if request.auth != null && hasRole('admin');
+    }
+
     // Availability collection
     match /availability/{availabilityId} {
       // Allow public read for booking form availability check
@@ -193,6 +201,14 @@ service cloud.firestore {
       // All authenticated users can read (to see changed times)
       allow read: if request.auth != null;
       // Only admins can create, update, or delete time overrides
+      allow create, update, delete: if request.auth != null && hasRole('admin');
+    }
+
+    // Booking forms collection (custom booking forms with commission rates)
+    match /bookingForms/{formId} {
+      // Public read (for booking request form to get form settings)
+      allow read: if true;
+      // Only admins can create, update, or delete booking forms
       allow create, update, delete: if request.auth != null && hasRole('admin');
     }
   }

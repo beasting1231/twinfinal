@@ -857,3 +857,398 @@ exports.sendBookingConfirmationOnCreate = onDocumentCreated(
 const {emailApi} = require("./emailApi");
 exports.emailApi = emailApi;
 
+// ===== GIFT VOUCHER EMAIL FUNCTION =====
+const {PDFDocument, rgb, StandardFonts} = require("pdf-lib");
+const fs = require("fs");
+const path = require("path");
+
+// Flight type display names for the voucher
+const FLIGHT_TYPE_LABELS = {
+  "sensational": "The Sensational: Beatenberg - Interlaken 1370m",
+  "classic": "The Classic: Beatenberg - Interlaken 1060m",
+  "romantic": "The Romantic: Niederhorn - Interlaken 1900m",
+  "spectacular": "The Spectacular: Schynige Platte - Interlaken 1600m",
+};
+
+// Default styling values (matching the frontend GiftVouchers.tsx)
+const VOUCHER_STYLES = {
+  // Colors (hex to RGB 0-1)
+  blueColor: {r: 0.102, g: 0.353, b: 0.588}, // #1a5a96
+  orangeColor: {r: 0.851, g: 0.471, b: 0.149}, // #d97826
+
+  // Global text area position
+  textAreaX: 80, // percentage from left
+  textAreaY: 40, // percentage from bottom
+  lineGap: 21, // pixels between lines
+
+  // Font sizes
+  headerSize: 15,
+  flightSize: 14,
+  photoSize: 14,
+  voucherSize: 12,
+  footerSize: 12,
+  websiteSize: 9,
+};
+
+// Generate gift voucher customer email HTML
+function generateGiftVoucherEmailHTML(voucherData) {
+  const {
+    firstName,
+    lastName,
+    recipientName,
+    flightType,
+    photoPackage,
+    transport,
+    totalPrice,
+  } = voucherData;
+
+  const flightLabel = FLIGHT_TYPE_LABELS[flightType] || flightType;
+
+  return `
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Your Gift Voucher</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: #f7f7f8;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        color: #111827;
+      }
+      .container {
+        max-width: 600px;
+        margin: 40px auto;
+        background-color: #ffffff;
+        border-radius: 16px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        overflow: hidden;
+      }
+      .logo-section {
+        text-align: center;
+        padding: 32px 20px 20px 20px;
+      }
+      .logo-section img {
+        height: 120px;
+        width: auto;
+      }
+      .header {
+        text-align: center;
+        padding: 20px 20px 30px 20px;
+        border-bottom: 1px solid #e5e7eb;
+      }
+      .header h1 {
+        font-size: 28px;
+        font-weight: 700;
+        margin: 0;
+        color: #1f2937;
+      }
+      .content {
+        padding: 32px;
+      }
+      .content p {
+        margin: 0 0 16px 0;
+        line-height: 1.6;
+        color: #374151;
+      }
+      .details {
+        background: #fef3c7;
+        border: 1px solid #f59e0b;
+        border-radius: 12px;
+        padding: 20px;
+        margin-top: 20px;
+      }
+      .details-row {
+        display: flex;
+        border-bottom: 1px solid #fcd34d;
+        padding: 10px 0;
+      }
+      .details-row:last-child {
+        border-bottom: none;
+      }
+      .label {
+        width: 150px;
+        font-weight: 600;
+        color: #92400e;
+      }
+      .value {
+        flex: 1;
+        color: #111827;
+      }
+      .footer {
+        text-align: center;
+        padding: 24px;
+        font-size: 13px;
+        color: #6b7280;
+        border-top: 1px solid #e5e7eb;
+      }
+      .footer a {
+        color: #2563eb;
+        text-decoration: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="logo-section">
+        <img src="https://twinparagliding.web.app/logo.png" alt="Twin Paragliding Logo" />
+      </div>
+      <div class="header">
+        <h1>Your Gift Voucher 🎁</h1>
+      </div>
+      <div class="content">
+        <p>Hello <strong>${firstName}</strong>,</p>
+        <p>Thank you for your gift voucher order! Your voucher is attached to this email as a PDF.</p>
+        ${recipientName ? `<p>This voucher is personalized for: <strong>${recipientName}</strong></p>` : ""}
+
+        <div class="details">
+          <div class="details-row"><div class="label">Flight</div><div class="value">${flightLabel}</div></div>
+          ${photoPackage ? `<div class="details-row"><div class="label">Photo & Video</div><div class="value">Included</div></div>` : ""}
+          ${transport ? `<div class="details-row"><div class="label">Transport</div><div class="value">Included</div></div>` : ""}
+          <div class="details-row"><div class="label">Total</div><div class="value"><strong>CHF ${totalPrice}.--</strong></div></div>
+        </div>
+
+        <p style="margin-top: 24px;"><strong>How to redeem:</strong></p>
+        <p>The recipient can book their flight by contacting us via WhatsApp or phone at <strong>079 622 5100</strong>, or by email at <strong>bookings@twinparagliding.com</strong>. The voucher is valid for 2 years.</p>
+
+        <p style="margin-top: 24px;">We look forward to welcoming ${recipientName || "your gift recipient"} for an unforgettable flight!</p>
+        <p><strong>— The Twin Paragliding Team</strong></p>
+      </div>
+      <div class="footer">
+        <div><strong>Twin Paragliding</strong> — Discover why birds sing</div>
+        <div style="margin-top:8px;">📧 <a href="mailto:bookings@twinparagliding.com">bookings@twinparagliding.com</a> · 🌐 <a href="https://www.fly-twin.com">www.fly-twin.com</a></div>
+      </div>
+    </div>
+  </body>
+</html>
+  `;
+}
+
+// Generate the customized PDF voucher from blank PNG template
+async function generateVoucherPDF(voucherData) {
+  const {flightType, photoPackage} = voucherData;
+  const flightLabel = FLIGHT_TYPE_LABELS[flightType] || flightType;
+  const styles = VOUCHER_STYLES;
+
+  // Create a new PDF document
+  const pdfDoc = await PDFDocument.create();
+
+  // Load the blank PNG template
+  const templatePath = path.join(__dirname, "gutschein-template.png");
+  const templateBytes = fs.readFileSync(templatePath);
+  const templateImage = await pdfDoc.embedPng(templateBytes);
+
+  // Get image dimensions (2480 x 1181 pixels)
+  const imgWidth = templateImage.width;
+  const imgHeight = templateImage.height;
+
+  // Create a page with the same aspect ratio (scale down for PDF)
+  const scale = 0.29;
+  const pageWidth = imgWidth * scale;
+  const pageHeight = imgHeight * scale;
+
+  const page = pdfDoc.addPage([pageWidth, pageHeight]);
+
+  // Draw the background image
+  page.drawImage(templateImage, {
+    x: 0,
+    y: 0,
+    width: pageWidth,
+    height: pageHeight,
+  });
+
+  // Embed fonts
+  const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const helveticaOblique = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
+
+  // Colors from styling
+  const blueColor = rgb(styles.blueColor.r, styles.blueColor.g, styles.blueColor.b);
+  const orangeColor = rgb(styles.orangeColor.r, styles.orangeColor.g, styles.orangeColor.b);
+
+  // Global positioning
+  const rightMargin = pageWidth * (styles.textAreaX / 100);
+  const startY = pageHeight * (styles.textAreaY / 100);
+  const lineGap = styles.lineGap;
+
+  // Track current line
+  let lineIndex = 0;
+
+  // === HEADER: "VOUCHER TICKET TO FLY" ===
+  const headerY = startY - (lineIndex * lineGap);
+
+  const voucherHeaderText = "V O U C H E R   ";
+  const voucherHeaderWidth = helveticaBold.widthOfTextAtSize(voucherHeaderText, styles.headerSize);
+
+  const ticketText = "T I C K E T   T O   F L Y";
+  const ticketWidth = helveticaBold.widthOfTextAtSize(ticketText, styles.headerSize);
+
+  const totalHeaderWidth = voucherHeaderWidth + ticketWidth;
+  const headerStartX = rightMargin - totalHeaderWidth;
+
+  page.drawText(voucherHeaderText, {
+    x: headerStartX,
+    y: headerY,
+    size: styles.headerSize,
+    font: helveticaBold,
+    color: orangeColor,
+  });
+
+  page.drawText(ticketText, {
+    x: headerStartX + voucherHeaderWidth,
+    y: headerY,
+    size: styles.headerSize,
+    font: helveticaBold,
+    color: blueColor,
+  });
+
+  lineIndex++;
+
+  // === FLIGHT TYPE ===
+  const flightY = startY - (lineIndex * lineGap);
+  const flightWidth = helveticaBold.widthOfTextAtSize(flightLabel, styles.flightSize);
+  page.drawText(flightLabel, {
+    x: rightMargin - flightWidth,
+    y: flightY,
+    size: styles.flightSize,
+    font: helveticaBold,
+    color: blueColor,
+  });
+
+  lineIndex++;
+
+  // === PHOTO & VIDEO SERVICE (if included) ===
+  if (photoPackage) {
+    const photoText = "incl. Photo & Video";
+    const photoY = startY - (lineIndex * lineGap);
+    const photoWidth = helveticaBold.widthOfTextAtSize(photoText, styles.photoSize);
+    page.drawText(photoText, {
+      x: rightMargin - photoWidth,
+      y: photoY,
+      size: styles.photoSize,
+      font: helveticaBold,
+      color: orangeColor,
+    });
+    lineIndex++;
+  }
+
+  // === VOUCHER NUMBER ===
+  const voucherNumText = "# 0 0 0 0 0 0";
+  const voucherNumY = startY - (lineIndex * lineGap);
+  const voucherNumWidth = helveticaBold.widthOfTextAtSize(voucherNumText, styles.voucherSize);
+  page.drawText(voucherNumText, {
+    x: rightMargin - voucherNumWidth,
+    y: voucherNumY,
+    size: styles.voucherSize,
+    font: helveticaBold,
+    color: blueColor,
+  });
+
+  lineIndex++;
+
+  // === FOOTER ===
+  const footerY = startY - (lineIndex * lineGap);
+  const footerText = "Valid for 2 Years  |  Info & Booking: 079 622 5100";
+  const footerWidth = helveticaOblique.widthOfTextAtSize(footerText, styles.footerSize);
+  page.drawText(footerText, {
+    x: rightMargin - footerWidth,
+    y: footerY,
+    size: styles.footerSize,
+    font: helveticaOblique,
+    color: blueColor,
+  });
+
+  lineIndex++;
+
+  // === WEBSITE ===
+  const websiteY = startY - (lineIndex * lineGap);
+  const websiteText = "www.fly-twin.com";
+  const websiteWidth = helveticaBold.widthOfTextAtSize(websiteText, styles.websiteSize);
+  page.drawText(websiteText, {
+    x: rightMargin - websiteWidth,
+    y: websiteY,
+    size: styles.websiteSize,
+    font: helveticaBold,
+    color: blueColor,
+  });
+
+  // Save the PDF
+  const pdfBytes = await pdfDoc.save();
+  return Buffer.from(pdfBytes);
+}
+
+// Cloud Function: Send gift voucher email when order is created
+exports.sendGiftVoucherEmail = onDocumentCreated(
+    "giftVouchers/{voucherId}",
+    async (event) => {
+      const voucherData = event.data.data();
+
+      // Skip if already processed
+      if (voucherData.emailSent) {
+        console.log("Email already sent for this voucher");
+        return;
+      }
+
+      const {
+        email,
+        firstName,
+        lastName,
+        deliveryMethod,
+      } = voucherData;
+
+      if (!email) {
+        console.error("No email address provided for gift voucher");
+        await event.data.ref.update({emailStatus: "failed", emailError: "No email address"});
+        return;
+      }
+
+      try {
+        // Generate the customized PDF
+        const pdfBuffer = await generateVoucherPDF(voucherData);
+
+        // Generate email HTML
+        const htmlContent = generateGiftVoucherEmailHTML(voucherData);
+
+        // Email options with PDF attachment
+        const mailOptions = {
+          from: {
+            name: "Twin Paragliding",
+            address: "bookings@twinparagliding.com",
+          },
+          to: email,
+          subject: "🎁 Your Gift Voucher - Twin Paragliding",
+          html: htmlContent,
+          attachments: [
+            {
+              filename: "Gift-Voucher-Twin-Paragliding.pdf",
+              content: pdfBuffer,
+              contentType: "application/pdf",
+            },
+          ],
+        };
+
+        // Send the email
+        await transporter.sendMail(mailOptions);
+        console.log(`Gift voucher email sent to ${email}`);
+
+        // Update document to mark email as sent
+        await event.data.ref.update({
+          emailSent: true,
+          emailSentAt: new Date(),
+        });
+
+        // Save to Sent folder (without attachment for simplicity)
+        await saveToSentFolder(email, "🎁 Your Gift Voucher - Twin Paragliding", htmlContent);
+
+      } catch (error) {
+        console.error("Error sending gift voucher email:", error);
+        await event.data.ref.update({
+          emailStatus: "failed",
+          emailError: error.message,
+        });
+      }
+    },
+);
+

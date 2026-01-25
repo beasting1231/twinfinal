@@ -22,7 +22,9 @@ export function OverbookedPilotContextMenu({
   onClose,
 }: OverbookedPilotContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [isPositioned, setIsPositioned] = useState(false);
+  const [customPilotName, setCustomPilotName] = useState("");
 
   useEffect(() => {
     if (!isOpen) return;
@@ -50,10 +52,11 @@ export function OverbookedPilotContextMenu({
     };
   }, [isOpen, onClose]);
 
-  // Reset positioning state when menu opens
+  // Reset positioning state and custom name when menu opens
   useEffect(() => {
     if (isOpen) {
       setIsPositioned(false);
+      setCustomPilotName("");
     }
   }, [isOpen]);
 
@@ -108,22 +111,61 @@ export function OverbookedPilotContextMenu({
           Assign Overbooked Pilot
         </div>
 
+        {/* Custom Pilot Name Input */}
+        <div className="pt-2 px-3 pb-2">
+          <div className="text-xs text-gray-500 dark:text-zinc-500 mb-1.5">Enter custom name:</div>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const trimmedName = customPilotName.trim();
+              if (trimmedName) {
+                onSelectPilot(trimmedName);
+                onClose();
+              }
+            }}
+            className="flex gap-2"
+          >
+            <input
+              ref={inputRef}
+              type="text"
+              value={customPilotName}
+              onChange={(e) => setCustomPilotName(e.target.value)}
+              placeholder="Pilot name"
+              className="flex-1 px-2 py-1.5 text-sm bg-gray-100 dark:bg-zinc-700 border border-gray-300 dark:border-zinc-600 rounded text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+              onKeyDown={(e) => {
+                // Prevent event from closing menu when typing
+                e.stopPropagation();
+              }}
+            />
+            <button
+              type="submit"
+              disabled={!customPilotName.trim()}
+              className="px-3 py-1.5 text-sm bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Assign
+            </button>
+          </form>
+        </div>
+
         {/* Un-assign Option */}
         {currentPilot && (
-          <button
-            onClick={() => {
-              onUnassign();
-              onClose();
-            }}
-            className="w-full px-3 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2"
-          >
-            <X className="w-4 h-4" />
-            <span>Un-assign</span>
-          </button>
+          <>
+            <div className="border-t border-gray-300 dark:border-zinc-700 my-1" />
+            <button
+              onClick={() => {
+                onUnassign();
+                onClose();
+              }}
+              className="w-full px-3 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2"
+            >
+              <X className="w-4 h-4" />
+              <span>Un-assign</span>
+            </button>
+          </>
         )}
 
         {/* Unavailable Pilots */}
-        {currentPilot && <div className="border-t border-gray-300 dark:border-zinc-700 my-1" />}
+        <div className="border-t border-gray-300 dark:border-zinc-700 my-1" />
         {unavailablePilots.length > 0 ? (
           <div className="py-1">
             {unavailablePilots.map((pilot) => {

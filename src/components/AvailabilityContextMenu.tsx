@@ -1,14 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import { LogIn, LogOut } from "lucide-react";
+import { LogIn, LogOut, Clock } from "lucide-react";
+import type { AvailabilityStatus } from "../types/index";
 
 interface AvailabilityContextMenuProps {
   isOpen: boolean;
   position: { x: number; y: number };
   isSignedOut: boolean;
+  currentStatus?: AvailabilityStatus; // Current availability status
   canSignOut: boolean; // Can't sign out if already assigned to a booking
+  canSetOnRequest?: boolean; // Whether the user can set "on request" (pilots and admins only)
   pilotName?: string; // Optional pilot name to show in menu
   onSignIn: () => void;
   onSignOut: () => void;
+  onOnRequest?: () => void; // Handler for "On request" action
   onClose: () => void;
 }
 
@@ -16,10 +20,13 @@ export function AvailabilityContextMenu({
   isOpen,
   position,
   isSignedOut,
+  currentStatus,
   canSignOut,
+  canSetOnRequest = false,
   pilotName,
   onSignIn,
   onSignOut,
+  onOnRequest,
   onClose,
 }: AvailabilityContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -118,27 +125,69 @@ export function AvailabilityContextMenu({
         {/* Actions */}
         <div className="py-1">
           {isSignedOut ? (
-            <button
-              onClick={() => {
-                onSignIn();
-                onClose();
-              }}
-              className="w-full px-3 py-2 text-left text-sm text-green-600 dark:text-green-400 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2"
-            >
-              <LogIn className="w-4 h-4" />
-              <span>Sign {pilotName ? `${pilotName} ` : ''}In</span>
-            </button>
+            <>
+              <button
+                onClick={() => {
+                  onSignIn();
+                  onClose();
+                }}
+                className="w-full px-3 py-2 text-left text-sm text-green-600 dark:text-green-400 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2"
+              >
+                <LogIn className="w-4 h-4" />
+                <span>Sign {pilotName ? `${pilotName} ` : ''}In</span>
+              </button>
+              {canSetOnRequest && onOnRequest && (
+                <button
+                  onClick={() => {
+                    onOnRequest();
+                    onClose();
+                  }}
+                  className="w-full px-3 py-2 text-left text-sm text-orange-600 dark:text-orange-400 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2"
+                >
+                  <Clock className="w-4 h-4" />
+                  <span>On request</span>
+                </button>
+              )}
+            </>
           ) : (
-            <button
-              onClick={() => {
-                onSignOut();
-                onClose();
-              }}
-              className="w-full px-3 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2 cursor-pointer"
-            >
-              <LogOut className="w-4 h-4" />
-              <span>Sign {pilotName ? `${pilotName} ` : ''}Out</span>
-            </button>
+            <>
+              {/* Show "On request" option if currently available (green) */}
+              {canSetOnRequest && onOnRequest && currentStatus === "available" && (
+                <button
+                  onClick={() => {
+                    onOnRequest();
+                    onClose();
+                  }}
+                  className="w-full px-3 py-2 text-left text-sm text-orange-600 dark:text-orange-400 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2"
+                >
+                  <Clock className="w-4 h-4" />
+                  <span>On request</span>
+                </button>
+              )}
+              {/* Show "Sign In" option if currently on request (orange) to go back to available */}
+              {currentStatus === "onRequest" && (
+                <button
+                  onClick={() => {
+                    onSignIn();
+                    onClose();
+                  }}
+                  className="w-full px-3 py-2 text-left text-sm text-green-600 dark:text-green-400 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2"
+                >
+                  <LogIn className="w-4 h-4" />
+                  <span>Sign {pilotName ? `${pilotName} ` : ''}In</span>
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  onSignOut();
+                  onClose();
+                }}
+                className="w-full px-3 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2 cursor-pointer"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Sign {pilotName ? `${pilotName} ` : ''}Out</span>
+              </button>
+            </>
           )}
         </div>
       </div>

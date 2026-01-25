@@ -48,6 +48,8 @@ interface NewBookingModalProps {
     notes?: string;
     flightType?: "sensational" | "classic" | "early bird";
     bookingSource?: string;
+    commission?: number;
+    commissionStatus?: "paid" | "unpaid";
   };
 }
 
@@ -165,10 +167,12 @@ export function NewBookingModal({
         setBookingSource(role === 'admin' ? (initialData.bookingSource || "twin") : defaultBookingSource);
         // Keep defaults for fields not in initialData
         setPickupLocation("");
-        setCommission("");
-        setCommissionStatus("unpaid");
+        // Set commission from initialData if provided
+        setCommission(initialData.commission !== undefined ? String(initialData.commission) : "");
+        setCommissionStatus(initialData.commissionStatus || "unpaid");
         setFemalePilotsRequired(0);
-        setShowAdditionalOptions(false);
+        // Auto-expand additional options if commission is set
+        setShowAdditionalOptions(initialData.commission !== undefined && initialData.commission > 0);
       } else {
         // Reset to defaults when opening without initialData
         setCustomerName("");

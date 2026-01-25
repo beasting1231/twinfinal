@@ -1,4 +1,6 @@
 import { useEffect, useRef } from "react";
+import { Clock, LogIn, LogOut } from "lucide-react";
+import type { AvailabilityStatus } from "../types/index";
 
 interface TimeSlotContextMenuProps {
   isOpen: boolean;
@@ -7,7 +9,12 @@ interface TimeSlotContextMenuProps {
   onChangeTime: () => void;
   onAddTime: () => void;
   onRemoveTime?: () => void;
+  onOnRequest?: () => void; // Handler for setting current user's availability to "on request"
+  onSignIn?: () => void; // Handler for signing in (available)
+  onSignOut?: () => void; // Handler for signing out (unavailable)
+  currentAvailabilityStatus?: AvailabilityStatus; // Current user's availability status for this time slot
   isAdditionalSlot?: boolean;
+  canManageAvailability?: boolean; // Whether the current user can sign in/out and set on request (pilots and admins)
   onClose: () => void;
 }
 
@@ -18,7 +25,12 @@ export function TimeSlotContextMenu({
   onChangeTime,
   onAddTime,
   onRemoveTime,
+  onOnRequest,
+  onSignIn,
+  onSignOut,
+  currentAvailabilityStatus = "unavailable",
   isAdditionalSlot = false,
+  canManageAvailability = false,
   onClose,
 }: TimeSlotContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -98,6 +110,55 @@ export function TimeSlotContextMenu({
       >
         Add Time
       </button>
+      {/* Availability management options for pilots and admins */}
+      {canManageAvailability && (
+        <>
+          {/* Divider */}
+          <div className="border-t border-gray-200 dark:border-zinc-700 my-1" />
+
+          {/* Sign In - show when unavailable or on request */}
+          {(currentAvailabilityStatus === "unavailable" || currentAvailabilityStatus === "onRequest") && onSignIn && (
+            <button
+              onClick={() => {
+                onSignIn();
+                onClose();
+              }}
+              className="w-full px-4 py-2 text-left text-sm text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors flex items-center gap-2"
+            >
+              <LogIn className="w-4 h-4" />
+              Sign In
+            </button>
+          )}
+
+          {/* On Request - show when unavailable or available */}
+          {(currentAvailabilityStatus === "unavailable" || currentAvailabilityStatus === "available") && onOnRequest && (
+            <button
+              onClick={() => {
+                onOnRequest();
+                onClose();
+              }}
+              className="w-full px-4 py-2 text-left text-sm text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors flex items-center gap-2"
+            >
+              <Clock className="w-4 h-4" />
+              On request
+            </button>
+          )}
+
+          {/* Sign Out - show when available or on request */}
+          {(currentAvailabilityStatus === "available" || currentAvailabilityStatus === "onRequest") && onSignOut && (
+            <button
+              onClick={() => {
+                onSignOut();
+                onClose();
+              }}
+              className="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center gap-2"
+            >
+              <LogOut className="w-4 h-4" />
+              Sign Out
+            </button>
+          )}
+        </>
+      )}
       {isAdditionalSlot && onRemoveTime && (
         <button
           onClick={() => {

@@ -1882,7 +1882,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
               pilotIndex?: number;
               status: "booked" | "available" | "noPilot";
               booking?: any;
-              sortOrder: number; // 0=booked, 1=available, 2=noPilot
+              sortOrder: number; // 0=booked, 1=available, 2=onRequest, 3=noPilot, 4=invisible
             }> = [];
 
             // Add booking cells first (they go on the left)
@@ -1894,14 +1894,20 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
               });
             });
 
-            // Add ALL unavailable pilots first (they MUST be shown)
+            // Separate pilots into available, onRequest, and unavailable
             const unavailablePilots: Array<{pilot: any, pilotIndex: number}> = [];
             const availablePilots: Array<{pilot: any, pilotIndex: number}> = [];
+            const onRequestPilots: Array<{pilot: any, pilotIndex: number}> = [];
 
             pilots.forEach((pilot, pilotIndex) => {
               const isPilotAvailableThisSlot = isPilotAvailableForTimeSlot(pilot.uid, timeSlot);
               if (isPilotAvailableThisSlot) {
-                availablePilots.push({pilot, pilotIndex});
+                const pilotStatus = getPilotAvailabilityStatus?.(pilot.uid, timeSlot);
+                if (pilotStatus === "onRequest") {
+                  onRequestPilots.push({pilot, pilotIndex});
+                } else {
+                  availablePilots.push({pilot, pilotIndex});
+                }
               } else {
                 unavailablePilots.push({pilot, pilotIndex});
               }
@@ -1913,12 +1919,13 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                 pilot,
                 pilotIndex,
                 status: "noPilot",
-                sortOrder: 2
+                sortOrder: 3  // Changed from 2 to 3
               });
             });
 
             // Calculate actual booking capacity remaining (not just grid space)
-            const totalAvailablePilots = availablePilots.length;
+            // Include both available and onRequest pilots in capacity calculation
+            const totalAvailablePilots = availablePilots.length + onRequestPilots.length;
             const actualCapacityRemaining = Math.max(0, totalAvailablePilots - slotsOccupiedByBookings);
 
             // Calculate how many available pilot cells we can show
@@ -1926,9 +1933,11 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
             const cellsUsed = slotsOccupiedByBookings + unavailablePilots.length;
             const gridSpaceAvailable = totalCellsNeeded - cellsUsed;
 
-            // Only show available cells if there's actual booking capacity remaining
-            // For admins with no pilots, show at least 1 cell so they can create bookings
-            let availableCellsToShow = Math.min(gridSpaceAvailable, actualCapacityRemaining, availablePilots.length);
+            // Determine how many regular available cells and onRequest cells to show
+            let remainingCapacity = Math.min(gridSpaceAvailable, actualCapacityRemaining);
+
+            // Show available cells first
+            let availableCellsToShow = Math.min(remainingCapacity, availablePilots.length);
             if (pilots.length === 0 && role === 'admin' && slotsOccupiedByBookings === 0) {
               availableCellsToShow = Math.max(1, availableCellsToShow);
             }
@@ -1952,6 +1961,20 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
               }
             }
 
+            // Show onRequest cells after available cells
+            remainingCapacity -= availableCellsToShow;
+            const onRequestCellsToShow = Math.min(remainingCapacity, onRequestPilots.length);
+
+            for (let i = 0; i < onRequestCellsToShow; i++) {
+              const {pilot, pilotIndex} = onRequestPilots[i];
+              cellsForRow.push({
+                pilot,
+                pilotIndex,
+                status: "available",  // Keep status as "available" for functionality
+                sortOrder: 2  // New sortOrder for onRequest cells
+              });
+            }
+
             // Add invisible cells to fill remaining columns (for rows without overbooking)
             // Calculate actual grid columns occupied (bookings can span multiple columns)
             const columnsOccupied = cellsForRow.reduce((total, cell) => {
@@ -1965,11 +1988,11 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
             for (let i = 0; i < cellsToFill; i++) {
               cellsForRow.push({
                 status: "available" as const,
-                sortOrder: 3  // Put invisible cells at the end
+                sortOrder: 4  // Put invisible cells at the end
               });
             }
 
-            // Sort cells: booked first, then available, then noPilot, then invisible
+            // Sort cells: booked first, then available, then onRequest, then noPilot, then invisible
             cellsForRow.sort((a, b) => a.sortOrder - b.sortOrder);
 
             // Calculate total pax for this time slot
@@ -2025,7 +2048,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                 let cumulativePosition = 0;
                 return cellsForRow.map((cell, cellIdx) => {
                   // Invisible cell - render empty div to maintain grid structure
-                  if (cell.sortOrder === 3) {
+                  if (cell.sortOrder === 4) {
                     return (
                       <div
                         key={`invisible-${timeIndex}-${cellIdx}`}

@@ -2,16 +2,20 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { collection, query, where, getDocs, onSnapshot, doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { format, differenceInDays, parseISO, startOfDay } from "date-fns";
-import type { Pilot } from "../types/index";
+import type { Pilot, AvailabilityStatus } from "../types/index";
 
 export interface PilotAvailability {
   pilot: Pilot;
   availableTimeSlots: Set<string>;
 }
 
+// Map from pilotUid to Map<timeSlot, status>
+export type PilotAvailabilityStatusMap = Map<string, Map<string, AvailabilityStatus>>;
+
 export function usePilots(selectedDate: Date) {
   const [rawPilots, setRawPilots] = useState<Pilot[]>([]);
   const [pilotAvailability, setPilotAvailability] = useState<Map<string, Set<string>>>(new Map());
+  const [pilotAvailabilityStatus, setPilotAvailabilityStatus] = useState<PilotAvailabilityStatusMap>(new Map());
   const [pilotSignInTimes, setPilotSignInTimes] = useState<Map<string, string>>(new Map()); // Track earliest sign-in time per pilot
   const [customOrder, setCustomOrder] = useState<string[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -57,6 +61,7 @@ export function usePilots(selectedDate: Date) {
           // Get unique pilot IDs and their available time slots
           const pilotIds = new Set<string>();
           const availabilityMap = new Map<string, Set<string>>();
+          const statusMap: PilotAvailabilityStatusMap = new Map();
           const signInTimesMap = new Map<string, string>(); // Track earliest sign-in time per pilot
 
           availabilitySnapshot.docs.forEach((doc) => {
@@ -67,6 +72,13 @@ export function usePilots(selectedDate: Date) {
               availabilityMap.set(data.userId, new Set());
             }
             availabilityMap.get(data.userId)!.add(data.timeSlot);
+
+            // Track status for each timeslot (default to "available" for backwards compatibility)
+            if (!statusMap.has(data.userId)) {
+              statusMap.set(data.userId, new Map());
+            }
+            const status: AvailabilityStatus = data.status === "onRequest" ? "onRequest" : "available";
+            statusMap.get(data.userId)!.set(data.timeSlot, status);
 
             // Track the earliest sign-in time for this pilot
             if (data.signedInAt) {
@@ -81,6 +93,7 @@ export function usePilots(selectedDate: Date) {
           if (pilotIds.size === 0) {
             setRawPilots([]);
             setPilotAvailability(new Map());
+            setPilotAvailabilityStatus(new Map());
             setPilotSignInTimes(new Map());
             setLoading(false);
             return;
@@ -163,6 +176,7 @@ export function usePilots(selectedDate: Date) {
           });
 
           setPilotAvailability(availabilityMap);
+          setPilotAvailabilityStatus(statusMap);
           setPilotSignInTimes(signInTimesMap);
           setLoading(false);
         } catch (err: any) {
@@ -318,6 +332,12 @@ export function usePilots(selectedDate: Date) {
     return slots ? slots.has(timeSlot) : false;
   };
 
+  const getPilotAvailabilityStatus = (pilotUid: string, timeSlot: string): AvailabilityStatus => {
+    const statusForPilot = pilotAvailabilityStatus.get(pilotUid);
+    if (!statusForPilot) return "unavailable";
+    return statusForPilot.get(timeSlot) || "unavailable";
+  };
+
   const saveCustomPilotOrder = async (newOrder: string[]) => {
     const dateStr = format(selectedDate, "yyyy-MM-dd");
     try {
@@ -335,5 +355,5 @@ export function usePilots(selectedDate: Date) {
     }
   };
 
-  return { pilots, loading, error, isPilotAvailableForTimeSlot, saveCustomPilotOrder };
+  return { pilots, loading, error, isPilotAvailableForTimeSlot, getPilotAvailabilityStatus, saveCustomPilotOrder };
 }

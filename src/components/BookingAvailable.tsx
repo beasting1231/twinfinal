@@ -1,12 +1,13 @@
 import { useRef, memo, useState } from "react";
 import { Info } from "lucide-react";
-import type { PilotPayment } from "../types/index";
+import type { PilotPayment, AvailabilityStatus } from "../types/index";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 
 interface BookingAvailableProps {
   pilotId: string;
   timeSlot: string;
   status?: "available" | "booked" | "noPilot";
+  pilotAvailabilityStatus?: AvailabilityStatus; // "available", "onRequest", or "unavailable"
   customerName?: string;
   pickupLocation?: string;
   bookingSource?: string;
@@ -44,11 +45,14 @@ interface BookingAvailableProps {
   isHighlighted?: boolean; // Whether this booking should be highlighted (from search)
   // Hide details prop (for agency users viewing others' bookings)
   hideDetails?: boolean; // Whether to hide booking details and show blank booking
+  // On request booking restriction
+  canBookOnRequest?: boolean; // Whether the user can book on "on request" slots (admins and pilots only)
 }
 
 export const BookingAvailable = memo(function BookingAvailable({
   pilotId,
   status = "available",
+  pilotAvailabilityStatus,
   customerName,
   pickupLocation,
   bookingSource,
@@ -81,7 +85,8 @@ export const BookingAvailable = memo(function BookingAvailable({
   isInMoveMode = false,
   isMoveModeActive = false,
   isHighlighted = false,
-  hideDetails = false
+  hideDetails = false,
+  canBookOnRequest = false
 }: BookingAvailableProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const longPressTimerRef = useRef<number | null>(null);
@@ -549,11 +554,14 @@ export const BookingAvailable = memo(function BookingAvailable({
 
   if (status === "noPilot") {
     const hasClickHandler = isCurrentUserPilot || onNoPilotClick;
+    const isOnRequest = pilotAvailabilityStatus === "onRequest";
     return (
       <div
         className={`w-full h-full rounded-lg flex items-center justify-center ${
           isMoveModeActive
             ? 'bg-blue-200 dark:bg-blue-900/40 hover:bg-blue-300 dark:hover:bg-blue-800/50 border-2 border-blue-400 dark:border-blue-600 cursor-pointer'
+            : isOnRequest
+            ? (hasClickHandler ? 'bg-amber-200 dark:bg-amber-700/50 cursor-pointer hover:bg-amber-300 dark:hover:bg-amber-600/50' : 'bg-amber-200 dark:bg-amber-700/50 cursor-not-allowed')
             : isFemalePilot
             ? (hasClickHandler ? 'bg-red-600/80 cursor-pointer hover:bg-red-700/80' : 'bg-red-600/80 cursor-not-allowed')
             : (hasClickHandler ? 'bg-gray-500 dark:bg-zinc-900 cursor-pointer hover:bg-gray-400 dark:hover:bg-zinc-800' : 'bg-gray-500 dark:bg-zinc-900 cursor-not-allowed')
@@ -564,36 +572,58 @@ export const BookingAvailable = memo(function BookingAvailable({
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
-        <div className={`text-xs ${isMoveModeActive ? 'text-blue-600 dark:text-blue-300' : isFemalePilot ? 'text-white' : 'text-white dark:text-zinc-500'}`}>no {pilotId.toLowerCase()}</div>
+        <div className={`text-xs ${isMoveModeActive ? 'text-blue-600 dark:text-blue-300' : isOnRequest ? 'text-amber-700 dark:text-amber-300' : isFemalePilot ? 'text-white' : 'text-white dark:text-zinc-500'}`}>{isOnRequest ? `${pilotId.toLowerCase()} on request` : `no ${pilotId.toLowerCase()}`}</div>
       </div>
     );
   }
 
   // Hide base cell styling when showing multi-column overlay
   const showMultiColumnOverlay = isOver && hasEnoughSpace && dropZoneWidth > 1;
+  const isOnRequest = pilotAvailabilityStatus === "onRequest";
+
+  // Get base styling for available cell (non-drag states)
+  const getAvailableCellBaseStyle = () => {
+    if (isMoveModeActive) {
+      return 'bg-blue-200 dark:bg-blue-900/40 hover:bg-blue-300 dark:hover:bg-blue-800/50 border-2 border-blue-400 dark:border-blue-600';
+    }
+    if (showMultiColumnOverlay) {
+      return isOnRequest
+        ? 'bg-amber-200 dark:bg-amber-800/60 relative'
+        : 'bg-gray-300 dark:bg-zinc-800 relative';
+    }
+    if (isOver && hasEnoughSpace) {
+      return 'bg-green-600/40 border-2 border-green-500';
+    }
+    if (!hasEnoughSpace && draggedItemPax) {
+      return 'bg-red-600/20 border border-red-500';
+    }
+    if (isOnRequest) {
+      return 'bg-amber-200 dark:bg-amber-700/50 hover:bg-amber-300 dark:hover:bg-amber-600/50';
+    }
+    return 'bg-gray-300 dark:bg-zinc-800 hover:bg-gray-400 dark:hover:bg-zinc-700';
+  };
+
+  // Determine if booking is allowed on this cell
+  const canBookThisCell = isOnRequest ? canBookOnRequest : true;
+  const effectiveOnAvailableClick = canBookThisCell ? onAvailableClick : undefined;
 
   return (
     <div
       ref={setDropNodeRef}
-      className={`w-full h-full rounded-lg transition-colors ${
-        hasEnoughSpace ? 'cursor-pointer' : 'cursor-not-allowed'
-      } ${
-        isMoveModeActive
-          ? 'bg-blue-200 dark:bg-blue-900/40 hover:bg-blue-300 dark:hover:bg-blue-800/50 border-2 border-blue-400 dark:border-blue-600'
-          : showMultiColumnOverlay
-          ? 'bg-gray-300 dark:bg-zinc-800 relative' // Hide green styling when showing overlay
-          : isOver && hasEnoughSpace
-          ? 'bg-green-600/40 border-2 border-green-500'
-          : !hasEnoughSpace && draggedItemPax
-          ? 'bg-red-600/20 border border-red-500'
-          : 'bg-gray-300 dark:bg-zinc-800 hover:bg-gray-400 dark:hover:bg-zinc-700'
-      }`}
-      onClick={onAvailableClick}
+      className={`w-full h-full rounded-lg transition-colors flex items-center justify-center ${
+        hasEnoughSpace && canBookThisCell ? 'cursor-pointer' : 'cursor-not-allowed'
+      } ${getAvailableCellBaseStyle()}`}
+      onClick={effectiveOnAvailableClick}
       onContextMenu={handleAvailableContextMenu}
       onTouchStart={handleAvailableTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
+      {/* On request label for empty cells */}
+      {isOnRequest && !isOver && (
+        <div className="text-xs text-amber-700 dark:text-amber-300">{pilotId.toLowerCase()} on request</div>
+      )}
+
       {/* Empty booking cell - available for booking */}
       {isOver && !hasEnoughSpace && (
         <div className="flex items-center justify-center h-full text-xs text-red-600 dark:text-red-400">

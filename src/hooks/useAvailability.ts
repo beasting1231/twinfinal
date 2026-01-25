@@ -4,17 +4,20 @@ import { db } from "../firebase/config";
 import { useAuth } from "../contexts/AuthContext";
 import { format, parse } from "date-fns";
 import { getTimeSlotsByDate } from "../utils/timeSlots";
+import type { AvailabilityStatus } from "../types/index";
 
 interface AvailabilityData {
   id?: string;
   userId: string;
   date: string; // ISO date string
   timeSlot: string;
+  status?: AvailabilityStatus; // "available" (default) or "onRequest"
 }
 
 export function useAvailability(targetUserId?: string) {
   const { currentUser } = useAuth();
   const [availabilityMap, setAvailabilityMap] = useState<Map<string, string>>(new Map());
+  const [statusMap, setStatusMap] = useState<Map<string, AvailabilityStatus>>(new Map()); // key -> status
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
@@ -111,12 +114,16 @@ export function useAvailability(targetUserId?: string) {
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const newMap = new Map<string, string>();
+      const newStatusMap = new Map<string, AvailabilityStatus>();
       snapshot.docs.forEach((doc) => {
         const data = doc.data() as AvailabilityData;
         const key = `${data.date}-${data.timeSlot}`;
         newMap.set(key, doc.id);
+        // Default to "available" for backwards compatibility
+        newStatusMap.set(key, data.status === "onRequest" ? "onRequest" : "available");
       });
       setAvailabilityMap(newMap);
+      setStatusMap(newStatusMap);
       setLoading(false);
     });
 
@@ -127,6 +134,56 @@ export function useAvailability(targetUserId?: string) {
     const dateStr = format(date, "yyyy-MM-dd");
     const key = `${dateStr}-${timeSlot}`;
     return availabilityMap.has(key);
+  };
+
+  const getAvailabilityStatus = (date: Date, timeSlot: string): AvailabilityStatus => {
+    const dateStr = format(date, "yyyy-MM-dd");
+    const key = `${dateStr}-${timeSlot}`;
+    if (!availabilityMap.has(key)) return "unavailable";
+    return statusMap.get(key) || "available";
+  };
+
+  const setOnRequest = async (date: Date, timeSlot: string) => {
+    if (!userId) return;
+
+    try {
+      setSaving(true);
+      setJustSaved(false);
+
+      const dateStr = format(date, "yyyy-MM-dd");
+      const key = `${dateStr}-${timeSlot}`;
+
+      if (availabilityMap.has(key)) {
+        // Update existing record to set status to onRequest
+        const q = query(
+          collection(db, "availability"),
+          where("userId", "==", userId),
+          where("date", "==", dateStr),
+          where("timeSlot", "==", timeSlot)
+        );
+        const snapshot = await getDocs(q);
+        const updatePromises = snapshot.docs.map((docSnapshot) =>
+          updateDoc(doc(db, "availability", docSnapshot.id), { status: "onRequest" })
+        );
+        await Promise.all(updatePromises);
+      } else {
+        // Create new record with onRequest status
+        await addDoc(collection(db, "availability"), {
+          userId: userId,
+          date: dateStr,
+          timeSlot: timeSlot,
+          status: "onRequest",
+          signedInAt: new Date().toISOString(),
+        });
+      }
+
+      setSaving(false);
+      setJustSaved(true);
+      setTimeout(() => setJustSaved(false), 2000);
+    } catch (error) {
+      console.error("Error setting on request:", error);
+      setSaving(false);
+    }
   };
 
   const toggleAvailability = async (date: Date, timeSlot: string) => {
@@ -238,6 +295,8 @@ export function useAvailability(targetUserId?: string) {
 
   return {
     isAvailable,
+    getAvailabilityStatus,
+    setOnRequest,
     toggleAvailability,
     toggleDay,
     loading,

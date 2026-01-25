@@ -191,6 +191,24 @@ export function UserManagement() {
 
   const hasChanges = Object.keys(editedRoles).length > 0;
 
+  const handleMwstToggle = async (userId: string, currentValue: boolean) => {
+    try {
+      await updateDoc(doc(db, "userProfiles", userId), {
+        mwst: !currentValue,
+        updatedAt: new Date(),
+      });
+      // Update local state
+      setUsers((prevUsers) =>
+        prevUsers.map((user) =>
+          user.uid === userId ? { ...user, mwst: !currentValue } : user
+        )
+      );
+    } catch (error) {
+      console.error("Error updating MWST:", error);
+      alert("Failed to update MWST. Please try again.");
+    }
+  };
+
   const getRoleBadgeColor = (role: UserRole | undefined) => {
     switch (role) {
       case "admin":
@@ -250,10 +268,11 @@ export function UserManagement() {
           <table className="w-full table-fixed">
             <thead>
               <tr className="border-b border-gray-200 dark:border-zinc-800">
-                <th className="text-left p-2 sm:p-4 text-gray-600 dark:text-zinc-400 font-medium w-[30%] sm:w-[25%]">Name</th>
-                <th className="text-left p-2 sm:p-4 text-gray-600 dark:text-zinc-400 font-medium hidden sm:table-cell sm:w-[25%]">Email</th>
-                <th className="text-left p-2 sm:p-4 text-gray-600 dark:text-zinc-400 font-medium w-[35%] sm:w-[20%]">Version</th>
-                <th className="text-left p-2 sm:p-4 text-gray-600 dark:text-zinc-400 font-medium w-[35%] sm:w-[30%]">Role</th>
+                <th className="text-left p-2 sm:p-4 text-gray-600 dark:text-zinc-400 font-medium w-[30%] sm:w-[20%]">Name</th>
+                <th className="text-left p-2 sm:p-4 text-gray-600 dark:text-zinc-400 font-medium hidden sm:table-cell sm:w-[20%]">Email</th>
+                <th className="text-left p-2 sm:p-4 text-gray-600 dark:text-zinc-400 font-medium w-[20%] sm:w-[15%]">Version</th>
+                <th className="text-left p-2 sm:p-4 text-gray-600 dark:text-zinc-400 font-medium w-[25%] sm:w-[25%]">Role</th>
+                <th className="text-center p-2 sm:p-4 text-gray-600 dark:text-zinc-400 font-medium w-[25%] sm:w-[20%]">MWST</th>
               </tr>
             </thead>
             <tbody className="overflow-visible">
@@ -362,6 +381,24 @@ export function UserManagement() {
                           </>
                         )}
                       </div>
+                    </td>
+                    <td className="p-2 sm:p-4 text-center">
+                      {currentRole === "pilot" ? (
+                        <button
+                          onClick={() => handleMwstToggle(user.uid, user.mwst || false)}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                            user.mwst ? "bg-green-600" : "bg-zinc-600"
+                          }`}
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                              user.mwst ? "translate-x-6" : "translate-x-1"
+                            }`}
+                          />
+                        </button>
+                      ) : (
+                        <span className="text-gray-400 dark:text-zinc-600">—</span>
+                      )}
                     </td>
                   </tr>
                 );
