@@ -805,7 +805,14 @@ export function BookingDetailsModal({
   };
 
   const handleNoShowPilotPayment = async (willPay: boolean) => {
-    if (!booking.id || !onUpdate) return;
+    if (!booking.id || !onUpdate) {
+      console.log("No booking ID or onUpdate function");
+      return;
+    }
+
+    console.log("handleNoShowPilotPayment called with willPay:", willPay);
+    console.log("Assigned pilots:", editedBooking.assignedPilots);
+    console.log("Booking ID:", booking.id);
 
     if (willPay) {
       // Set payment to -103 with method "ticket" for all assigned pilots
@@ -824,14 +831,21 @@ export function BookingDetailsModal({
         };
       });
 
+      console.log("Updated payments to save:", updatedPayments);
+
       // Update the booking with no show status and payments
       await onUpdate(booking.id, {
         bookingStatus: 'no show',
         pilotPayments: updatedPayments
       });
+
+      console.log("Booking updated successfully");
+
       setEditedBooking({ ...editedBooking, bookingStatus: 'no show', pilotPayments: updatedPayments });
       setPilotPayments(updatedPayments);
     } else {
+      console.log("Not paying pilots - unassigning all");
+
       // Unassign all pilots
       await onUpdate(booking.id, {
         bookingStatus: 'no show',
@@ -2191,7 +2205,10 @@ export function BookingDetailsModal({
       {/* No Show Pilot Payment Dialog */}
       {showNoShowDialog && (
         <Dialog open={showNoShowDialog} onOpenChange={setShowNoShowDialog}>
-          <DialogContent className="max-w-md bg-white dark:bg-zinc-950 border-gray-300 dark:border-zinc-800 text-gray-900 dark:text-white">
+          <DialogContent className="max-w-md bg-white dark:bg-zinc-950 border-gray-300 dark:border-zinc-800 text-gray-900 dark:text-white" aria-describedby={undefined}>
+            <div className="sr-only">
+              <DialogTitle>No Show Payment</DialogTitle>
+            </div>
             <div className="py-6">
               <p className="text-gray-900 dark:text-white text-lg font-medium mb-6 text-center">
                 Are the pilots getting paid?
