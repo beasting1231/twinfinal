@@ -77,6 +77,7 @@ export function BookingDetailsModal({
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [isCapturingScreenshot, setIsCapturingScreenshot] = useState(false);
   const [screenshotCopied, setScreenshotCopied] = useState(false);
+  const [showNoShowDialog, setShowNoShowDialog] = useState(false);
 
   const captureBookingScreenshot = async () => {
     if (!booking?.id) return;
@@ -798,12 +799,15 @@ export function BookingDetailsModal({
   };
 
   const handleNoShow = () => {
+    // Show the custom dialog to ask about pilot payment
+    setShowNoShowDialog(true);
+    setShowStatusDropdown(false);
+  };
+
+  const handleNoShowPilotPayment = (willPay: boolean) => {
     if (!booking.id || !onUpdate) return;
 
-    // Ask if pilots will be paid
-    const willPilotsBePaid = confirm("Will the pilots be paid for this flight?");
-
-    if (willPilotsBePaid) {
+    if (willPay) {
       // Set payment to -103 with method "ticket" for all assigned pilots
       const updatedPayments: PilotPayment[] = editedBooking.assignedPilots.map(pilotUid => {
         const pilot = pilots.find(p => p.uid === pilotUid);
@@ -838,7 +842,7 @@ export function BookingDetailsModal({
       setPilotPayments([]);
     }
 
-    setShowStatusDropdown(false);
+    setShowNoShowDialog(false);
   };
 
   const handlePaymentUpdate = (pilotName: string, field: keyof PilotPayment, value: any) => {
@@ -2181,6 +2185,41 @@ export function BookingDetailsModal({
           }}
           senderName={currentUser?.displayName || ''}
         />
+      )}
+
+      {/* No Show Pilot Payment Dialog */}
+      {showNoShowDialog && (
+        <Dialog open={showNoShowDialog} onOpenChange={setShowNoShowDialog}>
+          <DialogContent className="max-w-md bg-white dark:bg-zinc-950 border-gray-300 dark:border-zinc-800 text-gray-900 dark:text-white">
+            <DialogHeader>
+              <DialogTitle className="text-gray-900 dark:text-white text-xl font-semibold">No Show - Pilot Payment</DialogTitle>
+            </DialogHeader>
+            <div className="py-4">
+              <p className="text-gray-700 dark:text-zinc-300 text-base mb-6">
+                Will the pilots be paid for this flight?
+              </p>
+              <div className="flex gap-3">
+                <Button
+                  onClick={() => handleNoShowPilotPayment(true)}
+                  className="flex-1 bg-green-600 hover:bg-green-700 text-white font-medium py-3"
+                >
+                  Yes, Pay Pilots
+                </Button>
+                <Button
+                  onClick={() => handleNoShowPilotPayment(false)}
+                  variant="outline"
+                  className="flex-1 border-2 border-gray-300 dark:border-zinc-700 text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 font-medium py-3"
+                >
+                  No, Don't Pay
+                </Button>
+              </div>
+              <p className="text-xs text-gray-500 dark:text-zinc-500 mt-4">
+                • If yes: Payment set to -103 CHF (ticket method)<br/>
+                • If no: All pilots will be unassigned
+              </p>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
     </Dialog>
   );
