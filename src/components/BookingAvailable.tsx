@@ -12,6 +12,7 @@ interface BookingAvailableProps {
   pickupLocation?: string;
   bookingSource?: string;
   assignedPilots?: string[];
+  acknowledgedPilots?: string[];
   pilotPayments?: PilotPayment[];
   bookingStatus?: "unconfirmed" | "confirmed" | "pending" | "cancelled";
   span?: number;
@@ -26,6 +27,7 @@ interface BookingAvailableProps {
   onNoPilotContextMenu?: (position: { x: number; y: number }) => void;
   onAvailableContextMenu?: (position: { x: number; y: number }) => void;
   onPilotNameClick?: (slotIndex: number, pilotName: string, position: { x: number; y: number }) => void; // Handler for clicking on a pilot name
+  onPilotNameLongPress?: (pilotName: string, position: { x: number; y: number }) => void; // Handler for long-press on pilot name
   onOverbookedClick?: (slotIndex: number, position: { x: number; y: number }) => void; // Handler for context menu on overbooked position
   isCurrentUserPilot?: boolean; // Whether this cell is for the current user
   isFemalePilot?: boolean; // Whether this pilot is a female pilot
@@ -57,6 +59,7 @@ export const BookingAvailable = memo(function BookingAvailable({
   pickupLocation,
   bookingSource,
   assignedPilots = [],
+  acknowledgedPilots = [],
   pilotPayments = [],
   bookingStatus = "confirmed",
   span = 1,
@@ -71,6 +74,7 @@ export const BookingAvailable = memo(function BookingAvailable({
   onNoPilotContextMenu,
   onAvailableContextMenu,
   onPilotNameClick,
+  onPilotNameLongPress,
   onOverbookedClick,
   isCurrentUserPilot = false,
   isFemalePilot = false,
@@ -454,12 +458,44 @@ export const BookingAvailable = memo(function BookingAvailable({
             // Check if this is the current user's name (pilot can only unassign themselves)
             const isOwnName = currentUserDisplayName && pilot === currentUserDisplayName;
             const canClickToUnassign = isOwnName && onPilotNameClick;
+            const isAcknowledged = acknowledgedPilots.includes(pilot);
+            const canLongPress = isOwnName && onPilotNameLongPress;
 
-            // For overbooked positions with assigned pilots, show with orange background
+            // Long-press timer variable (using closure instead of ref to avoid hook in loop)
+            let pilotLongPressTimer: number | null = null;
+
+            const handlePilotTouchStart = (e: React.TouchEvent) => {
+              if (!canLongPress) return;
+              e.stopPropagation();
+              const touch = e.touches[0];
+              pilotLongPressTimer = window.setTimeout(() => {
+                onPilotNameLongPress(pilot, { x: touch.clientX, y: touch.clientY });
+              }, 500);
+            };
+
+            const handlePilotTouchEnd = () => {
+              if (pilotLongPressTimer) {
+                clearTimeout(pilotLongPressTimer);
+                pilotLongPressTimer = null;
+              }
+            };
+
+            // Determine background color: green if acknowledged, otherwise original colors
+            const bgColorClass = isAcknowledged
+              ? "bg-green-600/90"
+              : requiresFemalePilot
+              ? "bg-red-600/90"
+              : "bg-gray-700/90 dark:bg-zinc-800/90";
+
+            // For overbooked positions with assigned pilots, show with orange or green background
             if (isOverbookedPosition) {
               return (
                 <div key={index} className="flex justify-center">
-                  <div className="text-xs text-white bg-orange-600/90 rounded-t-lg px-2 py-0.5 w-[80%] relative">
+                  <div
+                    className={`text-xs text-white ${isAcknowledged ? "bg-green-600/90" : "bg-orange-600/90"} rounded-t-lg px-2 py-0.5 w-[80%] relative`}
+                    onTouchStart={handlePilotTouchStart}
+                    onTouchEnd={handlePilotTouchEnd}
+                  >
                     <div className="text-center truncate">{pilot}</div>
                     {numAmount !== undefined && numAmount !== 0 && !isNaN(numAmount) && (
                       <span className="absolute right-2 top-0.5 font-medium text-white">{numAmount}</span>
@@ -473,16 +509,15 @@ export const BookingAvailable = memo(function BookingAvailable({
             return (
               <div key={index} className="flex justify-center">
                 <div
-                  className={`${requiresFemalePilot
-                    ? "text-xs text-white bg-red-600/90 rounded-t-lg px-2 py-0.5 w-[80%] relative"
-                    : "text-xs text-white bg-gray-700/90 dark:bg-zinc-800/90 rounded-t-lg px-2 py-0.5 w-[80%] relative"
-                  } ${canClickToUnassign ? 'cursor-pointer hover:opacity-80' : ''}`}
+                  className={`text-xs text-white ${bgColorClass} rounded-t-lg px-2 py-0.5 w-[80%] relative ${canClickToUnassign ? 'cursor-pointer hover:opacity-80' : ''}`}
                   onClick={(e) => {
                     if (canClickToUnassign) {
                       e.stopPropagation(); // Prevent triggering onBookedClick
                       onPilotNameClick(index, pilot, { x: e.clientX, y: e.clientY });
                     }
                   }}
+                  onTouchStart={handlePilotTouchStart}
+                  onTouchEnd={handlePilotTouchEnd}
                 >
                   <div className="text-center truncate">{pilot}</div>
                   {numAmount !== undefined && numAmount !== 0 && !isNaN(numAmount) && (

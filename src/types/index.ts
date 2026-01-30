@@ -40,6 +40,7 @@ export interface Booking {
   bookingSource: string;
   phoneNumber?: string;
   email?: string;
+  preferredContact?: "phone" | "email" | null;
   notes?: string;
   officeNotes?: string;
   commission?: number | null;
@@ -47,6 +48,7 @@ export interface Booking {
   femalePilotsRequired?: number;
   flightType?: "sensational" | "classic" | "early bird";
   assignedPilots: string[];
+  acknowledgedPilots?: string[]; // Pilots who have confirmed they've seen the assignment
   bookingStatus: "unconfirmed" | "confirmed" | "pending" | "cancelled" | "deleted" | "no show";
   span: number;
   pilotPayments?: PilotPayment[];

@@ -382,6 +382,27 @@ export function BookingDetailsModal({
     }
   };
 
+  const handlePreferredContactToggle = async (contactType: "phone" | "email") => {
+    if (!booking?.id || !onUpdate || !editedBooking) return;
+
+    // Check if user can edit this booking (creator or admin)
+    const canEdit = role === 'admin' || booking.createdBy === currentUser?.uid;
+    if (!canEdit) return;
+
+    // Toggle: if already selected, set to null; otherwise set to new type
+    const newPreferredContact = editedBooking.preferredContact === contactType ? null : contactType;
+
+    // Update local state immediately for instant visual feedback
+    setEditedBooking({
+      ...editedBooking,
+      preferredContact: newPreferredContact
+    });
+
+    // Update in Firestore
+    await onUpdate(booking.id, {
+      preferredContact: newPreferredContact
+    });
+  };
 
   // Create an availability check function that uses edited date data when in edit mode
   const checkPilotAvailability = (pilotUid: string, timeSlot: string): boolean => {
@@ -1245,7 +1266,29 @@ export function BookingDetailsModal({
                   <div className="bg-gray-50 dark:bg-zinc-900/50 border border-gray-300 dark:border-zinc-800 rounded-xl p-4 space-y-3">
                     {editedBooking.phoneNumber && (
                       <div className="flex items-center gap-3">
-                        <Phone className="w-4 h-4 text-gray-500 dark:text-zinc-500 flex-shrink-0" />
+                        <button
+                          onDoubleClick={() => handlePreferredContactToggle("phone")}
+                          className={`p-2 rounded-lg transition-all ${
+                            editedBooking?.preferredContact === "phone"
+                              ? "bg-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.5)] dark:shadow-[0_0_15px_rgba(59,130,246,0.7)]"
+                              : "hover:bg-gray-200 dark:hover:bg-zinc-800"
+                          } ${
+                            role === 'admin' || booking?.createdBy === currentUser?.uid
+                              ? "cursor-pointer"
+                              : "cursor-default"
+                          }`}
+                          title={
+                            role === 'admin' || booking?.createdBy === currentUser?.uid
+                              ? "Double-click to set as preferred contact"
+                              : "Preferred contact method"
+                          }
+                        >
+                          <Phone className={`w-4 h-4 flex-shrink-0 ${
+                            editedBooking?.preferredContact === "phone"
+                              ? "text-blue-600 dark:text-blue-400"
+                              : "text-gray-500 dark:text-zinc-500"
+                          }`} />
+                        </button>
                         <div className="flex-1 min-w-0">
                           <div className="text-xs text-gray-500 dark:text-zinc-500 mb-0.5">Phone</div>
                           <button
@@ -1283,7 +1326,29 @@ export function BookingDetailsModal({
                     )}
                     {editedBooking.email && (
                       <div className="flex items-center gap-3">
-                        <Mail className="w-4 h-4 text-gray-500 dark:text-zinc-500 flex-shrink-0" />
+                        <button
+                          onDoubleClick={() => handlePreferredContactToggle("email")}
+                          className={`p-2 rounded-lg transition-all ${
+                            editedBooking?.preferredContact === "email"
+                              ? "bg-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.5)] dark:shadow-[0_0_15px_rgba(59,130,246,0.7)]"
+                              : "hover:bg-gray-200 dark:hover:bg-zinc-800"
+                          } ${
+                            role === 'admin' || booking?.createdBy === currentUser?.uid
+                              ? "cursor-pointer"
+                              : "cursor-default"
+                          }`}
+                          title={
+                            role === 'admin' || booking?.createdBy === currentUser?.uid
+                              ? "Double-click to set as preferred contact"
+                              : "Preferred contact method"
+                          }
+                        >
+                          <Mail className={`w-4 h-4 flex-shrink-0 ${
+                            editedBooking?.preferredContact === "email"
+                              ? "text-blue-600 dark:text-blue-400"
+                              : "text-gray-500 dark:text-zinc-500"
+                          }`} />
+                        </button>
                         <div className="flex-1 min-w-0">
                           <div className="text-xs text-gray-500 dark:text-zinc-500 mb-0.5">Email</div>
                           <button

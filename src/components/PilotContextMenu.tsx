@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { X, UserCheck } from "lucide-react";
+import { X, UserCheck, Check } from "lucide-react";
 import type { Pilot } from "../types/index";
 
 interface PilotContextMenuProps {
@@ -8,8 +8,11 @@ interface PilotContextMenuProps {
   availablePilots: Pilot[];
   pilotFlightCounts?: Record<string, number>;
   currentPilot?: string;
+  currentUserDisplayName?: string;
+  isAcknowledged?: boolean;
   onSelectPilot: (pilotName: string) => void;
   onUnassign: () => void;
+  onAcknowledge?: () => void;
   onClose: () => void;
   isPilotSelfUnassign?: boolean; // Whether this is a pilot unassigning themselves
 }
@@ -20,8 +23,11 @@ export function PilotContextMenu({
   availablePilots,
   pilotFlightCounts = {},
   currentPilot,
+  currentUserDisplayName,
+  isAcknowledged = false,
   onSelectPilot,
   onUnassign,
+  onAcknowledge,
   onClose,
   isPilotSelfUnassign = false,
 }: PilotContextMenuProps) {
@@ -125,6 +131,20 @@ export function PilotContextMenu({
           >
             <X className="w-4 h-4" />
             <span>Un-assign</span>
+          </button>
+        )}
+
+        {/* Acknowledge Option - Show if current user is the assigned pilot and hasn't acknowledged yet */}
+        {currentPilot && currentUserDisplayName && currentPilot === currentUserDisplayName && !isAcknowledged && onAcknowledge && (
+          <button
+            onClick={() => {
+              onAcknowledge();
+              onClose();
+            }}
+            className="w-full px-3 py-2 text-left text-sm text-green-600 dark:text-green-400 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2"
+          >
+            <Check className="w-4 h-4" />
+            <span>I'm here!</span>
           </button>
         )}
 

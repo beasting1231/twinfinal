@@ -9,6 +9,7 @@ import { AvailabilityContextMenu } from "./AvailabilityContextMenu";
 import { DriverVehicleCell } from "./DriverVehicleCell";
 import { DriverVehicleModal } from "./DriverVehicleModal";
 import { DriverVehicleContextMenu } from "./DriverVehicleContextMenu";
+import { DailyNoteSection } from "./DailyNoteSection";
 import { ScheduleBookingRequestContextMenu } from "./ScheduleBookingRequestContextMenu";
 import { BookingRequestItem } from "./BookingRequestItem";
 import { TimeSlotContextMenu } from "./TimeSlotContextMenu";
@@ -17,6 +18,7 @@ import { ChangeTimeModal } from "./ChangeTimeModal";
 import { AddTimeModal } from "./AddTimeModal";
 import { DeletedBookingContextMenu } from "./DeletedBookingContextMenu";
 import { DeletedBookingItem } from "./DeletedBookingItem";
+import { PilotAcknowledgmentContextMenu } from "./PilotAcknowledgmentContextMenu";
 import { CollapsibleDriverMap } from "./CollapsibleDriverMap";
 import { CollapsibleDriverOwnMap } from "./CollapsibleDriverOwnMap";
 import { LocationToggle } from "./LocationToggle";
@@ -27,6 +29,7 @@ import { useBookingRequests } from "../hooks/useBookingRequests";
 import { useAllPilots } from "../hooks/useAllPilots";
 import { useAuth } from "../contexts/AuthContext";
 import { useRole } from "../hooks/useRole";
+import { useDailyNotes } from "../hooks/useDailyNotes";
 import type { Booking, Pilot, BookingRequest, AvailabilityStatus } from "../types/index";
 import { format } from "date-fns";
 import { doc, updateDoc, setDoc, deleteDoc, collection, query, where, onSnapshot } from "firebase/firestore";
@@ -151,6 +154,9 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     updateDriverAssignment,
     addDriverAssignment
   } = useDriverAssignments(dateString);
+
+  // Fetch daily note
+  const { note: dailyNote, updateNote } = useDailyNotes(selectedDate);
 
   // Fetch booking requests
   const { bookingRequests, updateBookingRequest, deleteBookingRequest } = useBookingRequests();
@@ -312,6 +318,13 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     timeIndex: number;
     timeSlot: string;
     isAdditional: boolean;
+  } | null>(null);
+
+  const [pilotAcknowledgmentMenu, setPilotAcknowledgmentMenu] = useState<{
+    isOpen: boolean;
+    position: { x: number; y: number };
+    pilotName: string;
+    bookingId: string;
   } | null>(null);
 
   // Add pilot modal state
@@ -1055,6 +1068,44 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     });
   }, [currentUserDisplayName, role, canEditForSelectedDate]);
 
+  // Handle pilot long-press for acknowledgment
+  const handlePilotNameLongPress = useCallback((booking: Booking) => (
+    pilotName: string,
+    position: { x: number; y: number }
+  ) => {
+    if (!currentUserDisplayName || pilotName !== currentUserDisplayName) return;
+    if ((role !== "pilot" && role !== "admin") || !booking.id) return;
+
+    setPilotAcknowledgmentMenu({
+      isOpen: true,
+      position,
+      pilotName,
+      bookingId: booking.id
+    });
+  }, [currentUserDisplayName, role]);
+
+  // Handle pilot acknowledgment
+  const handlePilotAcknowledge = useCallback(async () => {
+    if (!pilotAcknowledgmentMenu || !onUpdateBooking) return;
+
+    const { pilotName, bookingId } = pilotAcknowledgmentMenu;
+
+    // Find the booking to get current acknowledged pilots
+    const booking = bookings.find(b => b.id === bookingId);
+    if (!booking) return;
+
+    const currentAcknowledged = booking.acknowledgedPilots || [];
+
+    // Add pilot to acknowledged list if not already there
+    if (!currentAcknowledged.includes(pilotName)) {
+      await onUpdateBooking(bookingId, {
+        acknowledgedPilots: [...currentAcknowledged, pilotName]
+      });
+    }
+
+    setPilotAcknowledgmentMenu(null);
+  }, [pilotAcknowledgmentMenu, bookings, onUpdateBooking]);
+
   // Handle opening availability context menu
   const handleNoPilotContextMenu = (pilotIndex: number, timeIndex: number) => (position: { x: number; y: number }) => {
     // Check if editing is allowed for this date (non-admins cannot edit past 24 hours)
@@ -1790,6 +1841,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
         className={`inline-block origin-top-left ${!isPinching ? 'transition-transform duration-100' : ''}`}
         style={{ transform: `scale(${scale})` }}
       >
+        <div className="flex gap-4">
         <div className="grid gap-2" style={{ gridTemplateColumns: `80px repeat(${maxColumnsNeeded}, 160px) 48px 98px${showSecondDriverColumn ? ' 98px' : ''}` }}>
           {/* Header Row - Shows pilots present today */}
           {role !== 'agency' ? (
@@ -2091,6 +2143,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                         pickupLocation={cell.booking.pickupLocation}
                         bookingSource={cell.booking.bookingSource}
                         assignedPilots={cell.booking.assignedPilots}
+                        acknowledgedPilots={cell.booking.acknowledgedPilots}
                         pilotPayments={cell.booking.pilotPayments}
                         bookingStatus={cell.booking.bookingStatus}
                         span={span}
@@ -2101,6 +2154,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                         onBookedClick={canViewBooking(cell.booking) ? () => handleBookedCellClick(cell.booking) : undefined}
                         onContextMenu={canViewBooking(cell.booking) && (canManagePilots() || role === "pilot") ? handleBookingContextMenu(cell.booking, timeSlot) : undefined}
                         onPilotNameClick={role === "pilot" ? handlePilotNameClick(cell.booking, timeSlot) : undefined}
+                        onPilotNameLongPress={(role === "pilot" || role === "admin") ? handlePilotNameLongPress(cell.booking) : undefined}
                         currentUserDisplayName={currentUserDisplayName}
                         bookingId={cell.booking.id}
                         canDrag={isDragEnabled}
@@ -2257,9 +2311,19 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
             ];
           })}
         </div>
+
+        {/* Daily Notes Section - To the right of the grid */}
+        <div className="w-[512px] flex-shrink-0">
+          <DailyNoteSection
+            note={dailyNote}
+            onUpdateNote={(note) => updateNote(note, currentUserDisplayName)}
+            isAdmin={role === 'admin'}
+          />
+        </div>
+        </div>
       </div>
 
-      {/* Booking Requests Inbox and Driver Location Map - Only show to admins */}
+      {/* Booking Requests Inbox - Only show to admins */}
       {role === 'admin' && (
       <div
         className="flex flex-col gap-4 max-w-4xl sticky left-4"
@@ -2543,8 +2607,21 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
               return counts;
             }, {} as Record<string, number>)}
           currentPilot={contextMenu.booking.assignedPilots[contextMenu.slotIndex]}
+          currentUserDisplayName={currentUserDisplayName}
+          isAcknowledged={contextMenu.booking.acknowledgedPilots?.includes(contextMenu.booking.assignedPilots[contextMenu.slotIndex]) || false}
           onSelectPilot={handleSelectPilot}
           onUnassign={handleUnassignPilot}
+          onAcknowledge={async () => {
+            const currentPilot = contextMenu.booking.assignedPilots[contextMenu.slotIndex];
+            if (!currentPilot || !contextMenu.booking.id || !onUpdateBooking) return;
+
+            const currentAcknowledged = contextMenu.booking.acknowledgedPilots || [];
+            if (!currentAcknowledged.includes(currentPilot)) {
+              await onUpdateBooking(contextMenu.booking.id, {
+                acknowledgedPilots: [...currentAcknowledged, currentPilot]
+              });
+            }
+          }}
           onClose={() => setContextMenu(null)}
           isPilotSelfUnassign={contextMenu.isPilotSelfUnassign}
         />
@@ -2975,6 +3052,17 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
           }}
           existingTimes={[...timeSlots, ...additionalSlots]}
           onAddTime={handleAddTimeSlot}
+        />
+      )}
+
+      {/* Pilot Acknowledgment Context Menu */}
+      {pilotAcknowledgmentMenu && (
+        <PilotAcknowledgmentContextMenu
+          isOpen={pilotAcknowledgmentMenu.isOpen}
+          position={pilotAcknowledgmentMenu.position}
+          pilotName={pilotAcknowledgmentMenu.pilotName}
+          onAcknowledge={handlePilotAcknowledge}
+          onClose={() => setPilotAcknowledgmentMenu(null)}
         />
       )}
 

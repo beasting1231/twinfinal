@@ -211,5 +211,13 @@ service cloud.firestore {
       // Only admins can create, update, or delete booking forms
       allow create, update, delete: if request.auth != null && hasRole('admin');
     }
+
+    // Daily notes collection (notes for each day)
+    match /dailyNotes/{dateId} {
+      // Admins, drivers, and pilots can read
+      allow read: if request.auth != null && hasAnyRole(['admin', 'driver', 'pilot']);
+      // Only admins can create, update, or delete notes
+      allow create, update, delete: if request.auth != null && hasRole('admin');
+    }
   }
 }
