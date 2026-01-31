@@ -55,6 +55,25 @@ service cloud.firestore {
       return isAssigned && onlyPaymentsChanged;
     }
 
+    // Helper function to check if pilot is acknowledging their assignment
+    function isPilotAcknowledging() {
+      let userDisplayName = getUserDisplayName();
+      let assignedPilots = resource.data.assignedPilots;
+
+      // Check that the pilot is assigned to this booking
+      let isAssigned = userDisplayName in assignedPilots;
+
+      // Check that only acknowledgedPilots and history fields are being changed
+      let onlyAcknowledgedChanged = request.resource.data.diff(resource.data).affectedKeys().hasOnly(['acknowledgedPilots', 'history']);
+
+      // Check that the pilot is only adding themselves to the acknowledged list
+      let oldAcknowledged = resource.data.get('acknowledgedPilots', []);
+      let newAcknowledged = request.resource.data.get('acknowledgedPilots', []);
+      let onlyAddingSelf = newAcknowledged.hasAll(oldAcknowledged) && userDisplayName in newAcknowledged;
+
+      return isAssigned && onlyAcknowledgedChanged && onlyAddingSelf;
+    }
+
     // Bookings collection
     match /bookings/{bookingId} {
       // Allow public read for booking form availability check
@@ -69,6 +88,7 @@ service cloud.firestore {
       // Pilot: can update only their own bookings (check createdBy)
       //        OR can update any booking to remove themselves from assignedPilots
       //        OR can update pilotPayments on bookings they're assigned to
+      //        OR can acknowledge their assignment
       // Agency: can update only their own bookings (check createdBy)
       // Driver: can update all bookings
       // Admin: can update all bookings
@@ -77,6 +97,7 @@ service cloud.firestore {
         hasAnyRole(['driver', 'admin']) ||
         (hasRole('pilot') && isPilotSelfUnassign()) ||
         (hasRole('pilot') && isPilotUpdatingOwnPayment()) ||
+        (hasRole('pilot') && isPilotAcknowledging()) ||
         (hasAnyRole(['pilot', 'agency']) && (
           !('createdBy' in resource.data) ||
           resource.data.createdBy == request.auth.uid
