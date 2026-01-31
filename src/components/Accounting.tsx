@@ -158,6 +158,16 @@ export function Accounting() {
     };
   }, [bookings]);
 
+  // Normalize time to hh:mm format (strip seconds if present)
+  const normalizeTime = (time: string): string => {
+    // Match time patterns like "HH:MM:SS" or "HH:MM"
+    const timeMatch = time.match(/^(\d{1,2}:\d{2})(:\d{2})?/);
+    if (timeMatch) {
+      return timeMatch[1]; // Return just HH:MM part
+    }
+    return time; // Return original if no match
+  };
+
   // Process bookings into accounting rows
   const accountingData = useMemo(() => {
     if (!bookings || bookings.length === 0) return [];
@@ -222,14 +232,16 @@ export function Accounting() {
       if (booking.timeIndex >= 1000) {
         // Additional slot - look up from additionalSlots array
         const additionalIndex = booking.timeIndex - 1000;
-        timeSlot = additionalSlots[additionalIndex] || `Extra ${additionalIndex + 1}`;
+        const rawTimeSlot = additionalSlots[additionalIndex] || `Extra ${additionalIndex + 1}`;
+        timeSlot = normalizeTime(rawTimeSlot);
         // For turn number, mark as "Extra" by using negative or special value
         // We'll display the actual time as the "turn" identifier
         turnNumber = -1; // Will be displayed as "Extra" in the UI
       } else {
         // Regular slot
         const defaultTimeSlot = timeSlotsForDate[booking.timeIndex] || `${booking.timeIndex}:00`;
-        timeSlot = dateOverrides[booking.timeIndex] || defaultTimeSlot;
+        const rawTimeSlot = dateOverrides[booking.timeIndex] || defaultTimeSlot;
+        timeSlot = normalizeTime(rawTimeSlot);
         turnNumber = booking.timeIndex + 1;
       }
       const turnKey = `${booking.date}@${booking.timeIndex}`;
@@ -556,8 +568,8 @@ export function Accounting() {
   const exportToCSV = () => {
     // Create CSV headers based on role
     const headers = role === "pilot"
-      ? ["Date", "Time", "Pilot", "Payment", "Method", "Source"]
-      : ["Date", "Time", "Pilot", "Payment", "Method", "Source", "Turn", "Pax", "Driver(s)", "Vehicle(s)", "Commission", "Comm. Status", "Office notes", "Additional notes", "Booking details"];
+      ? ["Flight #", "Date", "Time", "Pilot", "Payment", "Method", "Source"]
+      : ["Flight #", "Pilot's Invoice", "Date", "Time", "Pilot", "Payment", "Method", "Source", "Turn", "Pax", "Driver(s)", "Vehicle(s)", "Commission", "Comm. Status", "Office notes", "Additional notes", "Booking details"];
 
     // Create CSV rows from filtered data
     const csvRows = [headers.join(",")];
@@ -567,8 +579,21 @@ export function Accounting() {
         (filteredData[index - 1].date !== row.date ||
          filteredData[index - 1].time !== row.time);
 
+      // Calculate pilot's invoice (same calculation as in the UI)
+      const calculatePilotInvoice = () => {
+        if (typeof row.payment !== "number") return "-";
+        // Base calculation: negative stays same, positive subtracts 103
+        let invoice = row.payment < 0 ? row.payment : row.payment - 103;
+        // If pilot has MWST enabled, apply additional deduction
+        if (pilotMwstMap[row.pilot]) {
+          invoice -= invoice > 0 ? 6 : 3;
+        }
+        return invoice.toFixed(2);
+      };
+
       const rowData = role === "pilot"
         ? [
+            index + 1,
             formatDate(row.date),
             row.time,
             row.pilot,
@@ -577,6 +602,8 @@ export function Accounting() {
             row.bookingSource,
           ]
         : [
+            index + 1,
+            calculatePilotInvoice(),
             formatDate(row.date),
             row.time,
             row.pilot,
@@ -596,6 +623,12 @@ export function Accounting() {
 
       csvRows.push(rowData.map(field => `"${field}"`).join(","));
     });
+
+    // Add total row for non-pilot users
+    if (role !== "pilot") {
+      const totalRow = ["", totalPilotsInvoice.toFixed(2), "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""];
+      csvRows.push(totalRow.map(field => `"${field}"`).join(","));
+    }
 
     // Create blob and download
     const csvContent = csvRows.join("\n");

@@ -14,6 +14,7 @@ interface Form {
   commissionRate: number;
   hideAvailability: boolean;
   onlySensational: boolean;
+  requireTermsAndConditions: boolean;
   createdAt: Date;
 }
 
@@ -23,6 +24,7 @@ const defaultMainForm: Form = {
   commissionRate: 0,
   hideAvailability: false,
   onlySensational: false,
+  requireTermsAndConditions: false,
   createdAt: new Date(0),
 };
 
@@ -40,12 +42,14 @@ export function Forms() {
     const loadForms = async () => {
       let hideAvailability = false;
       let onlySensational = false;
+      let requireTermsAndConditions = false;
 
       try {
         const settingsDoc = await getDoc(doc(db, "settings", "form"));
         if (settingsDoc.exists()) {
           hideAvailability = settingsDoc.data().hideAvailability ?? false;
           onlySensational = settingsDoc.data().onlySensational ?? false;
+          requireTermsAndConditions = settingsDoc.data().requireTermsAndConditions ?? false;
         }
       } catch (error) {
         console.error("Error loading main form settings:", error);
@@ -57,6 +61,7 @@ export function Forms() {
         commissionRate: 0,
         hideAvailability,
         onlySensational,
+        requireTermsAndConditions,
         createdAt: new Date(0),
       };
 
@@ -72,6 +77,7 @@ export function Forms() {
             commissionRate: data.commissionRate || 0,
             hideAvailability: data.hideAvailability ?? false,
             onlySensational: data.onlySensational ?? false,
+            requireTermsAndConditions: data.requireTermsAndConditions ?? false,
             createdAt: data.createdAt?.toDate() || new Date(),
           };
         });
@@ -136,6 +142,32 @@ export function Forms() {
     }
   };
 
+  const handleToggleTerms = async (formId: string, currentValue: boolean) => {
+    const newValue = !currentValue;
+    setSavingSettings(formId + "-terms");
+
+    // Optimistically update UI
+    setForms((prev) =>
+      prev.map((f) => (f.id === formId ? { ...f, requireTermsAndConditions: newValue } : f))
+    );
+
+    try {
+      if (formId === "main") {
+        await setDoc(doc(db, "settings", "form"), { requireTermsAndConditions: newValue }, { merge: true });
+      } else {
+        await setDoc(doc(db, "bookingForms", formId), { requireTermsAndConditions: newValue }, { merge: true });
+      }
+    } catch (error) {
+      console.error("Error saving form settings:", error);
+      // Revert on error
+      setForms((prev) =>
+        prev.map((f) => (f.id === formId ? { ...f, requireTermsAndConditions: currentValue } : f))
+      );
+    } finally {
+      setSavingSettings(null);
+    }
+  };
+
   const getFormUrls = (form: Form) => {
     const baseFormUrl = `${window.location.origin}/booking-request`;
     const embedUrl = `${window.location.origin}/embed/`;
@@ -176,6 +208,7 @@ export function Forms() {
         commissionRate,
         hideAvailability: false,
         onlySensational: false,
+        requireTermsAndConditions: false,
         createdAt: new Date(),
       });
 
@@ -185,6 +218,7 @@ export function Forms() {
         commissionRate,
         hideAvailability: false,
         onlySensational: false,
+        requireTermsAndConditions: false,
         createdAt: new Date(),
       };
 
@@ -363,6 +397,28 @@ export function Forms() {
                     <span
                       className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
                         form.onlySensational ? "translate-x-5" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">Require terms and conditions</p>
+                    <p className="text-xs text-gray-500 dark:text-zinc-400">
+                      Add required checkbox for terms and conditions
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleToggleTerms(form.id, form.requireTermsAndConditions)}
+                    disabled={savingSettings === form.id + "-terms"}
+                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                      form.requireTermsAndConditions ? "bg-blue-600" : "bg-gray-300 dark:bg-zinc-600"
+                    } ${savingSettings === form.id + "-terms" ? "opacity-50" : ""}`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                        form.requireTermsAndConditions ? "translate-x-5" : "translate-x-0"
                       }`}
                     />
                   </button>

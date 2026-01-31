@@ -1,6 +1,8 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { startOfWeek, startOfMonth, format } from "date-fns";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "./firebase/config";
 import { Header } from "./components/Header";
 import { ScheduleGrid } from "./components/ScheduleGrid";
 import { AvailabilityGrid } from "./components/AvailabilityGrid";
@@ -30,9 +32,38 @@ import { getTimeSlotsByDate } from "./utils/timeSlots";
 function DailyPlanPage() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [weekStartDate, setWeekStartDate] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
+  const [currentUserDisplayName, setCurrentUserDisplayName] = useState<string | undefined>();
 
   const { currentUser } = useAuth();
   const { bookings, loading: bookingsLoading, addBooking, updateBooking, deleteBooking } = useBookings();
+
+  // Fetch current user's display name from userProfile (not from Auth)
+  useEffect(() => {
+    if (!currentUser?.uid) {
+      setCurrentUserDisplayName(undefined);
+      return;
+    }
+
+    const fetchUserProfile = async () => {
+      try {
+        const userProfileRef = doc(db, "userProfiles", currentUser.uid);
+        const userProfileSnap = await getDoc(userProfileRef);
+
+        if (userProfileSnap.exists()) {
+          const profileData = userProfileSnap.data();
+          setCurrentUserDisplayName(profileData.displayName || currentUser.email || undefined);
+        } else {
+          // Fallback to auth displayName if profile doesn't exist
+          setCurrentUserDisplayName(currentUser.displayName || currentUser.email || undefined);
+        }
+      } catch (error) {
+        console.error("Error fetching user profile:", error);
+        setCurrentUserDisplayName(currentUser.displayName || currentUser.email || undefined);
+      }
+    };
+
+    fetchUserProfile();
+  }, [currentUser]);
 
   const filteredBookings = useMemo(() => {
     const selectedDateStr = format(selectedDate, "yyyy-MM-dd");
@@ -61,7 +92,7 @@ function DailyPlanPage() {
         getPilotAvailabilityStatus={getPilotAvailabilityStatus}
         saveCustomPilotOrder={saveCustomPilotOrder}
         loading={isLoading}
-        currentUserDisplayName={currentUser?.displayName || currentUser?.email || undefined}
+        currentUserDisplayName={currentUserDisplayName}
         onAddBooking={addBooking}
         onUpdateBooking={updateBooking}
         onDeleteBooking={deleteBooking}

@@ -39,6 +39,8 @@ export function BookingRequestForm() {
   const [loading, setLoading] = useState(true);
   const [hideAvailability, setHideAvailability] = useState(false);
   const [onlySensational, setOnlySensational] = useState(false);
+  const [requireTermsAndConditions, setRequireTermsAndConditions] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [customFormData, setCustomFormData] = useState<{ name: string; commissionRate: number; onlySensational: boolean } | null>(null);
@@ -79,6 +81,7 @@ export function BookingRequestForm() {
             const data = formDoc.data();
             const formOnlySensational = data.onlySensational ?? false;
             const formHideAvailability = data.hideAvailability ?? false;
+            const formRequireTerms = data.requireTermsAndConditions ?? false;
             setCustomFormData({
               name: data.name,
               commissionRate: data.commissionRate || 0,
@@ -87,6 +90,7 @@ export function BookingRequestForm() {
             // Use the custom form's settings - don't fall through to main form settings
             setOnlySensational(formOnlySensational);
             setHideAvailability(formHideAvailability);
+            setRequireTermsAndConditions(formRequireTerms);
             setSettingsLoaded(true);
             return;
           }
@@ -109,6 +113,7 @@ export function BookingRequestForm() {
           const data = settingsDoc.data();
           setHideAvailability(data.hideAvailability ?? false);
           setOnlySensational(data.onlySensational ?? false);
+          setRequireTermsAndConditions(data.requireTermsAndConditions ?? false);
         }
       } catch (error) {
         console.error("Error loading form settings:", error);
@@ -324,6 +329,16 @@ export function BookingRequestForm() {
     e.preventDefault();
     setSubmitting(true);
     setMessage(null);
+
+    // Check if terms are required and accepted
+    if (requireTermsAndConditions && !termsAccepted) {
+      setMessage({
+        type: "error",
+        text: "Please accept the terms and conditions to continue.",
+      });
+      setSubmitting(false);
+      return;
+    }
 
     try {
       // Convert timeIndex to time string
@@ -763,11 +778,40 @@ export function BookingRequestForm() {
             />
           </div>
 
+          {/* Terms and Conditions - only show if required */}
+          {settingsLoaded && requireTermsAndConditions && (
+            <div className="pt-2">
+              <label className="flex items-start gap-3 cursor-pointer group">
+                <div className="relative flex items-center justify-center">
+                  <input
+                    type="checkbox"
+                    checked={termsAccepted}
+                    onChange={(e) => setTermsAccepted(e.target.checked)}
+                    className="w-5 h-5 border-2 border-gray-300 rounded bg-white checked:bg-gray-900 checked:border-gray-900 focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 cursor-pointer transition-colors"
+                    required
+                  />
+                </div>
+                <span className="text-sm text-gray-700 flex-1">
+                  I accept the{" "}
+                  <a
+                    href="https://www.tandemparagliding.ch/gcc.html"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:text-blue-700 underline font-medium"
+                  >
+                    terms and conditions
+                  </a>
+                  {" "}*
+                </span>
+              </label>
+            </div>
+          )}
+
           {/* Submit Button */}
           <Button
             type="submit"
-            disabled={submitting}
-            className="w-full !bg-gray-900 !text-white hover:!bg-gray-800 mt-8"
+            disabled={submitting || (requireTermsAndConditions && !termsAccepted)}
+            className="w-full !bg-gray-900 !text-white hover:!bg-gray-800 mt-8 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {submitting ? "Submitting..." : "Submit Booking Request"}
           </Button>
