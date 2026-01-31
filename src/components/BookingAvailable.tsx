@@ -480,6 +480,13 @@ export const BookingAvailable = memo(function BookingAvailable({
               }
             };
 
+            const handlePilotContextMenu = (e: React.MouseEvent) => {
+              if (!canLongPress) return;
+              e.preventDefault();
+              e.stopPropagation();
+              onPilotNameLongPress(pilot, { x: e.clientX, y: e.clientY });
+            };
+
             // Determine background color: green if acknowledged, otherwise original colors
             const bgColorClass = isAcknowledged
               ? "bg-green-600/90"
@@ -495,6 +502,7 @@ export const BookingAvailable = memo(function BookingAvailable({
                     className={`text-xs text-white ${isAcknowledged ? "bg-green-600/90" : "bg-orange-600/90"} rounded-t-lg px-2 py-0.5 w-[80%] relative`}
                     onTouchStart={handlePilotTouchStart}
                     onTouchEnd={handlePilotTouchEnd}
+                    onContextMenu={handlePilotContextMenu}
                   >
                     <div className="text-center truncate">{pilot}</div>
                     {numAmount !== undefined && numAmount !== 0 && !isNaN(numAmount) && (
@@ -518,6 +526,7 @@ export const BookingAvailable = memo(function BookingAvailable({
                   }}
                   onTouchStart={handlePilotTouchStart}
                   onTouchEnd={handlePilotTouchEnd}
+                  onContextMenu={handlePilotContextMenu}
                 >
                   <div className="text-center truncate">{pilot}</div>
                   {numAmount !== undefined && numAmount !== 0 && !isNaN(numAmount) && (
