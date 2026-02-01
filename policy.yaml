@@ -1,0 +1,6 @@
+constraint: constraints/iam.allowedPolicyMemberDomains
+listPolicy:
+  allowedValues:
+    - "C00000000"
+    - "C036rfg98"
+

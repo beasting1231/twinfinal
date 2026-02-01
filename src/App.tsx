@@ -1,8 +1,6 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { startOfWeek, startOfMonth, format } from "date-fns";
-import { doc, getDoc } from "firebase/firestore";
-import { db } from "./firebase/config";
+import { startOfWeek, startOfMonth, format, addDays, subDays } from "date-fns";
 import { Header } from "./components/Header";
 import { ScheduleGrid } from "./components/ScheduleGrid";
 import { AvailabilityGrid } from "./components/AvailabilityGrid";
@@ -14,9 +12,34 @@ import { Priority } from "./components/Priority";
 import { Forms } from "./components/Forms";
 import { GiftVouchers } from "./components/GiftVouchers";
 import { GiftVoucherForm } from "./components/GiftVoucherForm";
-import { NotificationSettings } from "./components/NotificationSettings";
-import { UserManagement } from "./components/UserManagement";
-import { Email } from "./components/Email";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { retryImport } from "./utils/retryImport";
+
+// Code-split: NotificationSettings (Phase 1 - Low risk, rarely accessed)
+const NotificationSettings = lazy(() =>
+  retryImport(() =>
+    import("./components/NotificationSettings").then((module) => ({
+      default: module.NotificationSettings,
+    }))
+  )
+);
+
+// Code-split: Admin routes (Phase 2 - Admin-only, low risk)
+const UserManagement = lazy(() =>
+  retryImport(() =>
+    import("./components/UserManagement").then((module) => ({
+      default: module.UserManagement,
+    }))
+  )
+);
+
+const Email = lazy(() =>
+  retryImport(() =>
+    import("./components/Email").then((module) => ({
+      default: module.Email,
+    }))
+  )
+);
 import { BookingRequestForm } from "./components/BookingRequestForm";
 import { useBookings } from "./hooks/useBookings";
 import { usePilots } from "./hooks/usePilots";
@@ -32,38 +55,19 @@ import { getTimeSlotsByDate } from "./utils/timeSlots";
 function DailyPlanPage() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [weekStartDate, setWeekStartDate] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
-  const [currentUserDisplayName, setCurrentUserDisplayName] = useState<string | undefined>();
 
-  const { currentUser } = useAuth();
-  const { bookings, loading: bookingsLoading, addBooking, updateBooking, deleteBooking } = useBookings();
+  const { currentUser, userProfile } = useAuth();
 
-  // Fetch current user's display name from userProfile (not from Auth)
-  useEffect(() => {
-    if (!currentUser?.uid) {
-      setCurrentUserDisplayName(undefined);
-      return;
-    }
+  // Optimize: Only load bookings ±7 days from selected date
+  const dateRange = useMemo(() => ({
+    start: subDays(selectedDate, 7),
+    end: addDays(selectedDate, 7),
+  }), [selectedDate]);
 
-    const fetchUserProfile = async () => {
-      try {
-        const userProfileRef = doc(db, "userProfiles", currentUser.uid);
-        const userProfileSnap = await getDoc(userProfileRef);
+  const { bookings, addBooking, updateBooking, deleteBooking } = useBookings({ dateRange });
 
-        if (userProfileSnap.exists()) {
-          const profileData = userProfileSnap.data();
-          setCurrentUserDisplayName(profileData.displayName || currentUser.email || undefined);
-        } else {
-          // Fallback to auth displayName if profile doesn't exist
-          setCurrentUserDisplayName(currentUser.displayName || currentUser.email || undefined);
-        }
-      } catch (error) {
-        console.error("Error fetching user profile:", error);
-        setCurrentUserDisplayName(currentUser.displayName || currentUser.email || undefined);
-      }
-    };
-
-    fetchUserProfile();
-  }, [currentUser]);
+  // Get display name from user profile (already loaded by AuthContext)
+  const currentUserDisplayName = userProfile?.displayName || currentUser?.email || undefined;
 
   const filteredBookings = useMemo(() => {
     const selectedDateStr = format(selectedDate, "yyyy-MM-dd");
@@ -71,7 +75,10 @@ function DailyPlanPage() {
   }, [bookings, selectedDate]);
 
   const { pilots, loading: pilotsLoading, isPilotAvailableForTimeSlot, getPilotAvailabilityStatus, saveCustomPilotOrder } = usePilots(selectedDate);
-  const isLoading = pilotsLoading || bookingsLoading;
+
+  // Progressive loading: Only wait for pilots data, not bookings
+  // The grid will show immediately with pilots, and bookings will populate as they load
+  const isLoading = pilotsLoading;
   const timeSlots = useMemo(() => getTimeSlotsByDate(selectedDate), [selectedDate]);
 
   return (
@@ -145,6 +152,18 @@ function PageWrapper({ children }: { children: React.ReactNode }) {
       />
       <div className="flex-1 overflow-y-auto">
         {children}
+      </div>
+    </div>
+  );
+}
+
+// Loading fallback for lazy-loaded routes
+function LazyLoadingFallback() {
+  return (
+    <div className="flex items-center justify-center min-h-screen">
+      <div className="flex flex-col items-center gap-4">
+        <div className="w-8 h-8 border-4 border-zinc-700 border-t-blue-500 rounded-full animate-spin"></div>
+        <p className="text-zinc-400 text-sm">Loading...</p>
       </div>
     </div>
   );
@@ -227,7 +246,11 @@ function AppContent() {
       <Route path="/notifications" element={
         <ProtectedRoute>
           <PageWrapper>
-            <NotificationSettings />
+            <ErrorBoundary>
+              <Suspense fallback={<LazyLoadingFallback />}>
+                <NotificationSettings />
+              </Suspense>
+            </ErrorBoundary>
           </PageWrapper>
         </ProtectedRoute>
       } />
@@ -235,7 +258,11 @@ function AppContent() {
       <Route path="/user-management" element={
         <ProtectedRoute>
           <PageWrapper>
-            <UserManagement />
+            <ErrorBoundary>
+              <Suspense fallback={<LazyLoadingFallback />}>
+                <UserManagement />
+              </Suspense>
+            </ErrorBoundary>
           </PageWrapper>
         </ProtectedRoute>
       } />
@@ -243,7 +270,11 @@ function AppContent() {
       <Route path="/email" element={
         <ProtectedRoute>
           <PageWrapper>
-            <Email />
+            <ErrorBoundary>
+              <Suspense fallback={<LazyLoadingFallback />}>
+                <Email />
+              </Suspense>
+            </ErrorBoundary>
           </PageWrapper>
         </ProtectedRoute>
       } />

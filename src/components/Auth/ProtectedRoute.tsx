@@ -1,72 +1,61 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import { Onboarding } from "./Onboarding";
-import { useEffect, useState } from "react";
-import { doc, getDoc } from "firebase/firestore";
-import { db } from "../../firebase/config";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
 }
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { currentUser, userRole, loading } = useAuth();
-  const [onboardingComplete, setOnboardingComplete] = useState<boolean | null>(null);
-  const [checkingOnboarding, setCheckingOnboarding] = useState(true);
+  const { currentUser, userRole, userProfile, loading } = useAuth();
 
-  // Check if user has completed onboarding
-  useEffect(() => {
-    async function checkOnboarding() {
-      if (!currentUser) {
-        setCheckingOnboarding(false);
-        return;
-      }
+  // Redirect to login if not authenticated (and not loading)
+  if (!loading && !currentUser) {
+    return <Navigate to="/login" replace />;
+  }
 
-      try {
-        const userDocRef = doc(db, "userProfiles", currentUser.uid);
-        const userDoc = await getDoc(userDocRef);
-
-        if (userDoc.exists()) {
-          const userData = userDoc.data();
-          setOnboardingComplete(userData.onboardingComplete ?? true); // Default to true for existing users
-        } else {
-          setOnboardingComplete(false);
-        }
-      } catch (error) {
-        console.error("Error checking onboarding status:", error);
-        setOnboardingComplete(true); // Fail safe - assume complete
-      }
-
-      setCheckingOnboarding(false);
-    }
-
-    checkOnboarding();
-  }, [currentUser]);
-
-  // Show loading state while checking auth or onboarding
-  if (loading || checkingOnboarding) {
+  // If still loading auth state, show skeleton (brief, auth state is cached)
+  if (loading && !currentUser) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-zinc-950">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-8 h-8 border-4 border-zinc-700 border-t-white rounded-full animate-spin"></div>
-          <p className="text-zinc-400 text-sm">Loading...</p>
+      <div className="min-h-screen bg-zinc-950 p-4">
+        <div className="grid gap-2" style={{ gridTemplateColumns: `80px repeat(5, 160px) 48px 98px 98px` }}>
+          {/* Header Row Skeleton */}
+          <div className="h-7" />
+          <div className="h-7 bg-zinc-900 rounded-lg animate-pulse" />
+          <div className="h-7 bg-zinc-900 rounded-lg animate-pulse" />
+          <div className="h-7 bg-zinc-900 rounded-lg animate-pulse" />
+          <div className="h-7 bg-zinc-900 rounded-lg animate-pulse" />
+          <div className="h-7 bg-zinc-900 rounded-lg animate-pulse" />
+          <div className="h-7 w-full" />
+          <div className="h-7 bg-yellow-400/80 rounded-lg animate-pulse" />
+          <div className="h-7 bg-yellow-400/80 rounded-lg animate-pulse" />
+
+          {/* Time Slot Rows Skeleton (4 rows for brevity) */}
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="contents">
+              <div className="h-20 bg-zinc-900 rounded-lg animate-pulse" />
+              <div className="h-20 bg-zinc-800 rounded-lg animate-pulse" />
+              <div className="h-20 bg-zinc-800 rounded-lg animate-pulse" />
+              <div className="h-20 bg-zinc-800 rounded-lg animate-pulse" />
+              <div className="h-20 bg-zinc-800 rounded-lg animate-pulse" />
+              <div className="h-20 bg-zinc-800 rounded-lg animate-pulse" />
+              <div className="h-20 w-full" />
+              <div className="h-20 bg-zinc-800 rounded-lg animate-pulse" />
+              <div className="h-20 bg-zinc-800 rounded-lg animate-pulse" />
+            </div>
+          ))}
         </div>
       </div>
     );
   }
 
-  // Redirect to login if not authenticated
-  if (!currentUser) {
-    return <Navigate to="/login" replace />;
-  }
-
-  // Show onboarding if not completed
-  if (onboardingComplete === false) {
+  // Show onboarding if profile loaded and not completed
+  if (!loading && userProfile && !userProfile.onboardingComplete) {
     return <Onboarding />;
   }
 
-  // Show no access screen if no role (but onboarding complete)
-  if (!userRole) {
+  // Show no access screen if profile loaded but no role
+  if (!loading && userProfile && !userRole) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-zinc-950">
         <div className="w-full max-w-md p-8 bg-zinc-900 rounded-lg border border-zinc-800">
@@ -81,5 +70,16 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     );
   }
 
-  return <>{children}</>;
+  // Show app with cached data (even if profile still loading)
+  // This allows instant grid display while profile fetch completes in background
+  return (
+    <>
+      {loading && (
+        <div className="fixed top-0 left-0 right-0 h-1 bg-zinc-900 z-50">
+          <div className="h-full bg-gradient-to-r from-blue-500 to-blue-400 animate-pulse" style={{ width: '70%', transition: 'width 0.3s ease' }}></div>
+        </div>
+      )}
+      {children}
+    </>
+  );
 }

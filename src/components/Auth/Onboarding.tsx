@@ -6,7 +6,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 
 export function Onboarding() {
-  const { currentUser } = useAuth();
+  const { currentUser, refreshUserProfile } = useAuth();
   const [username, setUsername] = useState("");
   const [femalePilot, setFemalePilot] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -40,8 +40,8 @@ export function Onboarding() {
 
       console.log("✅ Onboarding completed successfully");
 
-      // Force a page reload to refresh auth state
-      window.location.reload();
+      // Refresh user profile from AuthContext (no page reload needed)
+      await refreshUserProfile();
     } catch (error: any) {
       console.error("❌ Error completing onboarding:", error);
       setError(error.message || "Failed to complete onboarding");

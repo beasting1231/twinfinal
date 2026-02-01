@@ -1,24 +1,89 @@
 import { useState, useEffect, useRef } from "react";
-import { collection, onSnapshot, addDoc, updateDoc, doc, deleteField, serverTimestamp, arrayUnion } from "firebase/firestore";
+import { collection, onSnapshot, addDoc, updateDoc, doc, deleteField, serverTimestamp, arrayUnion, query, where, orderBy } from "firebase/firestore";
 import { db } from "../firebase/config";
 import type { Booking, BookingHistoryEntry } from "../types/index";
 import { useEditing } from "../contexts/EditingContext";
 import { useAuth } from "../contexts/AuthContext";
 import { getTimeSlotsByDate } from "../utils/timeSlots";
+import { format } from "date-fns";
 
-export function useBookings() {
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [loading, setLoading] = useState(true);
+const BOOKINGS_CACHE_KEY = 'twin_bookings_cache';
+const CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
+
+interface UseBookingsOptions {
+  dateRange?: {
+    start: Date;
+    end: Date;
+  };
+}
+
+export function useBookings(options?: UseBookingsOptions) {
+  const [bookings, setBookings] = useState<Booking[]>(() => {
+    // Try to load from cache on initialization
+    try {
+      const cached = localStorage.getItem(BOOKINGS_CACHE_KEY);
+      if (cached) {
+        const { data, timestamp } = JSON.parse(cached);
+        const age = Date.now() - timestamp;
+        if (age < CACHE_EXPIRY_MS) {
+          console.log('📦 Loaded bookings from cache');
+          return data;
+        }
+      }
+    } catch (error) {
+      console.error('Error loading bookings cache:', error);
+    }
+    return [];
+  });
+  const [loading, setLoading] = useState(() => {
+    // If we have cached data, set loading to false immediately
+    try {
+      const cached = localStorage.getItem(BOOKINGS_CACHE_KEY);
+      if (cached) {
+        const { data, timestamp } = JSON.parse(cached);
+        const age = Date.now() - timestamp;
+        if (age < CACHE_EXPIRY_MS && data.length > 0) {
+          return false; // Don't show loading screen if we have valid cache
+        }
+      }
+    } catch (error) {
+      console.error('Error checking bookings cache:', error);
+    }
+    return true;
+  });
   const [error, setError] = useState<string | null>(null);
   const { isEditing, incrementPendingUpdates } = useEditing();
   const { currentUser } = useAuth();
   const pendingUpdateRef = useRef<Booking[] | null>(null);
 
   useEffect(() => {
+    const subscriptionStartTime = performance.now();
+
+    // Build query with optional date filtering
+    let bookingsQuery;
+    if (options?.dateRange) {
+      const startDate = format(options.dateRange.start, "yyyy-MM-dd");
+      const endDate = format(options.dateRange.end, "yyyy-MM-dd");
+      console.log(`📡 Starting bookings subscription (${startDate} to ${endDate})...`);
+
+      bookingsQuery = query(
+        collection(db, "bookings"),
+        where("date", ">=", startDate),
+        where("date", "<=", endDate),
+        orderBy("date")
+      );
+    } else {
+      console.log("📡 Starting bookings subscription (all dates)...");
+      bookingsQuery = collection(db, "bookings");
+    }
+
     // Subscribe to bookings collection
     const unsubscribeBookings = onSnapshot(
-      collection(db, "bookings"),
+      bookingsQuery,
       (snapshot) => {
+        const snapshotTime = performance.now() - subscriptionStartTime;
+        console.log(`⏱️ Bookings snapshot received in ${snapshotTime.toFixed(0)}ms (${snapshot.docs.length} bookings)`);
+
         const bookingsData = snapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
@@ -34,6 +99,15 @@ export function useBookings() {
           setBookings(prevBookings => {
             // If this is the first load, just set all bookings
             if (prevBookings.length === 0) {
+              // Update cache
+              try {
+                localStorage.setItem(BOOKINGS_CACHE_KEY, JSON.stringify({
+                  data: bookingsData,
+                  timestamp: Date.now(),
+                }));
+              } catch (error) {
+                console.error('Error caching bookings:', error);
+              }
               return bookingsData;
             }
 
@@ -66,7 +140,7 @@ export function useBookings() {
             console.log("Booking changes detected - updating");
 
             // Build new array, reusing unchanged booking objects
-            return bookingsData.map(newBooking => {
+            const updatedBookings = bookingsData.map(newBooking => {
               const prevBooking = prevBookingsMap.get(newBooking.id!);
               // If booking exists and hasn't changed, reuse the old reference
               if (prevBooking && JSON.stringify(prevBooking) === JSON.stringify(newBooking)) {
@@ -74,6 +148,18 @@ export function useBookings() {
               }
               return newBooking;
             });
+
+            // Update cache
+            try {
+              localStorage.setItem(BOOKINGS_CACHE_KEY, JSON.stringify({
+                data: updatedBookings,
+                timestamp: Date.now(),
+              }));
+            } catch (error) {
+              console.error('Error caching bookings:', error);
+            }
+
+            return updatedBookings;
           });
           pendingUpdateRef.current = null;
         }
@@ -81,9 +167,16 @@ export function useBookings() {
         setLoading(false);
       },
       (err) => {
-        console.error("Error fetching bookings:", err);
+        console.error("❌ Error fetching bookings:", err);
         setError(err.message);
         setLoading(false);
+
+        // Retry after 5 seconds
+        setTimeout(() => {
+          console.log("🔄 Retrying bookings subscription...");
+          setError(null);
+          setLoading(true);
+        }, 5000);
       }
     );
 
@@ -91,7 +184,7 @@ export function useBookings() {
     return () => {
       unsubscribeBookings();
     };
-  }, [isEditing, incrementPendingUpdates]);
+  }, [isEditing, incrementPendingUpdates, options?.dateRange?.start?.getTime(), options?.dateRange?.end?.getTime()]);
 
   // Apply pending updates when editing stops
   useEffect(() => {

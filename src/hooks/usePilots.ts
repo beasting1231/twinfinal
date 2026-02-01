@@ -12,21 +12,217 @@ export interface PilotAvailability {
 // Map from pilotUid to Map<timeSlot, status>
 export type PilotAvailabilityStatusMap = Map<string, Map<string, AvailabilityStatus>>;
 
+const PILOTS_CACHE_PREFIX = 'twin_pilots_cache_';
+const CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
+
 export function usePilots(selectedDate: Date) {
-  const [rawPilots, setRawPilots] = useState<Pilot[]>([]);
-  const [pilotAvailability, setPilotAvailability] = useState<Map<string, Set<string>>>(new Map());
-  const [pilotAvailabilityStatus, setPilotAvailabilityStatus] = useState<PilotAvailabilityStatusMap>(new Map());
-  const [pilotSignInTimes, setPilotSignInTimes] = useState<Map<string, string>>(new Map()); // Track earliest sign-in time per pilot
-  const [customOrder, setCustomOrder] = useState<string[] | null>(null);
-  const [loading, setLoading] = useState(true);
+  const dateStr = format(selectedDate, "yyyy-MM-dd");
+  const cacheKey = `${PILOTS_CACHE_PREFIX}${dateStr}`;
+
+  const [rawPilots, setRawPilots] = useState<Pilot[]>(() => {
+    // Try to load from cache on initialization
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const { data, timestamp } = JSON.parse(cached);
+        const age = Date.now() - timestamp;
+        if (age < CACHE_EXPIRY_MS) {
+          console.log(`📦 Loaded pilots from cache for ${dateStr}`);
+          return data;
+        }
+      }
+    } catch (error) {
+      console.error('Error loading pilots cache:', error);
+    }
+    return [];
+  });
+  const [pilotAvailability, setPilotAvailability] = useState<Map<string, Set<string>>>(() => {
+    // Try to load from cache on initialization
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const { availability, timestamp } = JSON.parse(cached);
+        const age = Date.now() - timestamp;
+        if (age < CACHE_EXPIRY_MS && availability) {
+          const availMap = new Map<string, Set<string>>();
+          Object.entries(availability).forEach(([pilotId, slots]) => {
+            availMap.set(pilotId, new Set(slots as string[]));
+          });
+          return availMap;
+        }
+      }
+    } catch (error) {
+      console.error('Error loading availability cache:', error);
+    }
+    return new Map();
+  });
+  const [pilotAvailabilityStatus, setPilotAvailabilityStatus] = useState<PilotAvailabilityStatusMap>(() => {
+    // Try to load from cache on initialization
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const { availabilityStatus, timestamp } = JSON.parse(cached);
+        const age = Date.now() - timestamp;
+        if (age < CACHE_EXPIRY_MS && availabilityStatus) {
+          const statusMap = new Map<string, Map<string, AvailabilityStatus>>();
+          Object.entries(availabilityStatus).forEach(([pilotId, slots]) => {
+            const slotMap = new Map<string, AvailabilityStatus>();
+            Object.entries(slots as Record<string, AvailabilityStatus>).forEach(([timeSlot, status]) => {
+              slotMap.set(timeSlot, status);
+            });
+            statusMap.set(pilotId, slotMap);
+          });
+          return statusMap;
+        }
+      }
+    } catch (error) {
+      console.error('Error loading availability status cache:', error);
+    }
+    return new Map();
+  });
+  const [pilotSignInTimes, setPilotSignInTimes] = useState<Map<string, string>>(() => {
+    // Try to load from cache on initialization
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const { signInTimes, timestamp } = JSON.parse(cached);
+        const age = Date.now() - timestamp;
+        if (age < CACHE_EXPIRY_MS && signInTimes) {
+          return new Map(Object.entries(signInTimes));
+        }
+      }
+    } catch (error) {
+      console.error('Error loading sign-in times cache:', error);
+    }
+    return new Map();
+  });
+  const [customOrder, setCustomOrder] = useState<string[] | null>(() => {
+    // Try to load from cache on initialization
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const { customPilotOrder, timestamp } = JSON.parse(cached);
+        const age = Date.now() - timestamp;
+        if (age < CACHE_EXPIRY_MS && customPilotOrder) {
+          return customPilotOrder;
+        }
+      }
+    } catch (error) {
+      console.error('Error loading custom order cache:', error);
+    }
+    return null;
+  });
+  const [loading, setLoading] = useState(() => {
+    // If we have cached data for this date, set loading to false immediately
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const { data, timestamp } = JSON.parse(cached);
+        const age = Date.now() - timestamp;
+        if (age < CACHE_EXPIRY_MS && data.length > 0) {
+          return false; // Don't show loading screen if we have valid cache
+        }
+      }
+    } catch (error) {
+      console.error('Error checking pilots cache:', error);
+    }
+    return true;
+  });
   const [error, setError] = useState<string | null>(null);
   const prevPilotsRef = useRef<Pilot[]>([]);
+  const prevDateStrRef = useRef(dateStr);
+
+  // Synchronize state immediately when date changes to prevent showing stale data
+  useEffect(() => {
+    // Skip on initial mount
+    if (prevDateStrRef.current === dateStr) {
+      prevDateStrRef.current = dateStr;
+      return;
+    }
+
+    prevDateStrRef.current = dateStr;
+
+    // Immediately load cached data for the new date (or clear if no cache)
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const { data, timestamp, availability, availabilityStatus, signInTimes, customPilotOrder } = JSON.parse(cached);
+        const age = Date.now() - timestamp;
+        if (age < CACHE_EXPIRY_MS) {
+          console.log(`📦 Immediately loaded cached data for ${dateStr}`);
+          setRawPilots(data);
+
+          // Restore availability maps from cached data
+          if (availability) {
+            const availMap = new Map<string, Set<string>>();
+            Object.entries(availability).forEach(([pilotId, slots]) => {
+              availMap.set(pilotId, new Set(slots as string[]));
+            });
+            setPilotAvailability(availMap);
+          }
+
+          if (availabilityStatus) {
+            const statusMap = new Map<string, Map<string, AvailabilityStatus>>();
+            Object.entries(availabilityStatus).forEach(([pilotId, slots]) => {
+              const slotMap = new Map<string, AvailabilityStatus>();
+              Object.entries(slots as Record<string, AvailabilityStatus>).forEach(([timeSlot, status]) => {
+                slotMap.set(timeSlot, status);
+              });
+              statusMap.set(pilotId, slotMap);
+            });
+            setPilotAvailabilityStatus(statusMap);
+          }
+
+          if (signInTimes) {
+            setPilotSignInTimes(new Map(Object.entries(signInTimes)));
+          }
+
+          if (customPilotOrder) {
+            setCustomOrder(customPilotOrder);
+          }
+
+          // Don't show loading since we have cache
+          setLoading(false);
+          return;
+        }
+      }
+    } catch (error) {
+      console.error('Error loading pilots cache on date change:', error);
+    }
+
+    // No valid cache - clear stale data and show loading
+    console.log(`🔄 Date changed to ${dateStr}, clearing stale data`);
+    setRawPilots([]);
+    setPilotAvailability(new Map());
+    setPilotAvailabilityStatus(new Map());
+    setPilotSignInTimes(new Map());
+    setCustomOrder(null);
+  }, [dateStr, cacheKey]);
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
+    const pilotsStartTime = performance.now();
+    console.log(`📡 Starting pilots subscription for ${dateStr}...`);
 
-    const dateStr = format(selectedDate, "yyyy-MM-dd");
+    // Check if we have valid cache for this date
+    let hasValidCache = false;
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const { data, timestamp } = JSON.parse(cached);
+        const age = Date.now() - timestamp;
+        if (age < CACHE_EXPIRY_MS && data.length > 0) {
+          hasValidCache = true;
+        }
+      }
+    } catch (error) {
+      console.error('Error checking pilots cache:', error);
+    }
+
+    // Only set loading to true if we don't have valid cache
+    if (!hasValidCache) {
+      setLoading(true);
+    }
+    setError(null);
 
     // Fetch custom pilot order for this date (if any)
     const fetchCustomOrder = async () => {
@@ -95,6 +291,12 @@ export function usePilots(selectedDate: Date) {
             setPilotAvailability(new Map());
             setPilotAvailabilityStatus(new Map());
             setPilotSignInTimes(new Map());
+            // Clear cache for this date since no pilots are available
+            try {
+              localStorage.removeItem(cacheKey);
+            } catch (error) {
+              console.error('Error clearing pilots cache:', error);
+            }
             setLoading(false);
             return;
           }
@@ -133,6 +335,8 @@ export function usePilots(selectedDate: Date) {
             // If this is the first load, just set all pilots
             if (prevPilots.length === 0) {
               console.log("First pilot load - setting all pilots");
+              // Note: Cache is updated after availability data is set (see below)
+              // so we skip caching here to avoid partial data
               return pilotsData;
             }
 
@@ -165,7 +369,7 @@ export function usePilots(selectedDate: Date) {
             console.log("Pilot data changes detected - updating");
 
             // Build new array, reusing unchanged pilot objects
-            return pilotsData.map(newPilot => {
+            const updatedPilots = pilotsData.map(newPilot => {
               const prevPilot = prevPilotsMap.get(newPilot.uid);
               // If pilot exists and hasn't changed, reuse the old reference
               if (prevPilot && JSON.stringify(prevPilot) === JSON.stringify(newPilot)) {
@@ -173,12 +377,52 @@ export function usePilots(selectedDate: Date) {
               }
               return newPilot;
             });
+
+            // Note: Cache is updated after availability data is set (see below)
+            // so we skip caching here to avoid partial data
+
+            return updatedPilots;
           });
 
           setPilotAvailability(availabilityMap);
           setPilotAvailabilityStatus(statusMap);
           setPilotSignInTimes(signInTimesMap);
+
+          // Update cache with complete data including availability
+          try {
+            // Convert Maps and Sets to serializable format
+            const availabilityObj: Record<string, string[]> = {};
+            availabilityMap.forEach((slots, pilotId) => {
+              availabilityObj[pilotId] = Array.from(slots);
+            });
+
+            const statusObj: Record<string, Record<string, AvailabilityStatus>> = {};
+            statusMap.forEach((slotMap, pilotId) => {
+              const slots: Record<string, AvailabilityStatus> = {};
+              slotMap.forEach((status, timeSlot) => {
+                slots[timeSlot] = status;
+              });
+              statusObj[pilotId] = slots;
+            });
+
+            const signInTimesObj = Object.fromEntries(signInTimesMap);
+
+            localStorage.setItem(cacheKey, JSON.stringify({
+              data: pilotsData,
+              availability: availabilityObj,
+              availabilityStatus: statusObj,
+              signInTimes: signInTimesObj,
+              customPilotOrder: customOrder,
+              timestamp: Date.now(),
+            }));
+          } catch (error) {
+            console.error('Error caching pilots data:', error);
+          }
+
           setLoading(false);
+
+          const pilotsTime = performance.now() - pilotsStartTime;
+          console.log(`⏱️ Pilots loaded in ${pilotsTime.toFixed(0)}ms (${pilotsData.length} pilots)`);
         } catch (err: any) {
           console.error("Error processing pilots:", err);
           setError(err.message);

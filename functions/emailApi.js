@@ -671,5 +671,35 @@ emailApp.post("/star", async (req, res) => {
   }
 });
 
+// Get email queue status
+emailApp.get("/queue", async (req, res) => {
+  try {
+    const snapshot = await db.collection("emailQueue")
+        .orderBy("createdAt", "desc")
+        .limit(20)
+        .get();
+
+    const emails = [];
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      emails.push({
+        id: doc.id,
+        to: data.to,
+        customerName: data.customerName,
+        type: data.type,
+        status: data.status,
+        createdAt: data.createdAt?.toDate?.() || data.createdAt,
+        sentAt: data.sentAt?.toDate?.() || data.sentAt,
+        error: data.error,
+      });
+    });
+
+    res.json({emails});
+  } catch (error) {
+    console.error("Error getting queue:", error);
+    res.status(500).json({error: error.message});
+  }
+});
+
 // Export as v1 HTTP function (publicly accessible)
 exports.emailApi = functions.https.onRequest(emailApp);

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Check Email Queue</title>
+</head>
+<body>
+  <h1>Email Queue Status</h1>
+  <div id="status">Loading...</div>
+  <div id="results"></div>
+
+  <button id="signin" style="padding: 10px 20px; font-size: 16px; margin: 20px;">Sign In with Google</button>
+
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+    import { getFirestore, collection, query, orderBy, limit, getDocs } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+    import { getAuth, signInWithPopup, GoogleAuthProvider } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAWK-LIdsOVV4Kpnxr_pHdaeOO6pU5cFg8",
+      authDomain: "twinscheduler.firebaseapp.com",
+      projectId: "twinscheduler",
+      storageBucket: "twinscheduler.firebasestorage.app",
+      messagingSenderId: "302440705715",
+      appId: "1:302440705715:web:20c8d09784d1cb88b14ac6"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+
+    document.getElementById('signin').addEventListener('click', async () => {
+      const provider = new GoogleAuthProvider();
+      try {
+        await signInWithPopup(auth, provider);
+        document.getElementById('signin').style.display = 'none';
+        checkQueue();
+      } catch (error) {
+        alert('Sign in failed: ' + error.message);
+      }
+    });
+
+    async function checkQueue() {
+      try {
+        const q = query(
+          collection(db, 'emailQueue'),
+          orderBy('createdAt', 'desc'),
+          limit(20)
+        );
+
+        const snapshot = await getDocs(q);
+
+        const statusDiv = document.getElementById('status');
+        const resultsDiv = document.getElementById('results');
+
+        if (snapshot.empty) {
+          statusDiv.innerHTML = '<p style="color: green;">No emails in queue.</p>';
+          return;
+        }
+
+        statusDiv.innerHTML = `<p>Found ${snapshot.size} emails in queue</p>`;
+
+        let html = '<table border="1" cellpadding="10" style="border-collapse: collapse; width: 100%;">';
+        html += '<tr><th>Created</th><th>To</th><th>Customer</th><th>Status</th><th>Error</th></tr>';
+
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          const createdAt = data.createdAt?.toDate?.() || data.createdAt;
+          html += `<tr>
+            <td>${createdAt}</td>
+            <td>${data.to}</td>
+            <td>${data.customerName}</td>
+            <td style="color: ${data.status === 'sent' ? 'green' : data.status === 'failed' ? 'red' : 'orange'}">${data.status}</td>
+            <td>${data.error || '—'}</td>
+          </tr>`;
+        });
+
+        html += '</table>';
+        resultsDiv.innerHTML = html;
+
+      } catch (error) {
+        document.getElementById('status').innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+        console.error(error);
+      }
+    }
+
+    // Auto-check if already signed in
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        document.getElementById('signin').style.display = 'none';
+        checkQueue();
+      }
+    });
+  </script>
+</body>
+</html>

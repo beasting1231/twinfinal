@@ -408,9 +408,14 @@ export const BookingAvailable = memo(function BookingAvailable({
                   </span>
                 )}
                 <div className="font-semibold text-sm text-zinc-900 dark:text-white truncate">
-                  {[bookingSource, pickupLocation, customerName].filter(Boolean).join(" - ")}
+                  {[bookingSource, pickupLocation].filter(Boolean).join(" - ")}
                 </div>
               </div>
+              {customerName && (
+                <div className="text-xs text-zinc-700 dark:text-zinc-300 truncate mt-0.5">
+                  {customerName}
+                </div>
+              )}
             </div>
 
             {/* Pilot badges grid - includes assigned pilots and overbooked indicators */}

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Fetch Email Queue</title>
+  <style>
+    body { font-family: monospace; padding: 20px; background: #1e1e1e; color: #d4d4d4; }
+    button { padding: 15px 30px; font-size: 16px; cursor: pointer; background: #0e639c; color: white; border: none; border-radius: 4px; }
+    button:hover { background: #1177bb; }
+    pre { background: #252526; padding: 15px; border-radius: 4px; overflow-x: auto; }
+    .status { margin: 20px 0; padding: 10px; border-radius: 4px; }
+    .pending { background: #3a3a00; border-left: 4px solid #ffaa00; }
+    .failed { background: #3a0000; border-left: 4px solid #ff0000; }
+    .sent { background: #003a00; border-left: 4px solid: #00ff00; }
+  </style>
+</head>
+<body>
+  <h1>Email Queue Viewer</h1>
+  <button id="fetch">Fetch Queue</button>
+  <div id="output"></div>
+
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+    import { getAuth, signInWithPopup, GoogleAuthProvider } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAWK-LIdsOVV4Kpnxr_pHdaeOO6pU5cFg8",
+      authDomain: "twinscheduler.firebaseapp.com",
+      projectId: "twinscheduler",
+      storageBucket: "twinscheduler.firebasestorage.app",
+      messagingSenderId: "302440705715",
+      appId: "1:302440705715:web:20c8d09784d1cb88b14ac6"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+
+    document.getElementById('fetch').addEventListener('click', async () => {
+      const output = document.getElementById('output');
+      output.innerHTML = '<p>Loading...</p>';
+
+      try {
+        // Make sure user is signed in
+        let user = auth.currentUser;
+        if (!user) {
+          const provider = new GoogleAuthProvider();
+          const result = await signInWithPopup(auth, provider);
+          user = result.user;
+        }
+
+        // Get ID token
+        const token = await user.getIdToken();
+
+        // Fetch queue from API
+        const response = await fetch('https://emailapi-s4tpzlbfgq-uc.a.run.app/queue', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+        }
+
+        const data = await response.json();
+
+        if (data.emails.length === 0) {
+          output.innerHTML = '<p style="color: #00ff00;">✅ Queue is empty - no pending emails</p>';
+          return;
+        }
+
+        let html = '<h2>Email Queue (' + data.emails.length + ' items)</h2>';
+
+        data.emails.forEach((email, index) => {
+          const statusClass = email.status === 'sent' ? 'sent' : email.status === 'failed' ? 'failed' : 'pending';
+          html += \`
+            <div class="status \${statusClass}">
+              <strong>[\${index + 1}] \${email.customerName}</strong><br>
+              To: \${email.to}<br>
+              Status: <strong>\${email.status.toUpperCase()}</strong><br>
+              Created: \${new Date(email.createdAt).toLocaleString()}<br>
+              \${email.sentAt ? 'Sent: ' + new Date(email.sentAt).toLocaleString() + '<br>' : ''}
+              \${email.error ? '<span style="color: #ff0000;">Error: ' + email.error + '</span>' : ''}
+            </div>
+          \`;
+        });
+
+        // Summary
+        const pending = data.emails.filter(e => e.status === 'pending').length;
+        const failed = data.emails.filter(e => e.status === 'failed').length;
+        const sent = data.emails.filter(e => e.status === 'sent').length;
+
+        html += \`
+          <h3>Summary</h3>
+          <pre>Sent: \${sent}
+Pending: \${pending}
+Failed: \${failed}</pre>
+        \`;
+
+        if (pending > 0 || failed > 0) {
+          html += '<p style="color: #ffaa00;">⚠️ There are stuck emails that need attention!</p>';
+          html += '<p>To fix: Delete the pending/failed documents from Firestore, then resend via the app.</p>';
+        }
+
+        output.innerHTML = html;
+
+      } catch (error) {
+        output.innerHTML = '<pre style="color: #ff0000;">Error: ' + error.message + '</pre>';
+        console.error(error);
+      }
+    });
+  </script>
+</body>
+</html>

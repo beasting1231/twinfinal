@@ -11,6 +11,12 @@
     <meta name="apple-mobile-web-app-title" content="twin Paragliding" />
     <link rel="manifest" href="/manifest.json" />
 
+    <!-- Pre-connect to Firebase for faster loading -->
+    <link rel="preconnect" href="https://firestore.googleapis.com">
+    <link rel="preconnect" href="https://identitytoolkit.googleapis.com">
+    <link rel="dns-prefetch" href="https://firestore.googleapis.com">
+    <link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com">
+
     <!-- iOS Touch Icons -->
     <link rel="apple-touch-icon" href="/icon-180.png" />
     <link rel="apple-touch-icon" sizes="152x152" href="/icon-152.png" />
@@ -18,9 +24,135 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/icon-180.png" />
 
     <title>twin Paragliding</title>
+  <style>
+    /* Inline critical CSS for immediate skeleton display */
+    body {
+      margin: 0;
+      background-color: #09090b;
+    }
+    #initial-skeleton {
+      min-height: 100vh;
+      background-color: #09090b;
+      padding: 1rem;
+    }
+    .skeleton-grid {
+      display: grid;
+      gap: 0.5rem;
+      grid-template-columns: 80px repeat(5, 160px) 48px 98px 98px;
+    }
+    .skeleton-box {
+      background: linear-gradient(90deg, #18181b 25%, #27272a 50%, #18181b 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: 0.5rem;
+    }
+    @keyframes shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    .skeleton-header { height: 1.75rem; }
+    .skeleton-cell { height: 5rem; }
+  </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Static skeleton loader shown immediately before React loads -->
+      <div id="initial-skeleton">
+        <div class="skeleton-grid">
+          <!-- Header Row -->
+          <div class="skeleton-header"></div>
+          <div class="skeleton-header skeleton-box"></div>
+          <div class="skeleton-header skeleton-box"></div>
+          <div class="skeleton-header skeleton-box"></div>
+          <div class="skeleton-header skeleton-box"></div>
+          <div class="skeleton-header skeleton-box"></div>
+          <div class="skeleton-header"></div>
+          <div class="skeleton-header skeleton-box" style="background: linear-gradient(90deg, #facc15 25%, #fde047 50%, #facc15 75%); background-size: 200% 100%;"></div>
+          <div class="skeleton-header skeleton-box" style="background: linear-gradient(90deg, #facc15 25%, #fde047 50%, #facc15 75%); background-size: 200% 100%;"></div>
+
+          <!-- Time Slot Rows (show 8 rows) -->
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+          <div class="skeleton-cell skeleton-box"></div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
       // Show update toast and reload after a brief delay

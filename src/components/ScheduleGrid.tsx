@@ -29,7 +29,6 @@ import { useBookingRequests } from "../hooks/useBookingRequests";
 import { useAllPilots } from "../hooks/useAllPilots";
 import { useAuth } from "../contexts/AuthContext";
 import { useRole } from "../hooks/useRole";
-import { useDailyNotes } from "../hooks/useDailyNotes";
 import type { Booking, Pilot, BookingRequest, AvailabilityStatus } from "../types/index";
 import { format } from "date-fns";
 import { doc, updateDoc, setDoc, deleteDoc, collection, query, where, onSnapshot } from "firebase/firestore";
@@ -154,9 +153,6 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     updateDriverAssignment,
     addDriverAssignment
   } = useDriverAssignments(dateString);
-
-  // Fetch daily note
-  const { note: dailyNote, updateNote } = useDailyNotes(selectedDate);
 
   // Fetch booking requests
   const { bookingRequests, updateBookingRequest, deleteBookingRequest } = useBookingRequests();
@@ -2315,9 +2311,10 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
         {/* Daily Notes Section - To the right of the grid */}
         <div className="w-[512px] flex-shrink-0">
           <DailyNoteSection
-            note={dailyNote}
-            onUpdateNote={(note) => updateNote(note, currentUserDisplayName)}
             isAdmin={role === 'admin'}
+            selectedDate={selectedDate}
+            timeSlots={timeSlots}
+            currentUserDisplayName={currentUserDisplayName}
           />
         </div>
         </div>
@@ -2526,6 +2523,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
         isPilotAvailableForTimeSlot={isPilotAvailableForTimeSlot}
         timeSlots={timeSlots}
         timeOverrides={timeOverrides}
+        additionalSlots={additionalSlots}
         onUpdate={onUpdateBooking}
         onDelete={onDeleteBooking}
         onNavigateToDate={onNavigateToDate}

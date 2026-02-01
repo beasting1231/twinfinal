@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Loader2, Send, X } from "lucide-react";
-import { collection, addDoc } from "firebase/firestore";
+import { collection, addDoc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase/config";
 
 interface EmailPreviewModalProps {
@@ -120,7 +120,7 @@ export function EmailPreviewModal({
 
     try {
       // Add to emailQueue collection - Cloud Function will pick it up and send
-      await addDoc(collection(db, "emailQueue"), {
+      const docRef = await addDoc(collection(db, "emailQueue"), {
         type: "bookingConfirmation",
         to: booking.email,
         customerName: booking.customerName,
@@ -134,15 +134,66 @@ export function EmailPreviewModal({
         createdAt: new Date(),
       });
 
-      setSent(true);
-      setTimeout(() => {
-        onOpenChange(false);
-        setSent(false);
-      }, 2000);
+      // Listen for real-time updates to the document
+      let unsubscribe: (() => void) | null = null;
+      let timeoutId: NodeJS.Timeout | null = null;
+
+      try {
+        timeoutId = setTimeout(() => {
+          if (unsubscribe) unsubscribe();
+          setSending(false);
+          setError("Email sending timed out. Please check if the email was received.");
+        }, 30000); // 30 second timeout
+
+        unsubscribe = onSnapshot(
+          docRef,
+          (docSnap) => {
+            const data = docSnap.data();
+
+            if (data?.status === "sent") {
+              if (timeoutId) clearTimeout(timeoutId);
+              if (unsubscribe) unsubscribe();
+              setSent(true);
+              setSending(false);
+              setTimeout(() => {
+                onOpenChange(false);
+                setSent(false);
+              }, 2000);
+            } else if (data?.status === "failed") {
+              if (timeoutId) clearTimeout(timeoutId);
+              if (unsubscribe) unsubscribe();
+              setSending(false);
+              setError(data.error || "Failed to send email. The email was queued but the server couldn't send it.");
+            }
+          },
+          (error) => {
+            console.error("Snapshot error:", error);
+            if (timeoutId) clearTimeout(timeoutId);
+            setSending(false);
+            // Show success message anyway since the email was queued
+            // The Cloud Function will handle sending it
+            setSent(true);
+            setTimeout(() => {
+              onOpenChange(false);
+              setSent(false);
+            }, 2000);
+          }
+        );
+      } catch (error: any) {
+        console.error("Failed to set up listener:", error);
+        if (timeoutId) clearTimeout(timeoutId);
+        setSending(false);
+        // Show success since email was queued
+        setSent(true);
+        setTimeout(() => {
+          onOpenChange(false);
+          setSent(false);
+        }, 2000);
+      }
+
     } catch (err) {
-      console.error("Error sending email:", err);
-      setError("Failed to send email. Please try again.");
-    } finally {
+      console.error("Error queueing email:", err);
+      setError("Failed to queue email. Please try again.");
       setSending(false);
     }
   };
@@ -307,7 +358,7 @@ export function EmailPreviewModal({
                 {sending ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Sending...
+                    Sending email...
                   </>
                 ) : (
                   <>

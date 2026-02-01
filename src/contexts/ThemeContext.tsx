@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, setDoc } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { useAuth } from "./AuthContext";
 
@@ -28,62 +28,45 @@ interface ThemeProviderProps {
 
 export function ThemeProvider({ children }: ThemeProviderProps) {
   const [theme, setThemeState] = useState<Theme>("dark");
-  const [isInitialized, setIsInitialized] = useState(false);
-  const { currentUser } = useAuth();
+  const { currentUser, userProfile, loading: authLoading } = useAuth();
 
-  // Apply initial theme immediately
+  // Apply initial theme immediately from localStorage (parallel initialization)
   useEffect(() => {
-    // Apply dark theme as default on mount
-    applyTheme("dark");
+    const cachedTheme = localStorage.getItem("theme") as Theme | null;
+    const initialTheme = (cachedTheme === "light" || cachedTheme === "dark") ? cachedTheme : "dark";
+    console.log("🎨 Applying cached theme on mount:", initialTheme);
+    setThemeState(initialTheme);
+    applyTheme(initialTheme);
   }, []);
 
-  // Load theme from Firestore or localStorage
+  // Sync theme with user profile from AuthContext (no additional Firestore fetch)
   useEffect(() => {
-    async function loadTheme() {
-      let finalTheme: Theme = "dark"; // Default to dark
-      console.log("🔍 Loading theme... Current user:", currentUser?.email || "Not logged in");
+    if (authLoading) return; // Wait for auth to finish loading
 
-      if (currentUser) {
-        try {
-          const profileRef = doc(db, "userProfiles", currentUser.uid);
-          const profileSnap = await getDoc(profileRef);
+    let finalTheme: Theme = "dark";
 
-          if (profileSnap.exists()) {
-            const data = profileSnap.data();
-            const savedTheme = data.theme as Theme | undefined;
-            console.log("📱 Theme from Firestore:", savedTheme);
-            if (savedTheme === "light" || savedTheme === "dark") {
-              finalTheme = savedTheme;
-              // Sync localStorage with Firestore to prevent desync issues
-              localStorage.setItem("theme", savedTheme);
-            }
-          }
-        } catch (error) {
-          console.error("Error loading theme:", error);
-          // Fall back to localStorage only on error
-          const localTheme = localStorage.getItem("theme") as Theme | null;
-          console.log("💾 Theme from localStorage (fallback):", localTheme);
-          if (localTheme === "light" || localTheme === "dark") {
-            finalTheme = localTheme;
-          }
-        }
-      } else {
-        // No user logged in, use localStorage
-        const localTheme = localStorage.getItem("theme") as Theme | null;
-        console.log("💾 Theme from localStorage:", localTheme);
-        if (localTheme === "light" || localTheme === "dark") {
-          finalTheme = localTheme;
-        }
+    if (currentUser && userProfile) {
+      // Use theme from user profile (already fetched by AuthContext)
+      finalTheme = userProfile.theme;
+      console.log("🔄 Syncing theme from user profile:", finalTheme);
+      // Sync localStorage with user profile
+      localStorage.setItem("theme", finalTheme);
+    } else {
+      // No user logged in, use localStorage
+      const localTheme = localStorage.getItem("theme") as Theme | null;
+      console.log("💾 Using theme from localStorage:", localTheme);
+      if (localTheme === "light" || localTheme === "dark") {
+        finalTheme = localTheme;
       }
-
-      console.log("🎯 Final theme to apply:", finalTheme);
-      setThemeState(finalTheme);
-      applyTheme(finalTheme);
-      setIsInitialized(true);
     }
 
-    loadTheme();
-  }, [currentUser]);
+    // Only update if theme actually changed
+    if (finalTheme !== theme) {
+      console.log("🎯 Updating theme to:", finalTheme);
+      setThemeState(finalTheme);
+      applyTheme(finalTheme);
+    }
+  }, [currentUser, userProfile, authLoading]);
 
   const applyTheme = (newTheme: Theme) => {
     const root = document.documentElement;
@@ -132,11 +115,8 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     setTheme,
   };
 
-  // Don't render children until theme is initialized to prevent flash
-  if (!isInitialized) {
-    return null;
-  }
-
+  // No need to block rendering - theme applies immediately via useEffect
+  // The dark theme is applied in index.html and synchronized on mount
   return (
     <ThemeContext.Provider value={value}>
       {children}
