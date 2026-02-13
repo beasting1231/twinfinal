@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { X, UserCheck, Check } from "lucide-react";
+import { X, UserCheck, Check, Copy } from "lucide-react";
 import type { Pilot } from "../types/index";
 
 interface PilotContextMenuProps {
@@ -13,6 +13,7 @@ interface PilotContextMenuProps {
   onSelectPilot: (pilotName: string) => void;
   onUnassign: () => void;
   onAcknowledge?: () => void;
+  onCopyTo?: () => void;
   onClose: () => void;
   isPilotSelfUnassign?: boolean; // Whether this is a pilot unassigning themselves
 }
@@ -28,6 +29,7 @@ export function PilotContextMenu({
   onSelectPilot,
   onUnassign,
   onAcknowledge,
+  onCopyTo,
   onClose,
   isPilotSelfUnassign = false,
 }: PilotContextMenuProps) {
@@ -186,6 +188,23 @@ export function PilotContextMenu({
                 No pilots available
               </div>
             )}
+          </>
+        )}
+
+        {/* Bottom Actions */}
+        {onCopyTo && !isPilotSelfUnassign && (
+          <>
+            <div className="border-t border-gray-300 dark:border-zinc-700 my-1" />
+            <button
+              onClick={() => {
+                onCopyTo();
+                onClose();
+              }}
+              className="w-full px-3 py-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2"
+            >
+              <Copy className="w-4 h-4" />
+              <span>Copy to</span>
+            </button>
           </>
         )}
       </div>

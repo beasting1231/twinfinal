@@ -236,6 +236,7 @@ export function useBookings(options?: UseBookingsOptions) {
     try {
       // Filter out undefined values from the update object (Firebase doesn't accept undefined)
       const sanitizedBooking: any = {};
+      const existingBooking = bookings.find((b) => b.id === id);
 
       // Check if this is a move operation (timeIndex or date changed)
       const isMove = booking.hasOwnProperty('timeIndex') || booking.hasOwnProperty('date');
@@ -263,9 +264,11 @@ export function useBookings(options?: UseBookingsOptions) {
         sanitizedBooking.createdAt = serverTimestamp();
       }
 
-      // Check if this is a restore operation (status changing FROM deleted to something else)
-      // We need to check if the current booking status is "deleted" and we're changing it
-      const isRestore = isStatusChange && booking.bookingStatus !== 'deleted';
+      // Restore means status changed FROM deleted TO something else.
+      const isRestore =
+        isStatusChange &&
+        existingBooking?.bookingStatus === 'deleted' &&
+        booking.bookingStatus !== 'deleted';
 
       // Build history entry details with actual values
       let historyAction: "edited" | "moved" | "status_changed" | "restored" = "edited";
@@ -320,7 +323,7 @@ export function useBookings(options?: UseBookingsOptions) {
         }
       };
 
-      if (isRestore && (isMove || booking.bookingStatus === 'pending')) {
+      if (isRestore) {
         // This is a restore operation
         historyAction = "restored";
         // Show the date and time it was restored to
@@ -328,15 +331,21 @@ export function useBookings(options?: UseBookingsOptions) {
         if (booking.date) {
           restoreDetails.push(`to ${booking.date}`);
         }
-        if (booking.hasOwnProperty('timeIndex') && booking.date) {
-          const date = new Date(booking.date + 'T00:00:00');
+        if (booking.hasOwnProperty('timeIndex') && (booking.date || existingBooking?.date)) {
+          const dateString = booking.date || existingBooking?.date;
+          const date = new Date(dateString + 'T00:00:00');
           const timeSlots = getTimeSlotsByDate(date);
           const timeString = timeSlots[booking.timeIndex as number] || '';
           if (timeString) {
             restoreDetails.push(`at ${timeString}`);
           }
         }
-        historyDetails = restoreDetails.length > 0 ? restoreDetails.join(' ') : undefined;
+        historyDetails =
+          restoreDetails.length > 0
+            ? restoreDetails.join(' ')
+            : booking.bookingStatus
+            ? `to ${booking.bookingStatus}`
+            : undefined;
       } else if (isMove) {
         historyAction = "moved";
         // Try to get more details about what changed
@@ -376,7 +385,7 @@ export function useBookings(options?: UseBookingsOptions) {
         timestamp: new Date(),
         userId: currentUser?.uid || "",
         userName: currentUser?.displayName || currentUser?.email || "Unknown",
-        details: historyDetails,
+        ...(historyDetails ? { details: historyDetails } : {}),
       };
 
       // Use arrayUnion to append to history array

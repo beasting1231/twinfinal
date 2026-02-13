@@ -14,6 +14,24 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
+const missingFirebaseEnv = Object.entries({
+  VITE_FIREBASE_API_KEY: firebaseConfig.apiKey,
+  VITE_FIREBASE_AUTH_DOMAIN: firebaseConfig.authDomain,
+  VITE_FIREBASE_PROJECT_ID: firebaseConfig.projectId,
+  VITE_FIREBASE_STORAGE_BUCKET: firebaseConfig.storageBucket,
+  VITE_FIREBASE_MESSAGING_SENDER_ID: firebaseConfig.messagingSenderId,
+  VITE_FIREBASE_APP_ID: firebaseConfig.appId,
+})
+  .filter(([, value]) => !value)
+  .map(([key]) => key);
+
+if (missingFirebaseEnv.length > 0) {
+  throw new Error(
+    `Missing Firebase env vars: ${missingFirebaseEnv.join(", ")}. ` +
+    "Create .env from .env.example and restart dev server."
+  );
+}
+
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 

@@ -1,6 +1,32 @@
 // BUILD_TIMESTAMP: __BUILD_TIME__
 const CACHE_NAME = 'twin-scheduler-v3';
 
+function canHandleRequest(requestUrl, method) {
+  if (method !== 'GET') return false;
+  const url = new URL(requestUrl);
+  // Cache API only supports HTTP(S). Skip extension/browser internal schemes.
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+  if (
+    url.hostname.includes('firebaseapp.com') ||
+    url.hostname.includes('googleapis.com') ||
+    url.hostname.includes('firestore.googleapis.com') ||
+    url.hostname.includes('cloudfunctions.net') ||
+    url.pathname.startsWith('/api/')
+  ) {
+    return false;
+  }
+  return true;
+}
+
+async function safeCachePut(request, response) {
+  try {
+    const cache = await caches.open(CACHE_NAME);
+    await cache.put(request, response);
+  } catch (_err) {
+    // Ignore cache write failures to avoid breaking runtime requests.
+  }
+}
+
 self.addEventListener('install', (event) => {
   // Force the waiting service worker to become the active service worker
   self.skipWaiting();
@@ -9,15 +35,7 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
-
-  // Don't intercept Firebase API calls, Firestore requests, Cloud Functions, or our API endpoints
-  // Let the browser handle them directly
-  if (url.hostname.includes('firebaseapp.com') ||
-      url.hostname.includes('googleapis.com') ||
-      url.hostname.includes('firestore.googleapis.com') ||
-      url.hostname.includes('cloudfunctions.net') ||
-      url.pathname.startsWith('/api/')) {
+  if (!canHandleRequest(event.request.url, event.request.method)) {
     return;
   }
 
@@ -31,9 +49,7 @@ self.addEventListener('fetch', (event) => {
         .then((response) => {
           // Clone the response before caching
           const responseToCache = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
+          void safeCachePut(event.request, responseToCache);
           return response;
         })
         .catch(() => {
@@ -54,9 +70,7 @@ self.addEventListener('fetch', (event) => {
         return fetch(event.request).then((response) => {
           // Cache the fetched resource for future use
           const responseToCache = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
+          void safeCachePut(event.request, responseToCache);
           return response;
         });
       })

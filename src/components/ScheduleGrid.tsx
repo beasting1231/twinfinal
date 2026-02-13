@@ -16,6 +16,7 @@ import { TimeSlotContextMenu } from "./TimeSlotContextMenu";
 import { AddPilotModal } from "./AddPilotModal";
 import { ChangeTimeModal } from "./ChangeTimeModal";
 import { AddTimeModal } from "./AddTimeModal";
+import { CopyBookingModal } from "./CopyBookingModal";
 import { DeletedBookingContextMenu } from "./DeletedBookingContextMenu";
 import { DeletedBookingItem } from "./DeletedBookingItem";
 import { PilotAcknowledgmentContextMenu } from "./PilotAcknowledgmentContextMenu";
@@ -341,6 +342,10 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
   const [addTimeModal, setAddTimeModal] = useState<{
     isOpen: boolean;
   } | null>(null);
+  const [copyBookingModal, setCopyBookingModal] = useState<{
+    isOpen: boolean;
+    booking: Booking | null;
+  }>({ isOpen: false, booking: null });
 
   // Time overrides state - maps timeIndex to new time string
   const [timeOverrides, setTimeOverrides] = useState<Record<number, string>>({});
@@ -1000,6 +1005,52 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     onUpdateBooking(booking.id!, {
       assignedPilots: updatedPilots,
     });
+  };
+
+  const handleOpenCopyBooking = () => {
+    if (!contextMenu || role !== "admin") return;
+    setCopyBookingModal({
+      isOpen: true,
+      booking: contextMenu.booking,
+    });
+  };
+
+  const handleCopyBookingConfirm = ({ date, timeIndex }: { date: string; timeIndex: number }) => {
+    const sourceBooking = copyBookingModal.booking;
+    if (!sourceBooking || !onAddBooking) return;
+
+    const duplicatedBooking: Omit<Booking, "id"> = {
+      date,
+      timeIndex,
+      pilotIndex: sourceBooking.pilotIndex ?? 0,
+      customerName: sourceBooking.customerName || "",
+      numberOfPeople: sourceBooking.numberOfPeople,
+      bookingSource: sourceBooking.bookingSource || "Online",
+      assignedPilots: Array(sourceBooking.numberOfPeople).fill(""),
+      acknowledgedPilots: [],
+      bookingStatus: "pending",
+      span: sourceBooking.span || sourceBooking.numberOfPeople || 1,
+      pilotPayments: [],
+    };
+
+    if (sourceBooking.pickupLocation !== undefined) duplicatedBooking.pickupLocation = sourceBooking.pickupLocation;
+    if (sourceBooking.phoneNumber !== undefined) duplicatedBooking.phoneNumber = sourceBooking.phoneNumber;
+    if (sourceBooking.email !== undefined) duplicatedBooking.email = sourceBooking.email;
+    if (sourceBooking.preferredContact !== undefined) duplicatedBooking.preferredContact = sourceBooking.preferredContact;
+    if (sourceBooking.notes !== undefined) duplicatedBooking.notes = sourceBooking.notes;
+    if (sourceBooking.officeNotes !== undefined) duplicatedBooking.officeNotes = sourceBooking.officeNotes;
+    if (sourceBooking.commission !== undefined) duplicatedBooking.commission = sourceBooking.commission;
+    if (sourceBooking.commissionStatus !== undefined) duplicatedBooking.commissionStatus = sourceBooking.commissionStatus;
+    if (sourceBooking.femalePilotsRequired !== undefined) duplicatedBooking.femalePilotsRequired = sourceBooking.femalePilotsRequired;
+    if (sourceBooking.flightType !== undefined) duplicatedBooking.flightType = sourceBooking.flightType;
+    if (sourceBooking.driver !== undefined) duplicatedBooking.driver = sourceBooking.driver;
+    if (sourceBooking.vehicle !== undefined) duplicatedBooking.vehicle = sourceBooking.vehicle;
+    if (sourceBooking.driver2 !== undefined) duplicatedBooking.driver2 = sourceBooking.driver2;
+    if (sourceBooking.vehicle2 !== undefined) duplicatedBooking.vehicle2 = sourceBooking.vehicle2;
+
+    onAddBooking(duplicatedBooking);
+
+    setCopyBookingModal({ isOpen: false, booking: null });
   };
 
   // Handle overbooked pilot selection from context menu
@@ -2528,6 +2579,21 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
         onDelete={onDeleteBooking}
         onNavigateToDate={onNavigateToDate}
       />
+      {copyBookingModal.booking && (
+        <CopyBookingModal
+          open={copyBookingModal.isOpen}
+          onOpenChange={(open) => {
+            if (!open) {
+              setCopyBookingModal({ isOpen: false, booking: null });
+              return;
+            }
+            setCopyBookingModal((prev) => ({ ...prev, isOpen: open }));
+          }}
+          onConfirm={handleCopyBookingConfirm}
+          defaultDate={copyBookingModal.booking.date}
+          defaultTimeIndex={copyBookingModal.booking.timeIndex}
+        />
+      )}
 
       {/* Pilot Context Menu */}
       {contextMenu && (
@@ -2609,6 +2675,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
           isAcknowledged={contextMenu.booking.acknowledgedPilots?.includes(contextMenu.booking.assignedPilots[contextMenu.slotIndex]) || false}
           onSelectPilot={handleSelectPilot}
           onUnassign={handleUnassignPilot}
+          onCopyTo={role === "admin" ? handleOpenCopyBooking : undefined}
           onAcknowledge={async () => {
             const currentPilot = contextMenu.booking.assignedPilots[contextMenu.slotIndex];
             if (!currentPilot || !contextMenu.booking.id || !onUpdateBooking) return;
