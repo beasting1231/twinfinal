@@ -44,6 +44,8 @@ export function BookingRequestForm() {
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [customFormData, setCustomFormData] = useState<{ name: string; commissionRate: number; onlySensational: boolean } | null>(null);
+  const [timeOverrides, setTimeOverrides] = useState<Record<number, string>>({});
+  const [additionalSlots, setAdditionalSlots] = useState<string[]>([]);
 
   // Parse the selected date
   const selectedDate = useMemo(() => {
@@ -126,6 +128,44 @@ export function BookingRequestForm() {
 
   // Get time slots for the selected date
   const timeSlots = useMemo(() => getTimeSlotsByDate(selectedDate), [selectedDate]);
+
+  // Fetch time overrides and additional slots for selected date
+  useEffect(() => {
+    const timeOverridesRef = doc(db, "timeOverrides", formData.date);
+    const unsubscribe = onSnapshot(
+      timeOverridesRef,
+      (docSnapshot) => {
+        if (!docSnapshot.exists()) {
+          setTimeOverrides({});
+          setAdditionalSlots([]);
+          return;
+        }
+
+        const data = docSnapshot.data();
+        const parsedOverrides: Record<number, string> = {};
+        const rawOverrides = data.overrides;
+
+        if (rawOverrides && typeof rawOverrides === "object") {
+          Object.entries(rawOverrides).forEach(([key, value]) => {
+            const index = parseInt(key, 10);
+            if (!Number.isNaN(index) && typeof value === "string") {
+              parsedOverrides[index] = value;
+            }
+          });
+        }
+
+        setTimeOverrides(parsedOverrides);
+        setAdditionalSlots(Array.isArray(data.additionalSlots) ? data.additionalSlots : []);
+      },
+      (error) => {
+        console.error("Error fetching time overrides:", error);
+        setTimeOverrides({});
+        setAdditionalSlots([]);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [formData.date]);
 
   // Fetch bookings for the selected date
   useEffect(() => {
@@ -215,8 +255,27 @@ export function BookingRequestForm() {
 
   // Filter bookings for selected date
   const filteredBookings = useMemo(() => {
-    return bookings.filter((b) => b.date === formData.date);
+    return bookings.filter((b) => b.date === formData.date && b.bookingStatus !== "deleted");
   }, [bookings, formData.date]);
+
+  // Build display slots with mapping to actual timeIndex and availability lookup time
+  const displaySlotOptions = useMemo(() => {
+    const baseSlots = timeSlots.map((slot, index) => ({
+      displayIndex: index,
+      actualTimeIndex: index,
+      displayTime: timeOverrides[index] || slot,
+      availabilityLookupTime: slot,
+    }));
+
+    const extraSlots = additionalSlots.map((slot, index) => ({
+      displayIndex: timeSlots.length + index,
+      actualTimeIndex: 1000 + index,
+      displayTime: slot,
+      availabilityLookupTime: slot,
+    }));
+
+    return [...baseSlots, ...extraSlots];
+  }, [timeSlots, timeOverrides, additionalSlots]);
 
   // Check if pilot is available for time slot
   // Matches the logic from BookingDetailsModal
@@ -227,25 +286,26 @@ export function BookingRequestForm() {
 
   // Calculate available spots for each time slot
   const timeSlotAvailability = useMemo(() => {
-    return timeSlots.map((timeSlot, timeIndex) => {
+    return displaySlotOptions.map((slotOption) => {
       // Count how many pilots are available at this time
       const availablePilots = allPilots.filter((pilot) =>
-        isPilotAvailableForTimeSlot(pilot.uid, timeSlot)
+        isPilotAvailableForTimeSlot(pilot.uid, slotOption.availabilityLookupTime)
       );
 
       // Count how many spots are taken by bookings at this time
-      const bookingsAtTime = filteredBookings.filter((b) => b.timeIndex === timeIndex);
-      const spotsTaken = bookingsAtTime.reduce((sum, b) => sum + (b.numberOfPeople || 0), 0);
+      const bookingsAtTime = filteredBookings.filter((b) => b.timeIndex === slotOption.actualTimeIndex);
+      const spotsTaken = bookingsAtTime.reduce((sum, b) => sum + (b.numberOfPeople || b.span || 1), 0);
 
       const availableSpots = availablePilots.length - spotsTaken;
 
       return {
-        timeSlot,
-        timeIndex,
+        timeSlot: slotOption.displayTime,
+        timeIndex: slotOption.displayIndex,
+        actualTimeIndex: slotOption.actualTimeIndex,
         availableSpots: Math.max(0, availableSpots),
       };
     });
-  }, [timeSlots, allPilots, filteredBookings, pilotAvailability]);
+  }, [displaySlotOptions, allPilots, filteredBookings, pilotAvailability]);
 
   // Reset timeIndex when date changes
   useEffect(() => {
@@ -341,8 +401,16 @@ export function BookingRequestForm() {
     }
 
     try {
-      // Convert timeIndex to time string
-      const selectedTimeSlot = timeSlots[parseInt(formData.timeIndex)];
+      const selectedDisplayIndex = parseInt(formData.timeIndex, 10);
+      const selectedSlot = displaySlotOptions.find((slot) => slot.displayIndex === selectedDisplayIndex);
+      if (!selectedSlot) {
+        setMessage({
+          type: "error",
+          text: "Selected time slot is no longer available. Please choose another time.",
+        });
+        setSubmitting(false);
+        return;
+      }
 
       // Combine country code and phone number
       const fullPhoneNumber = formData.phone
@@ -359,8 +427,8 @@ export function BookingRequestForm() {
         phone: fullPhoneNumber,
         phoneCountryCode: formData.phoneCountryCode,
         date: formData.date,
-        time: selectedTimeSlot,
-        timeIndex: parseInt(formData.timeIndex),
+        time: selectedSlot.displayTime,
+        timeIndex: selectedSlot.actualTimeIndex,
         numberOfPeople,
         meetingPoint: formData.meetingPoint,
         flightType: formData.flightType,
