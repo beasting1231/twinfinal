@@ -2600,6 +2600,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
         <PilotContextMenu
           isOpen={contextMenu.isOpen}
           position={contextMenu.position}
+          bookingStatus={contextMenu.booking.bookingStatus}
           availablePilots={pilots
             .filter((pilot) => {
               // Check if pilot is available for this time slot

@@ -5,6 +5,7 @@ import type { Pilot } from "../types/index";
 interface PilotContextMenuProps {
   isOpen: boolean;
   position: { x: number; y: number };
+  bookingStatus?: "unconfirmed" | "confirmed" | "pending" | "cancelled" | "deleted" | "no show";
   availablePilots: Pilot[];
   pilotFlightCounts?: Record<string, number>;
   currentPilot?: string;
@@ -21,6 +22,7 @@ interface PilotContextMenuProps {
 export function PilotContextMenu({
   isOpen,
   position,
+  bookingStatus,
   availablePilots,
   pilotFlightCounts = {},
   currentPilot,
@@ -35,6 +37,7 @@ export function PilotContextMenu({
 }: PilotContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [isPositioned, setIsPositioned] = useState(false);
+  const canAssignPilots = bookingStatus !== "cancelled";
 
   useEffect(() => {
     if (!isOpen) return;
@@ -116,14 +119,14 @@ export function PilotContextMenu({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        {!isPilotSelfUnassign && (
+        {!isPilotSelfUnassign && canAssignPilots && (
           <div className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-zinc-400 border-b border-gray-300 dark:border-zinc-700">
             Assign Pilot
           </div>
         )}
 
         {/* Un-assign Option */}
-        {currentPilot && (
+        {currentPilot && canAssignPilots && (
           <button
             onClick={() => {
               onUnassign();
@@ -137,7 +140,7 @@ export function PilotContextMenu({
         )}
 
         {/* Acknowledge Option - Show if current user is the assigned pilot and hasn't acknowledged yet */}
-        {currentPilot && currentUserDisplayName && currentPilot === currentUserDisplayName && !isAcknowledged && onAcknowledge && (
+        {currentPilot && currentUserDisplayName && currentPilot === currentUserDisplayName && !isAcknowledged && onAcknowledge && canAssignPilots && (
           <button
             onClick={() => {
               onAcknowledge();
@@ -151,7 +154,7 @@ export function PilotContextMenu({
         )}
 
         {/* Available Pilots - Only show if not pilot self-unassign */}
-        {!isPilotSelfUnassign && (
+        {!isPilotSelfUnassign && canAssignPilots && (
           <>
             {currentPilot && <div className="border-t border-gray-300 dark:border-zinc-700 my-1" />}
             {availablePilots.length > 0 ? (

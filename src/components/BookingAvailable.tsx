@@ -133,7 +133,7 @@ export const BookingAvailable = memo(function BookingAvailable({
 
   // Handle right-click (desktop)
   const handleContextMenu = (e: React.MouseEvent) => {
-    if (status !== "booked" || bookingStatus === "cancelled") return;
+    if (status !== "booked") return;
     if (!onContextMenu && !onOverbookedClick) return;
 
     e.preventDefault();
@@ -158,7 +158,7 @@ export const BookingAvailable = memo(function BookingAvailable({
 
   // Handle touch start (mobile long-press with two stages)
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (status !== "booked" || bookingStatus === "cancelled") return;
+    if (status !== "booked") return;
     if (!onContextMenu && !onOverbookedClick && !onEnterMoveMode) return;
 
     const touch = e.touches[0];
