@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build && sed -i '' \"s/__BUILD_TIME__/$(date +%s)/\" dist/sw.js && npm run build:embed && cp -r dist-embed/* dist/embed/ && npm run build:embed-voucher && cp -r dist-embed-voucher/* dist/embed-voucher/",
+    "build": "APP_BUILD_VERSION=$(date +%Y.%m.%d.%H%M%S) && VITE_APP_VERSION=$APP_BUILD_VERSION tsc -b && VITE_APP_VERSION=$APP_BUILD_VERSION vite build && sed -i '' \"s/__BUILD_TIME__/$(date +%s)/\" dist/sw.js && VITE_APP_VERSION=$APP_BUILD_VERSION npm run build:embed && cp -r dist-embed/* dist/embed/ && VITE_APP_VERSION=$APP_BUILD_VERSION npm run build:embed-voucher && cp -r dist-embed-voucher/* dist/embed-voucher/",
     "build:embed": "tsc -b && vite build --config vite.config.embed.ts && mkdir -p dist/embed",
     "build:embed-voucher": "tsc -b && vite build --config vite.config.embed-voucher.ts && mkdir -p dist/embed-voucher",
     "lint": "eslint .",

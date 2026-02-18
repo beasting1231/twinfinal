@@ -1,3 +1,3 @@
-// App version - update this when deploying significant changes
-// Format: YYYY.MM.DD.patch (e.g., 2025.12.29.1)
-export const APP_VERSION = "2025.12.29.1";
+// Build version injected at build time via VITE_APP_VERSION.
+// Falls back to "dev" for local development without an injected value.
+export const APP_VERSION = import.meta.env.VITE_APP_VERSION || "dev";
