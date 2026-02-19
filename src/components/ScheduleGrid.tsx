@@ -656,7 +656,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
           notes: request.notes || "",
           flightType: request.flightType,
           assignedPilots: [],
-          bookingStatus: "pending",
+          bookingStatus: "unconfirmed",
           span: request.numberOfPeople,
         });
 
@@ -1759,7 +1759,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
           notes: request.notes || "",
           flightType: request.flightType,
           assignedPilots: [],
-          bookingStatus: "pending",
+          bookingStatus: "unconfirmed",
           span: request.numberOfPeople,
         });
 
@@ -2810,7 +2810,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                 notes: request.notes || "",
                 flightType: request.flightType,
                 assignedPilots: [],
-                bookingStatus: "pending",
+                bookingStatus: "unconfirmed",
                 span: request.numberOfPeople,
               });
 
