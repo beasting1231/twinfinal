@@ -45,14 +45,16 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
       // Create entries for default slots
       const defaultEntries = defaultSlots.map((time, index) => ({
         time,
-        originalIndex: index,
+        availabilityLookupTime: time,
+        actualTimeIndex: index,
         isAdditional: false,
       }));
 
       // Create entries for additional slots
       const additionalEntries = additionalSlots.map((time, index) => ({
         time,
-        originalIndex: 1000 + index,
+        availabilityLookupTime: time,
+        actualTimeIndex: 1000 + index,
         isAdditional: true,
       }));
 
@@ -254,32 +256,30 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
 
   // Function to check if a cell should be locked (cannot be toggled to unavailable)
   // Locks cells when the user is available AND the time slot is fully or overbooked
-  const isCellLocked = (day: Date, timeSlot: string): boolean => {
+  const isCellLocked = (
+    day: Date,
+    slot: { availabilityLookupTime: string; actualTimeIndex: number }
+  ): boolean => {
     const dateStr = format(day, "yyyy-MM-dd");
 
     // Only lock if the current user is available for this time slot
-    const userIsAvailable = isAvailable(day, timeSlot);
+    const userIsAvailable = isAvailable(day, slot.availabilityLookupTime);
     if (!userIsAvailable) {
       return false; // Not locked if user is not available
     }
 
     // Count how many pilots are available for this time slot
-    const key = `${dateStr}-${timeSlot}`;
+    const key = `${dateStr}-${slot.availabilityLookupTime}`;
     const availablePilotsCount = _pilotsAvailabilityData.pilotsAvailablePerTimeSlot.get(key)?.size || 0;
 
     // Count how many booking spots are taken for this time slot
-    const bookingsAtTime = bookings.filter(b => b.date === dateStr && b.timeIndex !== undefined);
-
-    // Find the time slot index from the day's time slots
-    const dayTimeSlots = getTimeSlotsByDate(day);
-    const timeSlotIndex = dayTimeSlots.indexOf(timeSlot);
-
-    if (timeSlotIndex === -1) {
-      return false; // Time slot not found, don't lock
-    }
-
-    const spotsBooked = bookingsAtTime
-      .filter(b => b.timeIndex === timeSlotIndex)
+    const spotsBooked = bookings
+      .filter(
+        (b) =>
+          b.date === dateStr &&
+          b.timeIndex === slot.actualTimeIndex &&
+          b.bookingStatus !== "deleted"
+      )
       .reduce((total, booking) => {
         return total + (booking.numberOfPeople || booking.span || 1);
       }, 0);
@@ -311,7 +311,7 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
   const handleToggleColumn = async (dayIndex: number) => {
     const day = days[dayIndex];
     const combinedSlots = combinedDailyTimeSlots[dayIndex];
-    const timeSlotStrings = combinedSlots.map(slot => slot.time);
+    const timeSlotStrings = combinedSlots.map(slot => slot.availabilityLookupTime);
 
     // Check if editing is allowed for this day
     if (!canEditDay(day)) {
@@ -319,7 +319,7 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
     }
 
     // Check if any slots are locked (admins can override when editing others)
-    const anyLocked = timeSlotStrings.some((slot) => isCellLocked(day, slot));
+    const anyLocked = combinedSlots.some((slot) => isCellLocked(day, slot));
 
     if (anyLocked && !canAdminOverrideLock) {
       // Don't allow day-level toggle if any slots are locked (unless admin override)
@@ -327,7 +327,7 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
     }
 
     // Check if all slots are available
-    const allAvailable = timeSlotStrings.every((slot) => isAvailable(day, slot));
+    const allAvailable = combinedSlots.every((slot) => isAvailable(day, slot.availabilityLookupTime));
 
     if (allAvailable) {
       // Sign out all slots (will auto-unassign from any bookings)
@@ -497,16 +497,16 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
                 ) : (
                   // Actual availability cells
                   combinedSlots.map((slot) => (
-                    <div key={`cell-${dayIndex}-${slot.originalIndex}`} className="h-14">
+                    <div key={`cell-${dayIndex}-${slot.actualTimeIndex}`} className="h-14">
                       <AvailabilityCell
                         timeSlot={slot.time}
-                        isAvailable={isAvailable(day, slot.time)}
-                        status={getAvailabilityStatus(day, slot.time)}
-                        isLocked={isCellLocked(day, slot.time)}
+                        isAvailable={isAvailable(day, slot.availabilityLookupTime)}
+                        status={getAvailabilityStatus(day, slot.availabilityLookupTime)}
+                        isLocked={isCellLocked(day, slot)}
                         isDisabled={!canEditDay(day)}
                         canOverrideLock={canAdminOverrideLock}
                         isAdditional={slot.isAdditional}
-                        onToggle={() => handleToggleCell(dayIndex, slot.time)}
+                        onToggle={() => handleToggleCell(dayIndex, slot.availabilityLookupTime)}
                       />
                     </div>
                   ))

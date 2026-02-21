@@ -14,6 +14,8 @@ import { useRole } from "../hooks/useRole";
 import { BookingSourceAutocomplete } from "./BookingSourceAutocomplete";
 import { MeetingPointAutocomplete } from "./MeetingPointAutocomplete";
 import { getTimeSlotsByDate } from "../utils/timeSlots";
+import { doc, onSnapshot } from "firebase/firestore";
+import { db } from "../firebase/config";
 
 interface NewBookingModalProps {
   open: boolean;
@@ -85,6 +87,8 @@ export function NewBookingModal({
   // Modal-specific date and time selection
   const [selectedModalDate, setSelectedModalDate] = useState<string>("");
   const [selectedModalTimeIndex, setSelectedModalTimeIndex] = useState<number>(timeIndex);
+  const [timeOverrides, setTimeOverrides] = useState<Record<number, string>>({});
+  const [additionalSlots, setAdditionalSlots] = useState<string[]>([]);
 
   // Initialize modal date and time when modal opens
   useEffect(() => {
@@ -94,6 +98,37 @@ export function NewBookingModal({
       setAvailabilityError(false);
     }
   }, [open, selectedDate, timeIndex]);
+
+  // Fetch time overrides and additional slots for the selected modal date
+  useEffect(() => {
+    if (!selectedModalDate) {
+      setTimeOverrides({});
+      setAdditionalSlots([]);
+      return;
+    }
+
+    const timeOverridesRef = doc(db, "timeOverrides", selectedModalDate);
+    const unsubscribe = onSnapshot(
+      timeOverridesRef,
+      (docSnapshot) => {
+        if (docSnapshot.exists()) {
+          const data = docSnapshot.data();
+          setTimeOverrides(data.overrides || {});
+          setAdditionalSlots(data.additionalSlots || []);
+        } else {
+          setTimeOverrides({});
+          setAdditionalSlots([]);
+        }
+      },
+      (error) => {
+        console.error("Error fetching modal time overrides:", error);
+        setTimeOverrides({});
+        setAdditionalSlots([]);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [selectedModalDate]);
 
   // Get time slots for the selected modal date
   const modalTimeSlots = useMemo(() => {
@@ -106,24 +141,79 @@ export function NewBookingModal({
     }
   }, [selectedModalDate]);
 
-  // Get the current time slot string
+  // Helper function to convert time string to minutes for sorting
+  const timeToMinutes = (time: string): number => {
+    const [hours, minutes] = time.split(":").map(Number);
+    return hours * 60 + minutes;
+  };
+
+  // Build display slots with mapping to actual timeIndex and availability lookup time
+  const displaySlotOptions = useMemo(() => {
+    const baseSlots = modalTimeSlots.map((slot, index) => ({
+      displayTime: timeOverrides[index] || slot,
+      availabilityLookupTime: slot,
+      actualTimeIndex: index,
+    }));
+
+    const extraSlots = additionalSlots.map((slot, index) => ({
+      displayTime: slot,
+      availabilityLookupTime: slot,
+      actualTimeIndex: 1000 + index,
+    }));
+
+    const allSlots = [...baseSlots, ...extraSlots];
+    allSlots.sort((a, b) => timeToMinutes(a.displayTime) - timeToMinutes(b.displayTime));
+    return allSlots;
+  }, [modalTimeSlots, timeOverrides, additionalSlots]);
+
+  // Keep selected time valid when date/slot structure changes
+  useEffect(() => {
+    if (displaySlotOptions.length === 0) return;
+    const selectedExists = displaySlotOptions.some(
+      (slot) => slot.actualTimeIndex === selectedModalTimeIndex
+    );
+    if (!selectedExists) {
+      setSelectedModalTimeIndex(displaySlotOptions[0].actualTimeIndex);
+    }
+  }, [displaySlotOptions, selectedModalTimeIndex]);
+
+  const selectedSlotOption = useMemo(() => {
+    return displaySlotOptions.find((slot) => slot.actualTimeIndex === selectedModalTimeIndex);
+  }, [displaySlotOptions, selectedModalTimeIndex]);
+
+  // Get the current availability lookup time string
   const currentTimeSlot = useMemo(() => {
-    return modalTimeSlots[selectedModalTimeIndex] || timeSlot;
-  }, [modalTimeSlots, selectedModalTimeIndex, timeSlot]);
+    return selectedSlotOption?.availabilityLookupTime || timeSlot;
+  }, [selectedSlotOption, timeSlot]);
+
+  const { startEditing, stopEditing } = useEditing();
+  const { currentUser } = useAuth();
+  const { role } = useRole();
+
+  // Determine the default booking source based on role
+  // Admins default to "twin", non-admins use their display name
+  const defaultBookingSource = role === 'admin'
+    ? "twin"
+    : (currentUser?.displayName || "");
+
+  // Exclude deleted bookings from capacity calculations
+  const filteredBookings = useMemo(() => {
+    return bookings.filter((booking) => booking.bookingStatus !== "deleted");
+  }, [bookings]);
 
   // Calculate availability for all time slots
   const timeSlotAvailability = useMemo(() => {
     if (!selectedModalDate) return [];
 
-    return modalTimeSlots.map((slot, idx) => {
+    return displaySlotOptions.map((slotOption) => {
       // Count total pilots available at this time slot
       const totalAvailablePilots = pilots.filter((pilot) =>
-        isPilotAvailableForTimeSlot(pilot.uid, slot)
+        isPilotAvailableForTimeSlot(pilot.uid, slotOption.availabilityLookupTime)
       ).length;
 
       // Get bookings at this specific time and date
-      const bookingsAtThisTime = bookings.filter(
-        b => b.timeIndex === idx && b.date === selectedModalDate
+      const bookingsAtThisTime = filteredBookings.filter(
+        (b) => b.timeIndex === slotOption.actualTimeIndex && b.date === selectedModalDate
       );
 
       // Count total passengers booked at this time
@@ -135,22 +225,12 @@ export function NewBookingModal({
       const available = Math.max(0, totalAvailablePilots - totalPassengersBooked);
 
       return {
-        timeSlot: slot,
-        timeIndex: idx,
+        timeSlot: slotOption.displayTime,
+        actualTimeIndex: slotOption.actualTimeIndex,
         availableSpots: available,
       };
     });
-  }, [modalTimeSlots, pilots, bookings, selectedModalDate, isPilotAvailableForTimeSlot]);
-
-  const { startEditing, stopEditing } = useEditing();
-  const { currentUser } = useAuth();
-  const { role } = useRole();
-
-  // Determine the default booking source based on role
-  // Admins default to "twin", non-admins use their display name
-  const defaultBookingSource = role === 'admin'
-    ? "twin"
-    : (currentUser?.displayName || "");
+  }, [displaySlotOptions, pilots, filteredBookings, selectedModalDate, isPilotAvailableForTimeSlot]);
 
   // Initialize form with initialData if provided, or reset to defaults
   useEffect(() => {
@@ -202,7 +282,7 @@ export function NewBookingModal({
 
   // Calculate occupied pilot positions at this time
   const occupiedPilotIndices = useMemo(() => {
-    const bookingsAtThisTime = bookings.filter(b =>
+    const bookingsAtThisTime = filteredBookings.filter(b =>
       b.timeIndex === selectedModalTimeIndex &&
       b.date === selectedModalDate
     );
@@ -215,7 +295,7 @@ export function NewBookingModal({
       }
     });
     return occupied;
-  }, [bookings, selectedModalTimeIndex, selectedModalDate]);
+  }, [filteredBookings, selectedModalTimeIndex, selectedModalDate]);
 
   // Calculate available slots at this time based on actually available pilots
   // Use the same logic as BookingDetailsModal: total available pilots - total passengers booked
@@ -226,7 +306,7 @@ export function NewBookingModal({
     ).length;
 
     // Get bookings at this specific time and date
-    const bookingsAtThisTime = bookings.filter(
+    const bookingsAtThisTime = filteredBookings.filter(
       b => b.timeIndex === selectedModalTimeIndex && b.date === selectedModalDate
     );
 
@@ -239,7 +319,7 @@ export function NewBookingModal({
     const available = totalAvailablePilots - totalPassengersBooked;
 
     return Math.max(0, available);
-  }, [pilots, bookings, selectedModalTimeIndex, selectedModalDate, isPilotAvailableForTimeSlot, currentTimeSlot]);
+  }, [pilots, filteredBookings, selectedModalTimeIndex, selectedModalDate, isPilotAvailableForTimeSlot, currentTimeSlot]);
 
   // Calculate available female pilots at this time
   const availableFemalePilots = useMemo(() => {
@@ -250,7 +330,7 @@ export function NewBookingModal({
     );
 
     // Get bookings at this specific time and date
-    const bookingsAtThisTime = bookings.filter(
+    const bookingsAtThisTime = filteredBookings.filter(
       b => b.timeIndex === selectedModalTimeIndex && b.date === selectedModalDate
     );
 
@@ -266,7 +346,7 @@ export function NewBookingModal({
     });
 
     return Math.max(0, availableFemalePilotsList.length - assignedFemalePilots.size);
-  }, [pilots, bookings, selectedModalTimeIndex, selectedModalDate, isPilotAvailableForTimeSlot, currentTimeSlot]);
+  }, [pilots, filteredBookings, selectedModalTimeIndex, selectedModalDate, isPilotAvailableForTimeSlot, currentTimeSlot]);
 
   // Track initial available slots and monitor for changes
   useEffect(() => {
@@ -489,8 +569,8 @@ export function NewBookingModal({
 
                     return (
                       <SelectItem
-                        key={slot.timeIndex}
-                        value={slot.timeIndex.toString()}
+                        key={slot.actualTimeIndex}
+                        value={slot.actualTimeIndex.toString()}
                         disabled={isDisabled}
                         className={isDisabled ? "opacity-50 cursor-not-allowed" : ""}
                       >
