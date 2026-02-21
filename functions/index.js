@@ -1,4 +1,10 @@
-const {onDocumentCreated} = require("firebase-functions/v2/firestore");
+const {
+  onDocumentCreated,
+  onDocumentUpdated,
+  onDocumentDeleted,
+} = require("firebase-functions/v2/firestore");
+const {onRequest} = require("firebase-functions/v2/https");
+const {defineSecret} = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const nodemailer = require("nodemailer");
 const https = require("https");
@@ -7,6 +13,163 @@ const {ImapFlow} = require("imapflow");
 admin.initializeApp();
 
 const db = admin.firestore();
+const BOOKING_SEARCH_INDEX_COLLECTION = "bookingSearchIndex";
+const BOOKING_BACKFILL_BATCH_SIZE = 250;
+const bookingSearchBackfillKey = defineSecret("BOOKING_SEARCH_BACKFILL_KEY");
+
+function normalizeSearchText(value) {
+  if (!value || typeof value !== "string") return "";
+  return value
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim();
+}
+
+function normalizePhoneDigits(value) {
+  if (!value || typeof value !== "string") return "";
+  return value.replace(/\D/g, "");
+}
+
+function addPrefixTokens(tokenSet, value, maxPrefixLength = 24, maxTokens = 240) {
+  if (!value || tokenSet.size >= maxTokens) return;
+  const token = value.slice(0, 80);
+  const maxLen = Math.min(token.length, maxPrefixLength);
+
+  for (let i = 1; i <= maxLen; i++) {
+    tokenSet.add(token.slice(0, i));
+    if (tokenSet.size >= maxTokens) break;
+  }
+}
+
+function buildSearchPrefixes(bookingData) {
+  const tokenSet = new Set();
+  const maxTokens = 240;
+
+  const customerName = normalizeSearchText(bookingData.customerName || "");
+  const email = normalizeSearchText(bookingData.email || "");
+  const phoneDigits = normalizePhoneDigits(bookingData.phoneNumber || "");
+  const bookingSource = normalizeSearchText(bookingData.bookingSource || "");
+
+  // Name prefixes (supports first/last name typing)
+  const nameParts = customerName.split(/[^a-z0-9]+/).filter(Boolean);
+  for (const part of nameParts) {
+    addPrefixTokens(tokenSet, part, 24, maxTokens);
+  }
+
+  // Email prefixes (supports searching by full email prefix)
+  if (email) {
+    addPrefixTokens(tokenSet, email, 40, maxTokens);
+    const emailParts = email.split(/[^a-z0-9]+/).filter(Boolean);
+    for (const part of emailParts) {
+      addPrefixTokens(tokenSet, part, 24, maxTokens);
+    }
+  }
+
+  // Source prefixes
+  if (bookingSource) {
+    addPrefixTokens(tokenSet, bookingSource, 40, maxTokens);
+    const sourceParts = bookingSource.split(/[^a-z0-9]+/).filter(Boolean);
+    for (const part of sourceParts) {
+      addPrefixTokens(tokenSet, part, 24, maxTokens);
+    }
+  }
+
+  // Phone prefixes (digits only, supports +41 / spaces typed formats)
+  if (phoneDigits) {
+    addPrefixTokens(tokenSet, phoneDigits, 20, maxTokens);
+  }
+
+  return Array.from(tokenSet);
+}
+
+function buildBookingSearchIndexDocument(bookingId, bookingData) {
+  const customerName = typeof bookingData.customerName === "string" ? bookingData.customerName : "";
+  const email = typeof bookingData.email === "string" ? bookingData.email : "";
+  const phoneNumber = typeof bookingData.phoneNumber === "string" ? bookingData.phoneNumber : "";
+  const bookingSource = typeof bookingData.bookingSource === "string" ? bookingData.bookingSource : "";
+  const notes = typeof bookingData.notes === "string" ? bookingData.notes : "";
+  const date = typeof bookingData.date === "string" ? bookingData.date : "";
+  const timeIndex = typeof bookingData.timeIndex === "number" ? bookingData.timeIndex : 0;
+  const numberOfPeople = typeof bookingData.numberOfPeople === "number" ? bookingData.numberOfPeople : 0;
+  const bookingStatus = typeof bookingData.bookingStatus === "string" ? bookingData.bookingStatus : "pending";
+
+  return {
+    bookingId,
+    customerName,
+    customerNameNormalized: normalizeSearchText(customerName),
+    email,
+    emailNormalized: normalizeSearchText(email),
+    phoneNumber,
+    phoneDigits: normalizePhoneDigits(phoneNumber),
+    bookingSource,
+    notes,
+    date,
+    timeIndex,
+    numberOfPeople,
+    bookingStatus,
+    searchPrefixes: buildSearchPrefixes(bookingData),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+}
+
+async function backfillBookingSearchIndex({dryRun = false, maxBatches = 0} = {}) {
+  let processed = 0;
+  let indexed = 0;
+  let batches = 0;
+  let lastDocId = null;
+  const startedAt = Date.now();
+
+  while (true) {
+    let bookingsQuery = db
+        .collection("bookings")
+        .orderBy(admin.firestore.FieldPath.documentId())
+        .limit(BOOKING_BACKFILL_BATCH_SIZE);
+
+    if (lastDocId) {
+      bookingsQuery = bookingsQuery.startAfter(lastDocId);
+    }
+
+    const snapshot = await bookingsQuery.get();
+    if (snapshot.empty) {
+      break;
+    }
+
+    if (!dryRun) {
+      const batch = db.batch();
+      for (const bookingDoc of snapshot.docs) {
+        const indexDoc = buildBookingSearchIndexDocument(bookingDoc.id, bookingDoc.data());
+        batch.set(
+            db.collection(BOOKING_SEARCH_INDEX_COLLECTION).doc(bookingDoc.id),
+            indexDoc,
+            {merge: true},
+        );
+        indexed += 1;
+      }
+      await batch.commit();
+    } else {
+      indexed += snapshot.size;
+    }
+
+    processed += snapshot.size;
+    batches += 1;
+    lastDocId = snapshot.docs[snapshot.docs.length - 1].id;
+
+    if (maxBatches > 0 && batches >= maxBatches) {
+      break;
+    }
+  }
+
+  const durationMs = Date.now() - startedAt;
+  return {
+    dryRun,
+    processed,
+    indexed,
+    batches,
+    durationMs,
+    truncated: maxBatches > 0 && batches >= maxBatches,
+  };
+}
 
 // Configure SMTP transporter
 const transporter = nodemailer.createTransport({
@@ -1252,3 +1415,72 @@ exports.sendGiftVoucherEmail = onDocumentCreated(
     },
 );
 
+// Keep bookingSearchIndex in sync with bookings (does NOT modify bookings docs)
+exports.syncBookingSearchIndexOnCreate = onDocumentCreated(
+    "bookings/{bookingId}",
+    async (event) => {
+      const bookingId = event.params.bookingId;
+      const bookingData = event.data?.data();
+
+      if (!bookingData) return;
+
+      const indexDoc = buildBookingSearchIndexDocument(bookingId, bookingData);
+      await db.collection(BOOKING_SEARCH_INDEX_COLLECTION).doc(bookingId).set(indexDoc, {merge: true});
+    },
+);
+
+exports.syncBookingSearchIndexOnUpdate = onDocumentUpdated(
+    "bookings/{bookingId}",
+    async (event) => {
+      const bookingId = event.params.bookingId;
+      const bookingData = event.data?.after?.data();
+
+      if (!bookingData) return;
+
+      const indexDoc = buildBookingSearchIndexDocument(bookingId, bookingData);
+      await db.collection(BOOKING_SEARCH_INDEX_COLLECTION).doc(bookingId).set(indexDoc, {merge: true});
+    },
+);
+
+exports.syncBookingSearchIndexOnDelete = onDocumentDeleted(
+    "bookings/{bookingId}",
+    async (event) => {
+      const bookingId = event.params.bookingId;
+      await db.collection(BOOKING_SEARCH_INDEX_COLLECTION).doc(bookingId).delete();
+    },
+);
+
+// One-time secure backfill endpoint for existing bookings.
+// Protected by a Secret Manager key so it can be invoked safely from terminal.
+exports.backfillBookingSearchIndex = onRequest(
+    {
+      timeoutSeconds: 540,
+      memory: "1GiB",
+      secrets: [bookingSearchBackfillKey],
+    },
+    async (req, res) => {
+      const providedKey = String(req.query.key || req.get("x-backfill-key") || "");
+      const expectedKey = bookingSearchBackfillKey.value();
+
+      if (!providedKey || providedKey !== expectedKey) {
+        res.status(403).json({ok: false, error: "forbidden"});
+        return;
+      }
+
+      const dryRun = String(req.query.dryRun || "") === "1";
+      const maxBatchesRaw = Number(req.query.maxBatches || 0);
+      const maxBatches = Number.isFinite(maxBatchesRaw) && maxBatchesRaw > 0 ?
+        Math.floor(maxBatchesRaw) : 0;
+
+      try {
+        const result = await backfillBookingSearchIndex({dryRun, maxBatches});
+        res.status(200).json({ok: true, ...result});
+      } catch (error) {
+        console.error("Backfill function failed:", error);
+        res.status(500).json({
+          ok: false,
+          error: error?.message || "backfill-failed",
+        });
+      }
+    },
+);

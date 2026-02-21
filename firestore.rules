@@ -109,6 +109,16 @@ service cloud.firestore {
       );
     }
 
+    // Booking search index collection
+    // IMPORTANT: This is a separate, lightweight lookup table for search only.
+    // Existing bookings documents are never modified by search.
+    match /bookingSearchIndex/{indexId} {
+      // Search is only available to authenticated users in the app
+      allow read: if request.auth != null;
+      // Write access is restricted to admin users (Cloud Functions use Admin SDK and bypass rules)
+      allow write: if request.auth != null && hasRole('admin');
+    }
+
     // Booking requests collection
     match /bookingRequests/{requestId} {
       // Anyone can create a booking request (public form)
