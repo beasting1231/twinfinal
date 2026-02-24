@@ -2035,11 +2035,16 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
             // Determine how many regular available cells and onRequest cells to show
             let remainingCapacity = Math.min(gridSpaceAvailable, actualCapacityRemaining);
 
-            // Show available cells first
-            let availableCellsToShow = Math.min(remainingCapacity, availablePilots.length);
+            // Reserve visible capacity for onRequest pilots so they don't disappear when bookings exist.
+            // Without this, rows can overstate availability by showing extra "available" cells instead.
+            const reservedOnRequestCells = Math.min(remainingCapacity, onRequestPilots.length);
+
+            // Show available cells first, but only after reserving space for onRequest cells
+            let availableCellsToShow = Math.min(availablePilots.length, remainingCapacity - reservedOnRequestCells);
             if (pilots.length === 0 && role === 'admin' && slotsOccupiedByBookings === 0) {
               availableCellsToShow = Math.max(1, availableCellsToShow);
             }
+            availableCellsToShow = Math.max(0, availableCellsToShow);
 
             // Add available pilot cells
             for (let i = 0; i < availableCellsToShow; i++) {
@@ -2061,7 +2066,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
             }
 
             // Show onRequest cells after available cells
-            remainingCapacity -= availableCellsToShow;
+            remainingCapacity = Math.max(0, remainingCapacity - availableCellsToShow);
             const onRequestCellsToShow = Math.min(remainingCapacity, onRequestPilots.length);
 
             for (let i = 0; i < onRequestCellsToShow; i++) {
