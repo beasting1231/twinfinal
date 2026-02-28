@@ -138,7 +138,7 @@ function AvailabilityPage() {
 }
 
 // Simple page wrapper for other routes
-function PageWrapper({ children }: { children: React.ReactNode }) {
+function PageWrapper({ children, disablePageScroll = false }: { children: React.ReactNode; disablePageScroll?: boolean }) {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [weekStartDate, setWeekStartDate] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
 
@@ -150,7 +150,7 @@ function PageWrapper({ children }: { children: React.ReactNode }) {
         weekStartDate={weekStartDate}
         onWeekChange={setWeekStartDate}
       />
-      <div className="flex-1 overflow-y-auto">
+      <div className={`flex-1 ${disablePageScroll ? "overflow-hidden" : "overflow-y-auto"}`}>
         {children}
       </div>
     </div>
@@ -213,7 +213,7 @@ function AppContent() {
 
       <Route path="/accounting" element={
         <ProtectedRoute>
-          <PageWrapper>
+          <PageWrapper disablePageScroll>
             <Accounting />
           </PageWrapper>
         </ProtectedRoute>
