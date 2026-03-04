@@ -135,6 +135,10 @@ export function SearchBookingModal({
 
     return allBookings
       .filter((booking) => {
+        if (booking.isBlocked || booking.bookingSource === "Blocked") {
+          return false;
+        }
+
         const customerName = booking.customerName || "";
         const phoneNumber = booking.phoneNumber || "";
         const email = booking.email || "";

@@ -50,6 +50,7 @@ export interface Booking {
   assignedPilots: string[];
   acknowledgedPilots?: string[]; // Pilots who have confirmed they've seen the assignment
   bookingStatus: "unconfirmed" | "confirmed" | "pending" | "cancelled" | "deleted" | "no show";
+  isBlocked?: boolean; // Reserved/blocked capacity spot (not a normal customer booking)
   span: number;
   pilotPayments?: PilotPayment[];
   driver?: string;

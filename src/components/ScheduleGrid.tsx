@@ -24,6 +24,9 @@ import { CollapsibleDriverMap } from "./CollapsibleDriverMap";
 import { CollapsibleDriverOwnMap } from "./CollapsibleDriverOwnMap";
 import { LocationToggle } from "./LocationToggle";
 import { SearchBookingModal } from "./SearchBookingModal";
+import { AvailableSpotContextMenu } from "./AvailableSpotContextMenu";
+import { BlockSpotsModal } from "./BlockSpotsModal";
+import { BlockedSpotContextMenu } from "./BlockedSpotContextMenu";
 import { useBookingSourceColors } from "../hooks/useBookingSourceColors";
 import { useDriverAssignments } from "../hooks/useDriverAssignments";
 import { useBookingRequests } from "../hooks/useBookingRequests";
@@ -279,6 +282,30 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     timeIndex: number;
     isSignedOut: boolean;
     currentStatus: AvailabilityStatus;
+  } | null>(null);
+
+  // Available spot context menu state (admin block action)
+  const [availableSpotContextMenu, setAvailableSpotContextMenu] = useState<{
+    isOpen: boolean;
+    position: { x: number; y: number };
+    pilotIndex: number;
+    timeIndex: number;
+    timeSlot: string;
+  } | null>(null);
+
+  // Block spots modal state
+  const [blockSpotsModal, setBlockSpotsModal] = useState<{
+    isOpen: boolean;
+    pilotIndex: number;
+    timeIndex: number;
+    timeSlot: string;
+  } | null>(null);
+
+  // Blocked spot context menu state
+  const [blockedSpotContextMenu, setBlockedSpotContextMenu] = useState<{
+    isOpen: boolean;
+    position: { x: number; y: number };
+    booking: Booking;
   } | null>(null);
 
   // Driver/Vehicle modal state
@@ -569,6 +596,66 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     setIsModalOpen(true);
   }, [canEditForSelectedDate]);
 
+  const handleAvailableSpotContextMenu = useCallback((pilotIndex: number, timeIndex: number, timeSlot: string) => (position: { x: number; y: number }) => {
+    if (role !== "admin" || !canEditForSelectedDate) {
+      return;
+    }
+
+    setBlockedSpotContextMenu(null);
+    setAvailableSpotContextMenu({
+      isOpen: true,
+      position,
+      pilotIndex,
+      timeIndex,
+      timeSlot,
+    });
+  }, [role, canEditForSelectedDate]);
+
+  const handleBlockSpots = useCallback((numberOfPeople: number) => {
+    if (role !== "admin") return;
+    if (!blockSpotsModal || !onAddBooking) return;
+
+    const bookingDate = format(selectedDate, "yyyy-MM-dd");
+
+    onAddBooking({
+      date: bookingDate,
+      pilotIndex: blockSpotsModal.pilotIndex,
+      timeIndex: blockSpotsModal.timeIndex,
+      customerName: "",
+      pickupLocation: "",
+      bookingSource: "Blocked",
+      numberOfPeople,
+      assignedPilots: [],
+      bookingStatus: "confirmed",
+      isBlocked: true,
+      span: numberOfPeople,
+      notes: "",
+    });
+
+    setBlockSpotsModal(null);
+  }, [role, blockSpotsModal, onAddBooking, selectedDate]);
+
+  const handleBlockedSpotContextMenu = useCallback((booking: Booking) => (position: { x: number; y: number }) => {
+    if (role !== "admin" || !canEditForSelectedDate) {
+      return;
+    }
+
+    setAvailableSpotContextMenu(null);
+    setBlockedSpotContextMenu({
+      isOpen: true,
+      position,
+      booking,
+    });
+  }, [role, canEditForSelectedDate]);
+
+  const handleUnblockSpots = useCallback(async () => {
+    if (role !== "admin") return;
+    if (!blockedSpotContextMenu?.booking?.id || !onDeleteBooking) return;
+
+    await onDeleteBooking(blockedSpotContextMenu.booking.id);
+    setBlockedSpotContextMenu(null);
+  }, [role, blockedSpotContextMenu, onDeleteBooking]);
+
   // Check if a booking can be clicked by the current user
   const canViewBooking = useCallback((booking: Booking) => {
     // Agency users can only view bookings they created
@@ -597,6 +684,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     setContextMenu(null);
     setOverbookedContextMenu(null);
     setAvailabilityContextMenu(null);
+    setAvailableSpotContextMenu(null);
+    setBlockedSpotContextMenu(null);
     setBookingRequestContextMenu(null);
     setMoveMode({ isActive: true, booking });
   };
@@ -608,6 +697,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
   const enterRequestMoveMode = (request: BookingRequest) => {
     if (role !== 'admin') return;
     // Close all context menus when entering move mode
+    setAvailableSpotContextMenu(null);
+    setBlockedSpotContextMenu(null);
     setBookingRequestContextMenu(null);
     setRequestMoveMode({ isActive: true, request });
   };
@@ -619,6 +710,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
   const enterDeletedBookingMoveMode = (booking: Booking) => {
     if (role !== 'admin') return;
     // Close all context menus when entering move mode
+    setAvailableSpotContextMenu(null);
+    setBlockedSpotContextMenu(null);
     setDeletedBookingContextMenu(null);
     setDeletedBookingMoveMode({ isActive: true, booking });
   };
@@ -1961,7 +2054,11 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                 return aTime - bTime;
               });
 
-            // Calculate how many pilot slots are occupied by bookings
+            const isBlockedBooking = (booking: Booking) => booking.isBlocked || booking.bookingSource === "Blocked";
+            const regularBookingsAtThisTime = bookingsAtThisTime.filter((booking) => !isBlockedBooking(booking));
+            const blockedBookingsAtThisTime = bookingsAtThisTime.filter((booking) => isBlockedBooking(booking));
+
+            // Calculate how many pilot slots are occupied by bookings (including blocked spots)
             const slotsOccupiedByBookings = bookingsAtThisTime.reduce((total, booking) => {
               return total + (booking.numberOfPeople || booking.span || 1);
             }, 0);
@@ -1979,17 +2076,17 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
             const cellsForRow: Array<{
               pilot?: any;
               pilotIndex?: number;
-              status: "booked" | "available" | "noPilot";
-              booking?: any;
-              sortOrder: number; // 0=booked, 1=available, 2=onRequest, 3=noPilot, 4=invisible
+              status: "booked" | "available" | "blocked" | "noPilot";
+              booking?: Booking;
+              sortOrder: number; // 0=booked, 1=available, 2=onRequest, 3=blocked, 4=noPilot, 5=invisible
             }> = [];
 
-            // Add booking cells first (they go on the left)
-            bookingsAtThisTime.forEach(booking => {
+            // Add normal booking cells first (leftmost)
+            regularBookingsAtThisTime.forEach((booking) => {
               cellsForRow.push({
                 status: "booked",
                 booking,
-                sortOrder: 0
+                sortOrder: 0,
               });
             });
 
@@ -2012,13 +2109,13 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
               }
             });
 
-            // Add all unavailable pilot cells
+            // Add all unavailable pilot cells (rightmost, after blocked spots)
             unavailablePilots.forEach(({pilot, pilotIndex}) => {
               cellsForRow.push({
                 pilot,
                 pilotIndex,
                 status: "noPilot",
-                sortOrder: 3  // Changed from 2 to 3
+                sortOrder: 4,
               });
             });
 
@@ -2075,14 +2172,23 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                 pilot,
                 pilotIndex,
                 status: "available",  // Keep status as "available" for functionality
-                sortOrder: 2  // New sortOrder for onRequest cells
+                sortOrder: 2,
               });
             }
+
+            // Add blocked cells after onRequest cells
+            blockedBookingsAtThisTime.forEach((booking) => {
+              cellsForRow.push({
+                status: "blocked",
+                booking,
+                sortOrder: 3,
+              });
+            });
 
             // Add invisible cells to fill remaining columns (for rows without overbooking)
             // Calculate actual grid columns occupied (bookings can span multiple columns)
             const columnsOccupied = cellsForRow.reduce((total, cell) => {
-              if (cell.status === "booked" && cell.booking) {
+              if ((cell.status === "booked" || cell.status === "blocked") && cell.booking) {
                 return total + (cell.booking.numberOfPeople || cell.booking.span || 1);
               }
               return total + 1; // Other cells occupy 1 column each
@@ -2092,11 +2198,11 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
             for (let i = 0; i < cellsToFill; i++) {
               cellsForRow.push({
                 status: "available" as const,
-                sortOrder: 4  // Put invisible cells at the end
+                sortOrder: 5,
               });
             }
 
-            // Sort cells: booked first, then available, then onRequest, then noPilot, then invisible
+            // Sort cells: booked -> available -> onRequest -> blocked -> noPilot -> invisible
             cellsForRow.sort((a, b) => a.sortOrder - b.sortOrder);
 
             // Calculate total pax for this time slot
@@ -2152,7 +2258,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                 let cumulativePosition = 0;
                 return cellsForRow.map((cell, cellIdx) => {
                   // Invisible cell - render empty div to maintain grid structure
-                  if (cell.sortOrder === 4) {
+                  if (cell.sortOrder === 5) {
                     return (
                       <div
                         key={`invisible-${timeIndex}-${cellIdx}`}
@@ -2162,8 +2268,68 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                     );
                   }
 
+                  if (cell.status === "blocked" && cell.booking) {
+                    const blockedBooking = cell.booking;
+                    const span = blockedBooking.numberOfPeople || blockedBooking.span || 1;
+
+                    const handleBlockedContextMenu = (event: React.MouseEvent) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      handleBlockedSpotContextMenu(blockedBooking)({ x: event.clientX, y: event.clientY });
+                    };
+
+                    const blockedTouchTimer = { value: null as ReturnType<typeof setTimeout> | null };
+
+                    const handleBlockedTouchStart = (event: React.TouchEvent) => {
+                      if (role !== "admin") return;
+                      const touch = event.touches[0];
+                      blockedTouchTimer.value = setTimeout(() => {
+                        handleBlockedSpotContextMenu(blockedBooking)({ x: touch.clientX, y: touch.clientY });
+                      }, 500);
+                    };
+
+                    const handleBlockedTouchMove = () => {
+                      if (blockedTouchTimer.value) {
+                        clearTimeout(blockedTouchTimer.value);
+                        blockedTouchTimer.value = null;
+                      }
+                    };
+
+                    const handleBlockedTouchEnd = () => {
+                      if (blockedTouchTimer.value) {
+                        clearTimeout(blockedTouchTimer.value);
+                        blockedTouchTimer.value = null;
+                      }
+                    };
+
+                    return (
+                      <div
+                        key={`blocked-${timeIndex}-${blockedBooking.id || cellIdx}`}
+                        className="h-20"
+                        style={{ gridColumn: `span ${span}` }}
+                      >
+                        <div
+                          className="w-full h-full rounded-lg border border-zinc-500/60 bg-zinc-600/35 flex flex-col justify-between px-2 py-2 select-none"
+                          onContextMenu={role === "admin" ? handleBlockedContextMenu : undefined}
+                          onTouchStart={role === "admin" ? handleBlockedTouchStart : undefined}
+                          onTouchMove={role === "admin" ? handleBlockedTouchMove : undefined}
+                          onTouchEnd={role === "admin" ? handleBlockedTouchEnd : undefined}
+                        >
+                          <div className="text-sm font-semibold text-zinc-100">BLOCKED</div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-zinc-300">blocked spots</span>
+                            <span className="text-xs font-medium rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 bg-zinc-700 text-zinc-200">
+                              {span}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
                   if (cell.status === "booked" && cell.booking) {
-                    const span = cell.booking.numberOfPeople || cell.booking.span || 1;
+                    const booking = cell.booking;
+                    const span = booking.numberOfPeople || booking.span || 1;
 
                     // Calculate how many positions in THIS booking are overbooked
                     // based on cumulative position across all bookings
@@ -2183,7 +2349,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
 
                   return (
                     <div
-                      key={`booking-${timeIndex}-${cell.booking.id || cellIdx}`}
+                      key={`booking-${timeIndex}-${booking.id || cellIdx}`}
                       className="h-20"
                       style={{ gridColumn: `span ${span}` }}
                     >
@@ -2191,39 +2357,39 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                         pilotId="" // Not tied to a specific pilot column anymore
                         timeSlot={timeSlot}
                         status="booked"
-                        customerName={cell.booking.customerName}
-                        pickupLocation={cell.booking.pickupLocation}
-                        bookingSource={cell.booking.bookingSource}
-                        assignedPilots={cell.booking.assignedPilots}
-                        acknowledgedPilots={cell.booking.acknowledgedPilots}
-                        pilotPayments={cell.booking.pilotPayments}
-                        bookingStatus={cell.booking.bookingStatus}
+                        customerName={booking.customerName}
+                        pickupLocation={booking.pickupLocation}
+                        bookingSource={booking.bookingSource}
+                        assignedPilots={booking.assignedPilots}
+                        acknowledgedPilots={booking.acknowledgedPilots}
+                        pilotPayments={booking.pilotPayments}
+                        bookingStatus={booking.bookingStatus === "deleted" || booking.bookingStatus === "no show" ? "confirmed" : booking.bookingStatus}
                         span={span}
-                        femalePilotsRequired={cell.booking.femalePilotsRequired}
-                        flightType={cell.booking.flightType}
-                        notes={cell.booking.notes}
-                        bookingSourceColor={getSourceColor(cell.booking.bookingSource)}
-                        onBookedClick={canViewBooking(cell.booking) ? () => handleBookedCellClick(cell.booking) : undefined}
-                        onContextMenu={canViewBooking(cell.booking) && (canManagePilots() || role === "pilot") ? handleBookingContextMenu(cell.booking, timeSlot) : undefined}
-                        onPilotNameClick={role === "pilot" ? handlePilotNameClick(cell.booking, timeSlot) : undefined}
-                        onPilotNameLongPress={(role === "pilot" || role === "admin") ? handlePilotNameLongPress(cell.booking) : undefined}
+                        femalePilotsRequired={booking.femalePilotsRequired}
+                        flightType={booking.flightType}
+                        notes={booking.notes}
+                        bookingSourceColor={getSourceColor(booking.bookingSource)}
+                        onBookedClick={canViewBooking(booking) ? () => handleBookedCellClick(booking) : undefined}
+                        onContextMenu={canViewBooking(booking) && (canManagePilots() || role === "pilot") ? handleBookingContextMenu(booking, timeSlot) : undefined}
+                        onPilotNameClick={role === "pilot" ? handlePilotNameClick(booking, timeSlot) : undefined}
+                        onPilotNameLongPress={(role === "pilot" || role === "admin") ? handlePilotNameLongPress(booking) : undefined}
                         currentUserDisplayName={currentUserDisplayName}
-                        bookingId={cell.booking.id}
+                        bookingId={booking.id}
                         canDrag={isDragEnabled}
                         overbookedCount={overbookedCount}
                         onOverbookedClick={role === 'admin' ? (slotIndex: number, position: { x: number; y: number }) => {
                           setOverbookedContextMenu({
                             isOpen: true,
                             position,
-                            booking: cell.booking,
+                            booking,
                             slotIndex,
                             timeSlot
                           });
                         } : undefined}
                         onEnterMoveMode={role === 'admin' ? enterMoveMode : undefined}
-                        isInMoveMode={moveMode.isActive && moveMode.booking?.id === cell.booking.id}
-                        isHighlighted={highlightedBookingId === cell.booking.id}
-                        hideDetails={!canViewBooking(cell.booking)}
+                        isInMoveMode={moveMode.isActive && moveMode.booking?.id === booking.id}
+                        isHighlighted={highlightedBookingId === booking.id}
+                        hideDetails={!canViewBooking(booking)}
                       />
                     </div>
                   );
@@ -2265,7 +2431,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                       <BookingAvailable
                         pilotId={cell.pilot?.displayName || ""}
                         timeSlot={timeSlot}
-                        status={cell.status}
+                        status={cell.status === "noPilot" ? "noPilot" : "available"}
                         pilotAvailabilityStatus={cell.pilot ? getPilotAvailabilityStatus?.(cell.pilot.uid, timeSlot) : undefined}
                         span={1}
                         isCurrentUserPilot={isCurrentUserPilot}
@@ -2286,8 +2452,12 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                             : undefined
                         }
                         onAvailableContextMenu={
-                          cell.status === "available" && isCurrentUserAvailableAtThisTime
-                            ? handleNoPilotContextMenu(currentUserPilotIndex, timeIndex)
+                          cell.status === "available"
+                            ? role === "admin" && !isOnRequestCell
+                              ? handleAvailableSpotContextMenu(cell.pilotIndex ?? 0, timeIndex, timeSlot)
+                              : isCurrentUserAvailableAtThisTime
+                                ? handleNoPilotContextMenu(currentUserPilotIndex, timeIndex)
+                                : undefined
                             : undefined
                         }
                         droppableId={cell.status === "available" && (!isOnRequestCell || canBookOnRequestCell) ? `droppable-${timeIndex}-${cell.pilotIndex ?? 0}` : undefined}
@@ -2731,6 +2901,46 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
           onSelectPilot={handleSelectOverbookedPilot}
           onUnassign={handleUnassignOverbookedPilot}
           onClose={() => setOverbookedContextMenu(null)}
+        />
+      )}
+
+      {/* Available Spot Context Menu */}
+      {availableSpotContextMenu && (
+        <AvailableSpotContextMenu
+          isOpen={availableSpotContextMenu.isOpen}
+          position={availableSpotContextMenu.position}
+          onBlockSpots={() => {
+            setBlockSpotsModal({
+              isOpen: true,
+              pilotIndex: availableSpotContextMenu.pilotIndex,
+              timeIndex: availableSpotContextMenu.timeIndex,
+              timeSlot: availableSpotContextMenu.timeSlot,
+            });
+          }}
+          onClose={() => setAvailableSpotContextMenu(null)}
+        />
+      )}
+
+      {/* Block Spots Modal */}
+      {blockSpotsModal && (
+        <BlockSpotsModal
+          open={blockSpotsModal.isOpen}
+          onOpenChange={(open) => {
+            if (!open) {
+              setBlockSpotsModal(null);
+            }
+          }}
+          onBlock={handleBlockSpots}
+        />
+      )}
+
+      {/* Blocked Spot Context Menu */}
+      {blockedSpotContextMenu && (
+        <BlockedSpotContextMenu
+          isOpen={blockedSpotContextMenu.isOpen}
+          position={blockedSpotContextMenu.position}
+          onUnblock={handleUnblockSpots}
+          onClose={() => setBlockedSpotContextMenu(null)}
         />
       )}
 
