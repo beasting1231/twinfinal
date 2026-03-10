@@ -611,7 +611,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     });
   }, [role, canEditForSelectedDate]);
 
-  const handleBlockSpots = useCallback((numberOfPeople: number) => {
+  const handleBlockSpots = useCallback((numberOfPeople: number, reason: string) => {
     if (role !== "admin") return;
     if (!blockSpotsModal || !onAddBooking) return;
 
@@ -629,7 +629,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
       bookingStatus: "confirmed",
       isBlocked: true,
       span: numberOfPeople,
-      notes: "",
+      notes: reason,
     });
 
     setBlockSpotsModal(null);
@@ -2205,8 +2205,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
             // Sort cells: booked -> available -> onRequest -> blocked -> noPilot -> invisible
             cellsForRow.sort((a, b) => a.sortOrder - b.sortOrder);
 
-            // Calculate total pax for this time slot
-            const totalPaxAtThisTime = bookingsAtThisTime.reduce((total, booking) => {
+            // Calculate total pax for this time slot (exclude blocked spots)
+            const totalPaxAtThisTime = regularBookingsAtThisTime.reduce((total, booking) => {
               return total + (booking.numberOfPeople || 1);
             }, 0);
 
@@ -2271,6 +2271,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                   if (cell.status === "blocked" && cell.booking) {
                     const blockedBooking = cell.booking;
                     const span = blockedBooking.numberOfPeople || blockedBooking.span || 1;
+                    const blockReason = blockedBooking.notes?.trim();
 
                     const handleBlockedContextMenu = (event: React.MouseEvent) => {
                       event.preventDefault();
@@ -2316,6 +2317,11 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                           onTouchEnd={role === "admin" ? handleBlockedTouchEnd : undefined}
                         >
                           <div className="text-sm font-semibold text-zinc-100">BLOCKED</div>
+                          {blockReason && (
+                            <div className="text-xs text-zinc-200/90 line-clamp-2 leading-snug">
+                              {blockReason}
+                            </div>
+                          )}
                           <div className="flex items-center justify-between">
                             <span className="text-xs text-zinc-300">blocked spots</span>
                             <span className="text-xs font-medium rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 bg-zinc-700 text-zinc-200">

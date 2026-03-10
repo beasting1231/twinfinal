@@ -2,19 +2,22 @@ import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Label } from "./ui/label";
+import { Textarea } from "./ui/textarea";
 
 interface BlockSpotsModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onBlock: (numberOfPeople: number) => void;
+  onBlock: (numberOfPeople: number, reason: string) => void;
 }
 
 export function BlockSpotsModal({ open, onOpenChange, onBlock }: BlockSpotsModalProps) {
   const [numberOfPeople, setNumberOfPeople] = useState("1");
+  const [reason, setReason] = useState("");
 
   useEffect(() => {
     if (open) {
       setNumberOfPeople("1");
+      setReason("");
     }
   }, [open]);
 
@@ -25,7 +28,7 @@ export function BlockSpotsModal({ open, onOpenChange, onBlock }: BlockSpotsModal
       return;
     }
 
-    onBlock(number);
+    onBlock(number, reason.trim());
     onOpenChange(false);
   };
 
@@ -59,6 +62,16 @@ export function BlockSpotsModal({ open, onOpenChange, onBlock }: BlockSpotsModal
               ))}
             </div>
           </div>
+        </div>
+
+        <div className="space-y-2 py-1 min-w-0 w-full">
+          <Label className="text-gray-900 dark:text-white">Reason (optional)</Label>
+          <Textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="e.g., Weather hold / VIP reservation / Maintenance"
+            className="min-h-[90px]"
+          />
         </div>
 
         <div className="flex gap-3 pt-2 w-full min-w-0">
