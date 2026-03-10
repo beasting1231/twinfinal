@@ -74,7 +74,7 @@ function DailyPlanPage() {
     return bookings.filter(booking => booking.date === selectedDateStr);
   }, [bookings, selectedDate]);
 
-  const { pilots, loading: pilotsLoading, isPilotAvailableForTimeSlot, getPilotAvailabilityStatus, saveCustomPilotOrder } = usePilots(selectedDate);
+  const { pilots, loading: pilotsLoading, isPilotAvailableForTimeSlot, getPilotAvailabilityStatus, getPilotSignInTimeForTimeSlot, saveCustomPilotOrder } = usePilots(selectedDate);
 
   // Progressive loading: Only wait for pilots data, not bookings
   // The grid will show immediately with pilots, and bookings will populate as they load
@@ -97,6 +97,7 @@ function DailyPlanPage() {
         allBookingsForSearch={bookings}
         isPilotAvailableForTimeSlot={isPilotAvailableForTimeSlot}
         getPilotAvailabilityStatus={getPilotAvailabilityStatus}
+        getPilotSignInTimeForTimeSlot={getPilotSignInTimeForTimeSlot}
         saveCustomPilotOrder={saveCustomPilotOrder}
         loading={isLoading}
         currentUserDisplayName={currentUserDisplayName}

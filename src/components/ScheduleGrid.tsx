@@ -48,6 +48,7 @@ interface ScheduleGridProps {
   allBookingsForSearch?: Booking[];
   isPilotAvailableForTimeSlot: (pilotUid: string, timeSlot: string) => boolean;
   getPilotAvailabilityStatus?: (pilotUid: string, timeSlot: string) => AvailabilityStatus;
+  getPilotSignInTimeForTimeSlot?: (pilotUid: string, timeSlot: string) => string | null;
   saveCustomPilotOrder?: (newOrder: string[]) => Promise<void>;
   loading?: boolean;
   currentUserDisplayName?: string;
@@ -57,18 +58,40 @@ interface ScheduleGridProps {
   onNavigateToDate?: (date: Date) => void;
 }
 
+const TIME_COLUMN_WIDTH = 112;
+
 // Draggable Pilot Header Component
-function DraggablePilotHeader({ pilot, index, isAdmin, isDragging }: { pilot: Pilot; index: number; isAdmin: boolean; isDragging: boolean }) {
+function DraggablePilotHeader({
+  pilot,
+  index,
+  dragEnabled,
+  isDragging,
+  isActive,
+  isMobile,
+  onMouseEnter,
+  onMouseLeave,
+  onSelect,
+}: {
+  pilot: Pilot;
+  index: number;
+  dragEnabled: boolean;
+  isDragging: boolean;
+  isActive: boolean;
+  isMobile: boolean;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
+  onSelect?: () => void;
+}) {
   const id = `pilot-header-${index}`;
 
   const { attributes, listeners, setNodeRef: setDragNodeRef, transform } = useDraggable({
     id,
-    disabled: !isAdmin,
+    disabled: !dragEnabled,
   });
 
   const { setNodeRef: setDropNodeRef, isOver } = useDroppable({
     id,
-    disabled: !isAdmin,
+    disabled: !dragEnabled,
   });
 
   const setNodeRef = (node: HTMLElement | null) => {
@@ -81,14 +104,19 @@ function DraggablePilotHeader({ pilot, index, isAdmin, isDragging }: { pilot: Pi
     opacity: isDragging ? 0.5 : 1,
   } : undefined;
 
+  const isInspectable = Boolean(onMouseEnter || onMouseLeave || onSelect);
+
   return (
     <div
       ref={setNodeRef}
       style={style}
-      {...(isAdmin ? listeners : {})}
-      {...(isAdmin ? attributes : {})}
-      className={`h-7 flex items-center justify-center ${pilot.femalePilot ? 'bg-red-600/80 text-white' : 'bg-gray-200 dark:bg-zinc-900 text-gray-900 dark:text-white'} rounded-lg font-medium text-sm gap-2 ${isAdmin ? 'cursor-move' : ''} ${isOver ? 'ring-2 ring-blue-500' : ''} transition-all`}
-      title={isAdmin ? 'Drag to reorder (Admin only)' : ''}
+      {...(dragEnabled ? listeners : {})}
+      {...(dragEnabled ? attributes : {})}
+      className={`h-7 flex items-center justify-center ${pilot.femalePilot ? 'bg-red-600/80 text-white' : 'bg-gray-200 dark:bg-zinc-900 text-gray-900 dark:text-white'} rounded-lg font-medium text-sm gap-2 ${dragEnabled ? 'cursor-move' : isInspectable ? 'cursor-pointer' : ''} ${isOver ? 'ring-2 ring-blue-500' : ''} ${isActive ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-gray-50 dark:ring-offset-zinc-950' : ''} transition-all`}
+      title={dragEnabled ? 'Drag to reorder (Admin only)' : isMobile ? 'Tap to show sign-in times' : ''}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      onClick={onSelect}
     >
       <span className={pilot.femalePilot ? 'text-white' : 'text-gray-600 dark:text-zinc-500'}>{index + 1}</span>
       <span>{pilot.displayName}</span>
@@ -96,7 +124,7 @@ function DraggablePilotHeader({ pilot, index, isAdmin, isDragging }: { pilot: Pi
   );
 }
 
-export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBookings = [], allBookingsForSearch = [], isPilotAvailableForTimeSlot, getPilotAvailabilityStatus, saveCustomPilotOrder, loading = false, currentUserDisplayName, onAddBooking, onUpdateBooking, onDeleteBooking, onNavigateToDate }: ScheduleGridProps) {
+export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBookings = [], allBookingsForSearch = [], isPilotAvailableForTimeSlot, getPilotAvailabilityStatus, getPilotSignInTimeForTimeSlot, saveCustomPilotOrder, loading = false, currentUserDisplayName, onAddBooking, onUpdateBooking, onDeleteBooking, onNavigateToDate }: ScheduleGridProps) {
   // Filter out deleted bookings from the main grid
   const bookings = useMemo(() => {
     return allBookings.filter(booking => booking.bookingStatus !== "deleted");
@@ -105,6 +133,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
   const [selectedCell, setSelectedCell] = useState<{ pilotIndex: number; timeIndex: number; timeSlot: string } | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+  const [hoveredPilotUid, setHoveredPilotUid] = useState<string | null>(null);
+  const [selectedPilotUid, setSelectedPilotUid] = useState<string | null>(null);
 
   // Get current user and role for permission checks
   const { currentUser } = useAuth();
@@ -119,6 +149,27 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
            ('ontouchstart' in window) ||
            (navigator.maxTouchPoints > 0);
   }, []);
+
+  const canInspectPilotSignInTimes = role === 'admin';
+  const inspectedPilotUid = canInspectPilotSignInTimes
+    ? (isMobile ? selectedPilotUid : hoveredPilotUid)
+    : null;
+
+  const toggleSelectedPilot = useCallback((pilotUid: string) => {
+    setSelectedPilotUid((currentPilotUid) => currentPilotUid === pilotUid ? null : pilotUid);
+  }, []);
+
+  useEffect(() => {
+    const pilotUids = new Set(pilots.map((pilot) => pilot.uid));
+
+    if (hoveredPilotUid && !pilotUids.has(hoveredPilotUid)) {
+      setHoveredPilotUid(null);
+    }
+
+    if (selectedPilotUid && !pilotUids.has(selectedPilotUid)) {
+      setSelectedPilotUid(null);
+    }
+  }, [pilots, hoveredPilotUid, selectedPilotUid]);
 
   // Calculate max columns needed (for overbooking support)
   const maxColumnsNeeded = useMemo(() => {
@@ -479,6 +530,20 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
 
   // Disable drag-and-drop on mobile (use long press move mode instead)
   const isDragEnabled = !isMobile && role === 'admin';
+
+  const getFormattedSignInTimestamp = useCallback((pilotUid: string, timeSlot: string) => {
+    const signInTimestamp = getPilotSignInTimeForTimeSlot?.(pilotUid, timeSlot);
+    if (!signInTimestamp) {
+      return null;
+    }
+
+    const signInDate = new Date(signInTimestamp);
+    if (Number.isNaN(signInDate.getTime())) {
+      return null;
+    }
+
+    return `signed in at ${format(signInDate, 'MM/dd HH:mm')}`;
+  }, [getPilotSignInTimeForTimeSlot]);
 
   // Helper function to check if there's enough space for a booking at a given time
   const hasEnoughSpaceAtTime = useCallback((timeIndex: number, _startPilotIndex: number, requiredPax: number): boolean => {
@@ -1923,7 +1988,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     return (
       <div className="flex-1 overflow-auto p-4 bg-gray-50 dark:bg-zinc-950">
         <div className="inline-block">
-          <div className="grid gap-2" style={{ gridTemplateColumns: `80px repeat(5, 160px) 48px 98px 98px` }}>
+          <div className="grid gap-2" style={{ gridTemplateColumns: `${TIME_COLUMN_WIDTH}px repeat(5, 160px) 48px 98px 98px` }}>
             {/* Header Row Skeleton */}
             <div className="h-7" />
             <div className="h-7 bg-gray-200 dark:bg-zinc-900 rounded-lg animate-pulse" />
@@ -1982,7 +2047,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
         style={{ transform: `scale(${scale})` }}
       >
         <div className="flex gap-4">
-        <div className="grid gap-2" style={{ gridTemplateColumns: `80px repeat(${maxColumnsNeeded}, 160px) 48px 98px${showSecondDriverColumn ? ' 98px' : ''}` }}>
+        <div className="grid gap-2" style={{ gridTemplateColumns: `${TIME_COLUMN_WIDTH}px repeat(${maxColumnsNeeded}, 160px) 48px 98px${showSecondDriverColumn ? ' 98px' : ''}` }}>
           {/* Header Row - Shows pilots present today */}
           {role !== 'agency' ? (
             <div data-sticky-column="true" className={`h-7 ${scale === 1 ? 'sticky left-0' : ''} z-10 relative`}>
@@ -2010,8 +2075,13 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                   key={pilot.uid}
                   pilot={pilot}
                   index={index}
-                  isAdmin={role === 'admin'}
+                  dragEnabled={isDragEnabled}
                   isDragging={draggedPilotIndex === index}
+                  isActive={canInspectPilotSignInTimes && inspectedPilotUid === pilot.uid}
+                  isMobile={isMobile}
+                  onMouseEnter={canInspectPilotSignInTimes && !isMobile ? () => setHoveredPilotUid(pilot.uid) : undefined}
+                  onMouseLeave={canInspectPilotSignInTimes && !isMobile ? () => setHoveredPilotUid((currentPilotUid) => currentPilotUid === pilot.uid ? null : currentPilotUid) : undefined}
+                  onSelect={canInspectPilotSignInTimes && isMobile ? () => toggleSelectedPilot(pilot.uid) : undefined}
                 />
               );
             } else {
@@ -2213,6 +2283,9 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
             // Determine styling: additional slots are green, overridden times are orange
             const hasTimeOverride = !isAdditional && timeOverrides[timeIndex] !== undefined;
             const slotDisplayTime = displayTime;
+            const inspectedPilotSignInText = inspectedPilotUid
+              ? getFormattedSignInTimestamp(inspectedPilotUid, timeSlot)
+              : null;
 
             return [
               // Time Slot Label
@@ -2224,7 +2297,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                 <div className="absolute top-0 bottom-0 bg-gray-50 dark:bg-zinc-950" style={{ left: '-16px', right: '-8px' }} />
                 <div
                   data-time-index={timeIndex}
-                  className={`h-full w-full flex items-center justify-center rounded-lg font-medium text-sm relative ${
+                  className={`h-full w-full flex flex-col items-center justify-center rounded-lg font-medium text-sm relative px-1 text-center ${
                     isAdditional
                       ? 'bg-green-500 dark:bg-green-600 text-white'
                       : hasTimeOverride
@@ -2237,7 +2310,16 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                   onTouchMove={role === 'admin' ? handleTimeSlotTouchMove : undefined}
                   onClick={moveMode.isActive || requestMoveMode.isActive || deletedBookingMoveMode.isActive ? () => handleMoveModeDestination(timeIndex) : undefined}
                 >
-                  {slotDisplayTime}
+                  <span>{slotDisplayTime}</span>
+                  {inspectedPilotSignInText && (
+                    <span className={`mt-1 text-[10px] leading-tight font-normal ${
+                      isAdditional || hasTimeOverride
+                        ? 'text-white/90'
+                        : 'text-gray-600 dark:text-zinc-400'
+                    }`}>
+                      {inspectedPilotSignInText}
+                    </span>
+                  )}
                   {totalPaxAtThisTime > 0 && (
                     <span className={`absolute top-1 right-1 text-xs font-medium rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 ${
                       isAdditional
