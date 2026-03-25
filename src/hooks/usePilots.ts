@@ -318,7 +318,7 @@ export function usePilots(selectedDate: Date) {
       availabilityQuery,
       async (availabilitySnapshot) => {
         try {
-          // Get unique pilot IDs and their available time slots
+          // Track pilots with at least one active slot for the day
           const pilotIds = new Set<string>();
           const availabilityMap = new Map<string, Set<string>>();
           const statusMap: PilotAvailabilityStatusMap = new Map();
@@ -328,11 +328,10 @@ export function usePilots(selectedDate: Date) {
 
           availabilitySnapshot.docs.forEach((doc) => {
             const data = doc.data();
-            pilotIds.add(data.userId);
-
             const status = normalizeAvailabilityStatus(data.status);
 
             if (isAvailabilityActive(status)) {
+              pilotIds.add(data.userId);
               if (!availabilityMap.has(data.userId)) {
                 availabilityMap.set(data.userId, new Set());
               }
@@ -370,15 +369,15 @@ export function usePilots(selectedDate: Date) {
             }
           });
 
-          // If no pilots are available, return empty array
+          // If no pilots are actively available for the day, keep the top row empty
           if (pilotIds.size === 0) {
             setRawPilots([]);
             setPilotAvailability(new Map());
-            setPilotAvailabilityStatus(new Map());
-            setPilotSignInTimes(new Map());
-            setPilotSignInTimesBySlot(new Map());
-            setPilotSignOutTimesBySlot(new Map());
-            // Clear cache for this date since no pilot availability records are available
+            setPilotAvailabilityStatus(statusMap);
+            setPilotSignInTimes(signInTimesMap);
+            setPilotSignInTimesBySlot(signInTimesBySlotMap);
+            setPilotSignOutTimesBySlot(signOutTimesBySlotMap);
+            // Clear cached pilot columns for this date since no one is actively available
             try {
               localStorage.removeItem(cacheKey);
             } catch (error) {
