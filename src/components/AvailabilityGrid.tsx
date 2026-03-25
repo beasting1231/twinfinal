@@ -9,6 +9,7 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import { collection, query, where, getDocs, doc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase/config";
 import type { UserProfile } from "../types/index";
+import { isAvailabilityActive, normalizeAvailabilityStatus } from "../utils/availabilityState";
 
 interface AvailabilityGridProps {
   weekStartDate: Date;
@@ -174,6 +175,11 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
             const data = doc.data();
             const pilotId = data.userId;
             const timeSlot = data.timeSlot;
+            const status = normalizeAvailabilityStatus(data.status);
+
+            if (!isAvailabilityActive(status)) {
+              return;
+            }
 
             // Add pilot to the day's signed-in set
             if (!pilotsSignedInPerDay.has(dateStr)) {

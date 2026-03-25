@@ -37,6 +37,8 @@ import type { Booking, Pilot, BookingRequest, AvailabilityStatus } from "../type
 import { format } from "date-fns";
 import { doc, updateDoc, setDoc, deleteDoc, collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase/config";
+import { setAvailabilityStatus, unassignPilotFromBookings } from "../utils/availabilityState";
+import { formatSwissDateTime } from "../utils/timezone";
 import { DndContext, useSensor, useSensors, PointerSensor, useDraggable, useDroppable } from "@dnd-kit/core";
 import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
 
@@ -49,6 +51,7 @@ interface ScheduleGridProps {
   isPilotAvailableForTimeSlot: (pilotUid: string, timeSlot: string) => boolean;
   getPilotAvailabilityStatus?: (pilotUid: string, timeSlot: string) => AvailabilityStatus;
   getPilotSignInTimeForTimeSlot?: (pilotUid: string, timeSlot: string) => string | null;
+  getPilotSignOutTimeForTimeSlot?: (pilotUid: string, timeSlot: string) => string | null;
   saveCustomPilotOrder?: (newOrder: string[]) => Promise<void>;
   loading?: boolean;
   currentUserDisplayName?: string;
@@ -124,7 +127,7 @@ function DraggablePilotHeader({
   );
 }
 
-export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBookings = [], allBookingsForSearch = [], isPilotAvailableForTimeSlot, getPilotAvailabilityStatus, getPilotSignInTimeForTimeSlot, saveCustomPilotOrder, loading = false, currentUserDisplayName, onAddBooking, onUpdateBooking, onDeleteBooking, onNavigateToDate }: ScheduleGridProps) {
+export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBookings = [], allBookingsForSearch = [], isPilotAvailableForTimeSlot, getPilotAvailabilityStatus, getPilotSignInTimeForTimeSlot, getPilotSignOutTimeForTimeSlot, saveCustomPilotOrder, loading = false, currentUserDisplayName, onAddBooking, onUpdateBooking, onDeleteBooking, onNavigateToDate }: ScheduleGridProps) {
   // Filter out deleted bookings from the main grid
   const bookings = useMemo(() => {
     return allBookings.filter(booking => booking.bookingStatus !== "deleted");
@@ -531,19 +534,27 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
   // Disable drag-and-drop on mobile (use long press move mode instead)
   const isDragEnabled = !isMobile && role === 'admin';
 
-  const getFormattedSignInTimestamp = useCallback((pilotUid: string, timeSlot: string) => {
+  const getFormattedAvailabilityAuditText = useCallback((pilotUid: string, timeSlot: string) => {
+    const availabilityStatus = getPilotAvailabilityStatus?.(pilotUid, timeSlot) || "unavailable";
+
+    if (availabilityStatus === "unavailable") {
+      const signOutTimestamp = getPilotSignOutTimeForTimeSlot?.(pilotUid, timeSlot);
+      if (!signOutTimestamp) {
+        return null;
+      }
+
+      const formattedSignOut = formatSwissDateTime(signOutTimestamp);
+      return formattedSignOut ? `signed out at ${formattedSignOut}` : null;
+    }
+
     const signInTimestamp = getPilotSignInTimeForTimeSlot?.(pilotUid, timeSlot);
     if (!signInTimestamp) {
       return null;
     }
 
-    const signInDate = new Date(signInTimestamp);
-    if (Number.isNaN(signInDate.getTime())) {
-      return null;
-    }
-
-    return `signed in at ${format(signInDate, 'MM/dd HH:mm')}`;
-  }, [getPilotSignInTimeForTimeSlot]);
+    const formattedSignIn = formatSwissDateTime(signInTimestamp);
+    return formattedSignIn ? `signed in at ${formattedSignIn}` : null;
+  }, [getPilotAvailabilityStatus, getPilotSignInTimeForTimeSlot, getPilotSignOutTimeForTimeSlot]);
 
   // Helper function to check if there's enough space for a booking at a given time
   const hasEnoughSpaceAtTime = useCallback((timeIndex: number, _startPilotIndex: number, requiredPax: number): boolean => {
@@ -1318,12 +1329,12 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
 
     console.log("handleNoPilotContextMenu called in ScheduleGrid", { pilotIndex, timeIndex, position, currentUserDisplayName });
 
-    // Check if pilot is currently available (has record in availability collection)
+    // Check if pilot is currently available for this time slot
     const pilot = pilots[pilotIndex];
     const timeSlot = timeSlots[timeIndex];
 
-    // If pilot is available, there's a record in the availability collection
-    // If pilot is NOT available (signed out), there's NO record
+    // A pilot can now have an availability record with status "unavailable"
+    // so availability must be determined by status, not document existence.
     const isPilotAvailable = pilot && isPilotAvailableForTimeSlot(pilot.uid, timeSlot);
     const isSignedOut = !isPilotAvailable;
 
@@ -1343,7 +1354,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     });
   };
 
-  // Handle signing in (marking as available - ADD to availability collection)
+  // Handle signing in (marking as available)
   const handleSignIn = async () => {
     if (!availabilityContextMenu) return;
 
@@ -1354,15 +1365,12 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     if (!pilot || !currentUserDisplayName) return;
 
     try {
-      const { addDoc, collection } = await import("firebase/firestore");
-      const { db } = await import("../firebase/config");
-      const { format } = await import("date-fns");
-
-      // Add to availability collection
-      await addDoc(collection(db, "availability"), {
+      await setAvailabilityStatus({
+        db,
         userId: pilot.uid,
         date: format(selectedDate, "yyyy-MM-dd"),
-        timeSlot: timeSlot,
+        timeSlot,
+        status: "available",
       });
 
       console.log("Signed in successfully");
@@ -1372,7 +1380,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     }
   };
 
-  // Handle signing out (marking as unavailable - DELETE from availability collection)
+  // Handle signing out (marking as unavailable without deleting history)
   const handleSignOut = async () => {
     if (!availabilityContextMenu) return;
 
@@ -1383,51 +1391,19 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     if (!pilot || !currentUserDisplayName) return;
 
     try {
-      const { query, collection, where, getDocs, deleteDoc, doc, updateDoc } = await import("firebase/firestore");
-      const { db } = await import("../firebase/config");
-      const { format } = await import("date-fns");
-
       const dateStr = format(selectedDate, "yyyy-MM-dd");
 
-      // Delete from availability collection
-      const q = query(
-        collection(db, "availability"),
-        where("userId", "==", pilot.uid),
-        where("date", "==", dateStr),
-        where("timeSlot", "==", timeSlot)
-      );
-
-      const snapshot = await getDocs(q);
-      const deletePromises = snapshot.docs.map((doc) => deleteDoc(doc.ref));
-      await Promise.all(deletePromises);
-
-      // Find and unassign pilot from any bookings at this time
-      const bookingsAtThisTime = bookings.filter(
-        booking => booking.date === dateStr && booking.timeIndex === timeIndex
-      );
-
-      // Unassign pilot from each booking they're assigned to
-      const unassignPromises = bookingsAtThisTime.map(async (booking) => {
-        const pilotDisplayName = pilot.displayName;
-        const assignedIndex = booking.assignedPilots.findIndex(p => p === pilotDisplayName);
-
-        if (assignedIndex !== -1) {
-          // Create updated pilots array with pilot removed (replaced with empty string)
-          const updatedPilots = [...booking.assignedPilots];
-          updatedPilots[assignedIndex] = "";
-
-          // Update the booking
-          if (onUpdateBooking && booking.id) {
-            await updateDoc(doc(db, "bookings", booking.id), {
-              assignedPilots: updatedPilots
-            });
-          }
-        }
+      await setAvailabilityStatus({
+        db,
+        userId: pilot.uid,
+        date: dateStr,
+        timeSlot,
+        status: "unavailable",
       });
 
-      await Promise.all(unassignPromises);
+      await unassignPilotFromBookings(db, dateStr, timeSlot, pilot.uid);
 
-      console.log("Signed out successfully and unassigned from bookings");
+      console.log("Signed out successfully and preserved availability history");
       setAvailabilityContextMenu(null);
     } catch (error) {
       console.error("Error signing out:", error);
@@ -1445,38 +1421,13 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     if (!pilot || !currentUserDisplayName) return;
 
     try {
-      const { addDoc, collection, query, where, getDocs, updateDoc, doc } = await import("firebase/firestore");
-      const { db } = await import("../firebase/config");
-      const { format } = await import("date-fns");
-
-      const dateStr = format(selectedDate, "yyyy-MM-dd");
-
-      // Check if there's already an availability record
-      const q = query(
-        collection(db, "availability"),
-        where("userId", "==", pilot.uid),
-        where("date", "==", dateStr),
-        where("timeSlot", "==", timeSlot)
-      );
-
-      const snapshot = await getDocs(q);
-
-      if (snapshot.empty) {
-        // Create new record with onRequest status
-        await addDoc(collection(db, "availability"), {
-          userId: pilot.uid,
-          date: dateStr,
-          timeSlot: timeSlot,
-          status: "onRequest",
-          signedInAt: new Date().toISOString(),
-        });
-      } else {
-        // Update existing record to set status to onRequest
-        const updatePromises = snapshot.docs.map((docSnapshot) =>
-          updateDoc(doc(db, "availability", docSnapshot.id), { status: "onRequest" })
-        );
-        await Promise.all(updatePromises);
-      }
+      await setAvailabilityStatus({
+        db,
+        userId: pilot.uid,
+        date: format(selectedDate, "yyyy-MM-dd"),
+        timeSlot,
+        status: "onRequest",
+      });
 
       console.log("Set to on request successfully");
       setAvailabilityContextMenu(null);
@@ -1608,25 +1559,13 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
         return;
       }
 
-      // Check if this availability already exists
-      const { getDocs, addDoc } = await import('firebase/firestore');
-      const availabilityQuery = query(
-        collection(db, 'availability'),
-        where('userId', '==', pilotUid),
-        where('date', '==', dateString),
-        where('timeSlot', '==', timeSlot)
-      );
-
-      const existingDocs = await getDocs(availabilityQuery);
-
-      // Only add if it doesn't already exist
-      if (existingDocs.empty) {
-        await addDoc(collection(db, 'availability'), {
-          userId: pilotUid,
-          date: dateString,
-          timeSlot: timeSlot,
-        });
-      }
+      await setAvailabilityStatus({
+        db,
+        userId: pilotUid,
+        date: dateString,
+        timeSlot,
+        status: "available",
+      });
 
       // Close modal
       setAddPilotModal(null);
@@ -2283,8 +2222,11 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
             // Determine styling: additional slots are green, overridden times are orange
             const hasTimeOverride = !isAdditional && timeOverrides[timeIndex] !== undefined;
             const slotDisplayTime = displayTime;
-            const inspectedPilotSignInText = inspectedPilotUid
-              ? getFormattedSignInTimestamp(inspectedPilotUid, timeSlot)
+            const inspectedPilotAvailabilityStatus = inspectedPilotUid
+              ? getPilotAvailabilityStatus?.(inspectedPilotUid, timeSlot) || "unavailable"
+              : null;
+            const inspectedPilotAvailabilityText = inspectedPilotUid
+              ? getFormattedAvailabilityAuditText(inspectedPilotUid, timeSlot)
               : null;
 
             return [
@@ -2311,13 +2253,15 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                   onClick={moveMode.isActive || requestMoveMode.isActive || deletedBookingMoveMode.isActive ? () => handleMoveModeDestination(timeIndex) : undefined}
                 >
                   <span>{slotDisplayTime}</span>
-                  {inspectedPilotSignInText && (
+                  {inspectedPilotAvailabilityText && (
                     <span className={`mt-1 text-[10px] leading-tight font-normal ${
                       isAdditional || hasTimeOverride
                         ? 'text-white/90'
-                        : 'text-gray-600 dark:text-zinc-400'
+                        : inspectedPilotAvailabilityStatus === 'unavailable'
+                          ? 'text-red-600 dark:text-red-400'
+                          : 'text-green-600 dark:text-green-400'
                     }`}>
-                      {inspectedPilotSignInText}
+                      {inspectedPilotAvailabilityText}
                     </span>
                   )}
                   {totalPaxAtThisTime > 0 && (
@@ -3213,46 +3157,19 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
             setTimeSlotContextMenu(null);
           }}
           onSignIn={async () => {
-            // Sign in (set to available) for this time slot
             if (!currentUser?.uid) {
               setTimeSlotContextMenu(null);
               return;
             }
 
             try {
-              const { addDoc, collection, query, where, getDocs, updateDoc, doc } = await import("firebase/firestore");
-              const { db } = await import("../firebase/config");
-              const { format } = await import("date-fns");
-
-              const dateStr = format(selectedDate, "yyyy-MM-dd");
-              const timeSlot = timeSlotContextMenu.timeSlot;
-
-              // Check if there's already an availability record
-              const q = query(
-                collection(db, "availability"),
-                where("userId", "==", currentUser.uid),
-                where("date", "==", dateStr),
-                where("timeSlot", "==", timeSlot)
-              );
-
-              const snapshot = await getDocs(q);
-
-              if (snapshot.empty) {
-                // Create new record with available status
-                await addDoc(collection(db, "availability"), {
-                  userId: currentUser.uid,
-                  date: dateStr,
-                  timeSlot: timeSlot,
-                  status: "available",
-                  signedInAt: new Date().toISOString(),
-                });
-              } else {
-                // Update existing record to set status to available
-                const updatePromises = snapshot.docs.map((docSnapshot) =>
-                  updateDoc(doc(db, "availability", docSnapshot.id), { status: "available" })
-                );
-                await Promise.all(updatePromises);
-              }
+              await setAvailabilityStatus({
+                db,
+                userId: currentUser.uid,
+                date: format(selectedDate, "yyyy-MM-dd"),
+                timeSlot: timeSlotContextMenu.timeSlot,
+                status: "available",
+              });
 
               console.log("Signed in successfully from time slot menu");
             } catch (error) {
@@ -3262,31 +3179,24 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
             setTimeSlotContextMenu(null);
           }}
           onSignOut={async () => {
-            // Sign out (delete availability record) for this time slot
             if (!currentUser?.uid) {
               setTimeSlotContextMenu(null);
               return;
             }
 
             try {
-              const { collection, query, where, getDocs, deleteDoc } = await import("firebase/firestore");
-              const { db } = await import("../firebase/config");
-              const { format } = await import("date-fns");
-
               const dateStr = format(selectedDate, "yyyy-MM-dd");
               const timeSlot = timeSlotContextMenu.timeSlot;
 
-              // Delete availability record
-              const q = query(
-                collection(db, "availability"),
-                where("userId", "==", currentUser.uid),
-                where("date", "==", dateStr),
-                where("timeSlot", "==", timeSlot)
-              );
+              await setAvailabilityStatus({
+                db,
+                userId: currentUser.uid,
+                date: dateStr,
+                timeSlot,
+                status: "unavailable",
+              });
 
-              const snapshot = await getDocs(q);
-              const deletePromises = snapshot.docs.map((docSnapshot) => deleteDoc(docSnapshot.ref));
-              await Promise.all(deletePromises);
+              await unassignPilotFromBookings(db, dateStr, timeSlot, currentUser.uid);
 
               console.log("Signed out successfully from time slot menu");
             } catch (error) {
@@ -3296,46 +3206,19 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
             setTimeSlotContextMenu(null);
           }}
           onOnRequest={async () => {
-            // Set current user's availability to "on request" for this time slot
             if (!currentUser?.uid) {
               setTimeSlotContextMenu(null);
               return;
             }
 
             try {
-              const { addDoc, collection, query, where, getDocs, updateDoc, doc } = await import("firebase/firestore");
-              const { db } = await import("../firebase/config");
-              const { format } = await import("date-fns");
-
-              const dateStr = format(selectedDate, "yyyy-MM-dd");
-              const timeSlot = timeSlotContextMenu.timeSlot;
-
-              // Check if there's already an availability record
-              const q = query(
-                collection(db, "availability"),
-                where("userId", "==", currentUser.uid),
-                where("date", "==", dateStr),
-                where("timeSlot", "==", timeSlot)
-              );
-
-              const snapshot = await getDocs(q);
-
-              if (snapshot.empty) {
-                // Create new record with onRequest status
-                await addDoc(collection(db, "availability"), {
-                  userId: currentUser.uid,
-                  date: dateStr,
-                  timeSlot: timeSlot,
-                  status: "onRequest",
-                  signedInAt: new Date().toISOString(),
-                });
-              } else {
-                // Update existing record to set status to onRequest
-                const updatePromises = snapshot.docs.map((docSnapshot) =>
-                  updateDoc(doc(db, "availability", docSnapshot.id), { status: "onRequest" })
-                );
-                await Promise.all(updatePromises);
-              }
+              await setAvailabilityStatus({
+                db,
+                userId: currentUser.uid,
+                date: format(selectedDate, "yyyy-MM-dd"),
+                timeSlot: timeSlotContextMenu.timeSlot,
+                status: "onRequest",
+              });
 
               console.log("Set to on request successfully from time slot menu");
             } catch (error) {

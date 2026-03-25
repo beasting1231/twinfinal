@@ -3,6 +3,7 @@ import { collection, query, where, getDocs, onSnapshot, doc, getDoc, setDoc } fr
 import { db } from "../firebase/config";
 import { format, differenceInDays, parseISO, startOfDay } from "date-fns";
 import type { Pilot, AvailabilityStatus } from "../types/index";
+import { isAvailabilityActive, normalizeAvailabilityStatus } from "../utils/availabilityState";
 
 export interface PilotAvailability {
   pilot: Pilot;
@@ -12,6 +13,7 @@ export interface PilotAvailability {
 // Map from pilotUid to Map<timeSlot, status>
 export type PilotAvailabilityStatusMap = Map<string, Map<string, AvailabilityStatus>>;
 export type PilotSignInTimeBySlotMap = Map<string, Map<string, string>>;
+export type PilotSignOutTimeBySlotMap = Map<string, Map<string, string>>;
 
 const PILOTS_CACHE_PREFIX = 'twin_pilots_cache_';
 const CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
@@ -117,6 +119,25 @@ export function usePilots(selectedDate: Date) {
     }
     return new Map();
   });
+  const [pilotSignOutTimesBySlot, setPilotSignOutTimesBySlot] = useState<PilotSignOutTimeBySlotMap>(() => {
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const { signOutTimesBySlot, timestamp } = JSON.parse(cached);
+        const age = Date.now() - timestamp;
+        if (age < CACHE_EXPIRY_MS && signOutTimesBySlot) {
+          const signOutMap = new Map<string, Map<string, string>>();
+          Object.entries(signOutTimesBySlot).forEach(([pilotId, slots]) => {
+            signOutMap.set(pilotId, new Map(Object.entries(slots as Record<string, string>)));
+          });
+          return signOutMap;
+        }
+      }
+    } catch (error) {
+      console.error('Error loading per-slot sign-out times cache:', error);
+    }
+    return new Map();
+  });
   const [customOrder, setCustomOrder] = useState<string[] | null>(() => {
     // Try to load from cache on initialization
     try {
@@ -167,7 +188,7 @@ export function usePilots(selectedDate: Date) {
     try {
       const cached = localStorage.getItem(cacheKey);
       if (cached) {
-        const { data, timestamp, availability, availabilityStatus, signInTimes, signInTimesBySlot, customPilotOrder } = JSON.parse(cached);
+        const { data, timestamp, availability, availabilityStatus, signInTimes, signInTimesBySlot, signOutTimesBySlot, customPilotOrder } = JSON.parse(cached);
         const age = Date.now() - timestamp;
         if (age < CACHE_EXPIRY_MS) {
           console.log(`📦 Immediately loaded cached data for ${dateStr}`);
@@ -208,6 +229,16 @@ export function usePilots(selectedDate: Date) {
             setPilotSignInTimesBySlot(new Map());
           }
 
+          if (signOutTimesBySlot) {
+            const signOutMap = new Map<string, Map<string, string>>();
+            Object.entries(signOutTimesBySlot).forEach(([pilotId, slots]) => {
+              signOutMap.set(pilotId, new Map(Object.entries(slots as Record<string, string>)));
+            });
+            setPilotSignOutTimesBySlot(signOutMap);
+          } else {
+            setPilotSignOutTimesBySlot(new Map());
+          }
+
           if (customPilotOrder) {
             setCustomOrder(customPilotOrder);
           }
@@ -228,6 +259,7 @@ export function usePilots(selectedDate: Date) {
     setPilotAvailabilityStatus(new Map());
     setPilotSignInTimes(new Map());
     setPilotSignInTimesBySlot(new Map());
+    setPilotSignOutTimesBySlot(new Map());
     setCustomOrder(null);
   }, [dateStr, cacheKey]);
 
@@ -292,24 +324,26 @@ export function usePilots(selectedDate: Date) {
           const statusMap: PilotAvailabilityStatusMap = new Map();
           const signInTimesMap = new Map<string, string>(); // Track earliest sign-in time per pilot
           const signInTimesBySlotMap: PilotSignInTimeBySlotMap = new Map();
+          const signOutTimesBySlotMap: PilotSignOutTimeBySlotMap = new Map();
 
           availabilitySnapshot.docs.forEach((doc) => {
             const data = doc.data();
             pilotIds.add(data.userId);
 
-            if (!availabilityMap.has(data.userId)) {
-              availabilityMap.set(data.userId, new Set());
-            }
-            availabilityMap.get(data.userId)!.add(data.timeSlot);
+            const status = normalizeAvailabilityStatus(data.status);
 
-            // Track status for each timeslot (default to "available" for backwards compatibility)
+            if (isAvailabilityActive(status)) {
+              if (!availabilityMap.has(data.userId)) {
+                availabilityMap.set(data.userId, new Set());
+              }
+              availabilityMap.get(data.userId)!.add(data.timeSlot);
+            }
+
             if (!statusMap.has(data.userId)) {
               statusMap.set(data.userId, new Map());
             }
-            const status: AvailabilityStatus = data.status === "onRequest" ? "onRequest" : "available";
             statusMap.get(data.userId)!.set(data.timeSlot, status);
 
-            // Track the earliest sign-in time for this pilot
             if (data.signedInAt) {
               const existingTime = signInTimesMap.get(data.userId);
               if (!existingTime || data.signedInAt < existingTime) {
@@ -320,8 +354,18 @@ export function usePilots(selectedDate: Date) {
                 signInTimesBySlotMap.set(data.userId, new Map());
               }
               const existingSlotTime = signInTimesBySlotMap.get(data.userId)!.get(data.timeSlot);
-              if (!existingSlotTime || data.signedInAt < existingSlotTime) {
+              if (!existingSlotTime || data.signedInAt > existingSlotTime) {
                 signInTimesBySlotMap.get(data.userId)!.set(data.timeSlot, data.signedInAt);
+              }
+            }
+
+            if (data.signedOutAt) {
+              if (!signOutTimesBySlotMap.has(data.userId)) {
+                signOutTimesBySlotMap.set(data.userId, new Map());
+              }
+              const existingSignOutTime = signOutTimesBySlotMap.get(data.userId)!.get(data.timeSlot);
+              if (!existingSignOutTime || data.signedOutAt > existingSignOutTime) {
+                signOutTimesBySlotMap.get(data.userId)!.set(data.timeSlot, data.signedOutAt);
               }
             }
           });
@@ -333,7 +377,8 @@ export function usePilots(selectedDate: Date) {
             setPilotAvailabilityStatus(new Map());
             setPilotSignInTimes(new Map());
             setPilotSignInTimesBySlot(new Map());
-            // Clear cache for this date since no pilots are available
+            setPilotSignOutTimesBySlot(new Map());
+            // Clear cache for this date since no pilot availability records are available
             try {
               localStorage.removeItem(cacheKey);
             } catch (error) {
@@ -430,6 +475,7 @@ export function usePilots(selectedDate: Date) {
           setPilotAvailabilityStatus(statusMap);
           setPilotSignInTimes(signInTimesMap);
           setPilotSignInTimesBySlot(signInTimesBySlotMap);
+          setPilotSignOutTimesBySlot(signOutTimesBySlotMap);
 
           // Update cache with complete data including availability
           try {
@@ -453,6 +499,10 @@ export function usePilots(selectedDate: Date) {
             signInTimesBySlotMap.forEach((slotMap, pilotId) => {
               signInTimesBySlotObj[pilotId] = Object.fromEntries(slotMap);
             });
+            const signOutTimesBySlotObj: Record<string, Record<string, string>> = {};
+            signOutTimesBySlotMap.forEach((slotMap, pilotId) => {
+              signOutTimesBySlotObj[pilotId] = Object.fromEntries(slotMap);
+            });
 
             localStorage.setItem(cacheKey, JSON.stringify({
               data: pilotsData,
@@ -460,6 +510,7 @@ export function usePilots(selectedDate: Date) {
               availabilityStatus: statusObj,
               signInTimes: signInTimesObj,
               signInTimesBySlot: signInTimesBySlotObj,
+              signOutTimesBySlot: signOutTimesBySlotObj,
               customPilotOrder: customOrder,
               timestamp: Date.now(),
             }));
@@ -636,6 +687,12 @@ export function usePilots(selectedDate: Date) {
     return signInTimesForPilot.get(timeSlot) || null;
   };
 
+  const getPilotSignOutTimeForTimeSlot = (pilotUid: string, timeSlot: string): string | null => {
+    const signOutTimesForPilot = pilotSignOutTimesBySlot.get(pilotUid);
+    if (!signOutTimesForPilot) return null;
+    return signOutTimesForPilot.get(timeSlot) || null;
+  };
+
   const saveCustomPilotOrder = async (newOrder: string[]) => {
     const dateStr = format(selectedDate, "yyyy-MM-dd");
     try {
@@ -653,5 +710,5 @@ export function usePilots(selectedDate: Date) {
     }
   };
 
-  return { pilots, loading, error, isPilotAvailableForTimeSlot, getPilotAvailabilityStatus, getPilotSignInTimeForTimeSlot, saveCustomPilotOrder };
+  return { pilots, loading, error, isPilotAvailableForTimeSlot, getPilotAvailabilityStatus, getPilotSignInTimeForTimeSlot, getPilotSignOutTimeForTimeSlot, saveCustomPilotOrder };
 }

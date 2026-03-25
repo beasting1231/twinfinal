@@ -20,6 +20,7 @@ import { BookingSourceAutocomplete } from "./BookingSourceAutocomplete";
 import { MeetingPointAutocomplete, getMeetingPointAbbreviation } from "./MeetingPointAutocomplete";
 import { EmailPreviewModal } from "./EmailPreviewModal";
 import { getTimeSlotsByDate } from "../utils/timeSlots";
+import { isAvailabilityActive, normalizeAvailabilityStatus } from "../utils/availabilityState";
 
 interface BookingDetailsModalProps {
   open: boolean;
@@ -675,6 +676,12 @@ export function BookingDetailsModal({
 
           availabilitySnapshot.docs.forEach((doc) => {
             const data = doc.data();
+            const status = normalizeAvailabilityStatus(data.status);
+
+            if (!isAvailabilityActive(status)) {
+              return;
+            }
+
             pilotIds.add(data.userId);
 
             if (!availabilityMap.has(data.userId)) {

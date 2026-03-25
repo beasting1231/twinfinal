@@ -12,6 +12,7 @@ import { Priority } from "./components/Priority";
 import { Forms } from "./components/Forms";
 import { GiftVouchers } from "./components/GiftVouchers";
 import { GiftVoucherForm } from "./components/GiftVoucherForm";
+import { LiabilityForm } from "./components/LiabilityForm";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { retryImport } from "./utils/retryImport";
 
@@ -74,7 +75,7 @@ function DailyPlanPage() {
     return bookings.filter(booking => booking.date === selectedDateStr);
   }, [bookings, selectedDate]);
 
-  const { pilots, loading: pilotsLoading, isPilotAvailableForTimeSlot, getPilotAvailabilityStatus, getPilotSignInTimeForTimeSlot, saveCustomPilotOrder } = usePilots(selectedDate);
+  const { pilots, loading: pilotsLoading, isPilotAvailableForTimeSlot, getPilotAvailabilityStatus, getPilotSignInTimeForTimeSlot, getPilotSignOutTimeForTimeSlot, saveCustomPilotOrder } = usePilots(selectedDate);
 
   // Progressive loading: Only wait for pilots data, not bookings
   // The grid will show immediately with pilots, and bookings will populate as they load
@@ -98,6 +99,7 @@ function DailyPlanPage() {
         isPilotAvailableForTimeSlot={isPilotAvailableForTimeSlot}
         getPilotAvailabilityStatus={getPilotAvailabilityStatus}
         getPilotSignInTimeForTimeSlot={getPilotSignInTimeForTimeSlot}
+        getPilotSignOutTimeForTimeSlot={getPilotSignOutTimeForTimeSlot}
         saveCustomPilotOrder={saveCustomPilotOrder}
         loading={isLoading}
         currentUserDisplayName={currentUserDisplayName}
@@ -232,6 +234,14 @@ function AppContent() {
         <ProtectedRoute>
           <PageWrapper>
             <Forms />
+          </PageWrapper>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/liability-form" element={
+        <ProtectedRoute>
+          <PageWrapper>
+            <LiabilityForm />
           </PageWrapper>
         </ProtectedRoute>
       } />

@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { collection, addDoc, onSnapshot, query, where, doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase/config";
+import { isAvailabilityActive, normalizeAvailabilityStatus } from "../utils/availabilityState";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
@@ -231,13 +232,15 @@ export function BookingRequestForm() {
       (snapshot) => {
         const availabilityMap = new Map<string, Set<string>>();
 
-        // Availability records only exist for time slots where pilots ARE available
-        // If a record exists, the pilot is available. If no record, they're not available.
-        // This matches how usePilots works.
         snapshot.docs.forEach((doc) => {
           const data = doc.data();
           const userId = data.userId;
           const timeSlot = data.timeSlot;
+          const status = normalizeAvailabilityStatus(data.status);
+
+          if (!isAvailabilityActive(status)) {
+            return;
+          }
 
           if (!availabilityMap.has(userId)) {
             availabilityMap.set(userId, new Set());
