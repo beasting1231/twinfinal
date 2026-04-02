@@ -182,6 +182,18 @@ export function Header({
                   User Management
                 </button>
               )}
+              {(role === "pilot" || role === "admin") && (
+                <button
+                  onClick={() => handleNavigate("/liability-form")}
+                  className={`w-full text-left px-4 py-3 rounded-lg transition-colors text-white font-medium ${
+                    isActive("/liability-form")
+                      ? "bg-blue-700 dark:bg-blue-600"
+                      : "bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+                  }`}
+                >
+                  Liability Form
+                </button>
+              )}
               <div className="my-2 border-t border-gray-200 dark:border-zinc-700" />
               {role !== 'agency' && (
                 <a
