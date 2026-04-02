@@ -27,6 +27,7 @@ import { SearchBookingModal } from "./SearchBookingModal";
 import { AvailableSpotContextMenu } from "./AvailableSpotContextMenu";
 import { BlockSpotsModal } from "./BlockSpotsModal";
 import { BlockedSpotContextMenu } from "./BlockedSpotContextMenu";
+import { WaitlistBookingTimeModal } from "./WaitlistBookingTimeModal";
 import { useBookingSourceColors } from "../hooks/useBookingSourceColors";
 import { useDriverAssignments } from "../hooks/useDriverAssignments";
 import { useBookingRequests } from "../hooks/useBookingRequests";
@@ -41,6 +42,7 @@ import { setAvailabilityStatus, unassignPilotFromBookings } from "../utils/avail
 import { formatSwissDateTime } from "../utils/timezone";
 import { DndContext, useSensor, useSensors, PointerSensor, useDraggable, useDroppable } from "@dnd-kit/core";
 import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
+import { Plus } from "lucide-react";
 
 interface ScheduleGridProps {
   selectedDate: Date;
@@ -213,7 +215,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
   } = useDriverAssignments(dateString);
 
   // Fetch booking requests
-  const { bookingRequests, updateBookingRequest, deleteBookingRequest } = useBookingRequests();
+  const { bookingRequests, updateBookingRequest, deleteBookingRequest, addBookingRequest } = useBookingRequests();
 
   // Filter booking requests by status
   const pendingRequests = useMemo(() => {
@@ -427,6 +429,12 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     isOpen: boolean;
     booking: Booking | null;
   }>({ isOpen: false, booking: null });
+  const [isWaitlistModalOpen, setIsWaitlistModalOpen] = useState(false);
+  const [waitlistModalSeed, setWaitlistModalSeed] = useState<{ pilotIndex: number; timeIndex: number; timeSlot: string } | null>(null);
+  const [waitlistBookingSelection, setWaitlistBookingSelection] = useState<{
+    request: BookingRequest;
+    options: Array<{ timeIndex: number; displayTime: string; availableSpots: number; isPreferred: boolean }>;
+  } | null>(null);
 
   // Time overrides state - maps timeIndex to new time string
   const [timeOverrides, setTimeOverrides] = useState<Record<number, string>>({});
@@ -953,6 +961,98 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     setBookingRequestToBook(null);
     setDeletedBookingToRestore(null);
   }, [onAddBooking, onUpdateBooking, bookingRequestToBook, deletedBookingToRestore]);
+
+  const handleWaitlistSubmit = useCallback((request: Omit<BookingRequest, "id">) => {
+    addBookingRequest(request).catch((error) => {
+      console.error("Error creating waitlist request:", error);
+      alert("Failed to create waitlist request. Please try again.");
+    });
+  }, [addBookingRequest]);
+
+  const openWaitlistModal = useCallback(() => {
+    const firstTimeSlot = combinedTimeSlots[0];
+    const defaultTimeIndex = firstTimeSlot?.originalIndex ?? 0;
+    const defaultTimeSlot = firstTimeSlot?.time ?? timeSlots[0] ?? "00:00";
+
+    setWaitlistModalSeed({
+      pilotIndex: 0,
+      timeIndex: defaultTimeIndex,
+      timeSlot: defaultTimeSlot,
+    });
+    setIsWaitlistModalOpen(true);
+  }, [combinedTimeSlots, timeSlots]);
+
+  const getWaitlistTimeOptions = useCallback((request: BookingRequest) => {
+    const indexToDisplayTime = new Map<number, string>(
+      combinedTimeSlots.map((slot) => [slot.originalIndex, slot.displayTime])
+    );
+
+    const indexedOptions = (request.availableTimeIndices || [])
+      .map((timeIndex, index) => ({
+        timeIndex,
+        displayTime: indexToDisplayTime.get(timeIndex) || request.availableTimes?.[index] || "",
+      }))
+      .filter((option) => option.displayTime);
+
+    if (indexedOptions.length > 0) {
+      return indexedOptions;
+    }
+
+    if (typeof request.time === "string" && request.time.trim()) {
+      const parsedTimes = request.time
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean);
+
+      return parsedTimes
+        .map((displayTime) => {
+          const matchedSlot = combinedTimeSlots.find((slot) => slot.displayTime === displayTime || slot.time === displayTime);
+          return matchedSlot ? { timeIndex: matchedSlot.originalIndex, displayTime } : null;
+        })
+        .filter((option): option is { timeIndex: number; displayTime: string } => option !== null);
+    }
+
+    return [];
+  }, [combinedTimeSlots]);
+
+  const getAvailableSpotsForTimeIndex = useCallback((requestDate: string, timeIndex: number, availabilityLookupTime: string) => {
+    const availablePilotsCount = pilots.filter((pilot) => isPilotAvailableForTimeSlot(pilot.uid, availabilityLookupTime)).length;
+    const bookingsAtTime = bookings.filter((booking) => booking.date === requestDate && booking.timeIndex === timeIndex);
+    const spotsBooked = bookingsAtTime.reduce((total, booking) => total + (booking.numberOfPeople || booking.span || 1), 0);
+    return Math.max(0, availablePilotsCount - spotsBooked);
+  }, [pilots, bookings, isPilotAvailableForTimeSlot]);
+
+  const createBookingFromRequest = useCallback(async (request: BookingRequest, selectedTimeIndex: number) => {
+    if (!request.id || !onAddBooking) return;
+
+    await onAddBooking({
+      date: request.date,
+      pilotIndex: 0,
+      timeIndex: selectedTimeIndex,
+      customerName: request.customerName,
+      numberOfPeople: request.numberOfPeople,
+      pickupLocation: request.meetingPoint || "",
+      bookingSource: request.bookingSource || "Online",
+      phoneNumber: request.phone || "",
+      email: request.email,
+      notes: request.notes || "",
+      flightType: request.flightType,
+      assignedPilots: [],
+      bookingStatus: "unconfirmed",
+      span: request.numberOfPeople,
+    });
+
+    await updateDoc(doc(db, "bookingRequests", request.id), {
+      status: "approved",
+    });
+
+    const currentDateString = format(selectedDate, "yyyy-MM-dd");
+    if (request.date !== currentDateString && onNavigateToDate) {
+      const [year, month, day] = request.date.split('-').map(Number);
+      const targetDate = new Date(year, month - 1, day);
+      onNavigateToDate(targetDate);
+    }
+  }, [onAddBooking, selectedDate, onNavigateToDate]);
 
   const handleDriverVehicleCellClick = useCallback((booking: Booking | null, driverColumn: 1 | 2 = 1, timeIndex: number) => {
     // Only driver and admin can manage drivers
@@ -1543,6 +1643,56 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
       longPressTimerRef.current = null;
     }
   };
+
+  const copyTextToClipboard = useCallback(async (text: string) => {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    textArea.style.position = "fixed";
+    textArea.style.opacity = "0";
+    textArea.style.pointerEvents = "none";
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    document.execCommand("copy");
+    document.body.removeChild(textArea);
+  }, []);
+
+  const handleCopyAvailability = useCallback(async () => {
+    try {
+      const selectedDateString = format(selectedDate, "yyyy-MM-dd");
+
+      const availabilityLines = combinedTimeSlots
+        .map(({ time, displayTime, originalIndex: timeIndex }) => {
+          const availablePilotsCount = pilots.filter((pilot) => isPilotAvailableForTimeSlot(pilot.uid, time)).length;
+          const spotsBooked = bookings
+            .filter((booking) => booking.timeIndex === timeIndex && booking.date === selectedDateString)
+            .reduce((total, booking) => total + (booking.numberOfPeople || booking.span || 1), 0);
+
+          const availableSpots = Math.max(0, availablePilotsCount - spotsBooked);
+          if (availableSpots <= 0) {
+            return null;
+          }
+
+          return `${displayTime} - ${availableSpots} spots available`;
+        })
+        .filter((line): line is string => line !== null);
+
+      if (availabilityLines.length === 0) {
+        alert("No spots available for this day.");
+        return;
+      }
+
+      await copyTextToClipboard(availabilityLines.join("\n"));
+    } catch (error) {
+      console.error("Error copying availability:", error);
+      alert("Failed to copy availability. Please try again.");
+    }
+  }, [selectedDate, combinedTimeSlots, pilots, isPilotAvailableForTimeSlot, bookings, copyTextToClipboard]);
 
   // Handle adding a pilot to a time slot
   const handleAddPilot = async (pilotUid: string) => {
@@ -2637,6 +2787,17 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
             </TabsContent>
 
             <TabsContent value="waitlist" className="p-4 mt-0">
+              <div className="flex justify-end mb-3">
+                <button
+                  type="button"
+                  onClick={openWaitlistModal}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 dark:border-zinc-700 px-2.5 py-1.5 text-sm font-medium text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
+                  title="Add waitlist item"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add
+                </button>
+              </div>
               {waitlistRequests.length === 0 ? (
                 <div className="flex items-center justify-center h-32">
                   <p className="text-gray-500 dark:text-zinc-500">No items in waiting list</p>
@@ -2771,6 +2932,26 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
           } : undefined}
         />
       )}
+
+      <NewBookingModal
+        open={isWaitlistModalOpen}
+        onOpenChange={(open) => {
+          setIsWaitlistModalOpen(open);
+          if (!open) {
+            setWaitlistModalSeed(null);
+          }
+        }}
+        selectedDate={selectedDate}
+        pilotIndex={waitlistModalSeed?.pilotIndex ?? 0}
+        timeIndex={waitlistModalSeed?.timeIndex ?? (combinedTimeSlots[0]?.originalIndex ?? 0)}
+        timeSlot={waitlistModalSeed?.timeSlot ?? (combinedTimeSlots[0]?.time ?? timeSlots[0] ?? "00:00")}
+        pilots={pilots}
+        bookings={bookings}
+        isPilotAvailableForTimeSlot={isPilotAvailableForTimeSlot}
+        onSubmit={handleBookingSubmit}
+        mode="waitlist"
+        onSubmitWaitlist={handleWaitlistSubmit}
+      />
 
       <BookingDetailsModal
         open={isDetailsModalOpen}
@@ -3025,6 +3206,27 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
         date={selectedDriverDate}
       />
 
+      <WaitlistBookingTimeModal
+        open={Boolean(waitlistBookingSelection)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setWaitlistBookingSelection(null);
+          }
+        }}
+        request={waitlistBookingSelection?.request || null}
+        options={waitlistBookingSelection?.options || []}
+        onConfirm={async (timeIndex) => {
+          if (!waitlistBookingSelection) return;
+          try {
+            await createBookingFromRequest(waitlistBookingSelection.request, timeIndex);
+            setWaitlistBookingSelection(null);
+          } catch (error) {
+            console.error("Error creating booking from waitlist selection:", error);
+            alert("Failed to create booking. Please try again.");
+          }
+        }}
+      />
+
       {/* Booking Request Context Menu */}
       {bookingRequestContextMenu && (
         <ScheduleBookingRequestContextMenu
@@ -3035,43 +3237,37 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
             if (!request.id || !onAddBooking) return;
 
             try {
-              // Find the time index
-              const timeSlotIndex = timeSlots.findIndex(slot => slot === request.time);
+              if (request.status === "waitlist") {
+                if (combinedTimeSlots.length === 0) {
+                  alert("No time slots are available in the schedule.");
+                  return;
+                }
 
-              if (timeSlotIndex === -1) {
-                alert("The requested time slot is not available in the schedule.");
+                const preferredOptions = getWaitlistTimeOptions(request);
+                const preferredIndexSet = new Set(preferredOptions.map((option) => option.timeIndex));
+
+                const optionList = combinedTimeSlots.map((slot) => {
+                  const availabilityLookupTime = slot.time;
+                  return {
+                    timeIndex: slot.originalIndex,
+                    displayTime: slot.displayTime,
+                    availableSpots: getAvailableSpotsForTimeIndex(request.date, slot.originalIndex, availabilityLookupTime),
+                    isPreferred: preferredIndexSet.has(slot.originalIndex),
+                  };
+                });
+
+                setWaitlistBookingSelection({
+                  request,
+                  options: optionList,
+                });
                 return;
-              }
-
-              // Create the booking
-              await onAddBooking({
-                date: request.date,
-                pilotIndex: 0, // Will be assigned later
-                timeIndex: timeSlotIndex,
-                customerName: request.customerName,
-                numberOfPeople: request.numberOfPeople,
-                pickupLocation: request.meetingPoint || "",
-                bookingSource: request.bookingSource || "Online",
-                phoneNumber: request.phone || "",
-                email: request.email,
-                notes: request.notes || "",
-                flightType: request.flightType,
-                assignedPilots: [],
-                bookingStatus: "unconfirmed",
-                span: request.numberOfPeople,
-              });
-
-              // Mark request as approved
-              await updateDoc(doc(db, "bookingRequests", request.id), {
-                status: "approved",
-              });
-
-              // Navigate to the booking's date if it's different from the current date
-              const currentDateString = format(selectedDate, "yyyy-MM-dd");
-              if (request.date !== currentDateString && onNavigateToDate) {
-                const [year, month, day] = request.date.split('-').map(Number);
-                const targetDate = new Date(year, month - 1, day);
-                onNavigateToDate(targetDate);
+              } else {
+                const matchedSlot = combinedTimeSlots.find((slot) => slot.displayTime === request.time || slot.time === request.time);
+                if (!matchedSlot) {
+                  alert("The requested time slot is not available in the schedule.");
+                  return;
+                }
+                await createBookingFromRequest(request, matchedSlot.originalIndex);
               }
             } catch (error) {
               console.error("Error creating booking from request:", error);
@@ -3151,6 +3347,9 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
           onAddTime={() => {
             setAddTimeModal({ isOpen: true });
             setTimeSlotContextMenu(null);
+          }}
+          onCopyAvailability={() => {
+            void handleCopyAvailability();
           }}
           onRemoveTime={() => {
             handleRemoveTimeSlot(timeSlotContextMenu.timeSlot);

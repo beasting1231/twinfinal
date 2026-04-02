@@ -602,6 +602,18 @@ exports.sendBookingConfirmationEmail = onDocumentCreated(
     async (event) => {
       const bookingData = event.data.data();
 
+      // Only send notifications for new inbound booking requests.
+      // Internal waitlist entries should not trigger email/Telegram notifications.
+      if (bookingData.status !== "pending") {
+        console.log("Skipping booking request notifications for non-pending status:", bookingData.status);
+        return {skipped: true, reason: "non-pending-status"};
+      }
+
+      if (!bookingData.email || typeof bookingData.email !== "string") {
+        console.log("Skipping booking request notifications due to missing customer email");
+        return {skipped: true, reason: "missing-email"};
+      }
+
       // Fetch notification settings from Firestore
       let notificationConfig = {
         emailNotifications: {

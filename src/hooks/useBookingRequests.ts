@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { collection, onSnapshot, query, where, doc, updateDoc, deleteDoc } from "firebase/firestore";
+import { collection, onSnapshot, query, where, doc, updateDoc, deleteDoc, addDoc } from "firebase/firestore";
 import { db } from "../firebase/config";
 import type { BookingRequest } from "../types/index";
 
@@ -51,6 +51,15 @@ export function useBookingRequests() {
     }
   };
 
+  const addBookingRequest = async (request: Omit<BookingRequest, "id">) => {
+    try {
+      await addDoc(collection(db, "bookingRequests"), request);
+    } catch (error) {
+      console.error("Error adding booking request:", error);
+      throw error;
+    }
+  };
+
   const deleteBookingRequest = async (id: string) => {
     try {
       const requestRef = doc(db, "bookingRequests", id);
@@ -61,5 +70,5 @@ export function useBookingRequests() {
     }
   };
 
-  return { bookingRequests, loading, updateBookingRequest, deleteBookingRequest };
+  return { bookingRequests, loading, updateBookingRequest, deleteBookingRequest, addBookingRequest };
 }

@@ -122,6 +122,8 @@ export interface BookingRequest {
   date: string; // ISO date string (YYYY-MM-DD)
   time: string; // Time string (HH:mm)
   timeIndex: number; // Index of the time slot
+  availableTimes?: string[]; // All available times selected for waitlist entries
+  availableTimeIndices?: number[]; // Selected time indices for waitlist entries
   numberOfPeople: number;
   meetingPoint?: string; // HW, OST, mhof, or other
   flightType?: "sensational" | "classic" | "early bird";

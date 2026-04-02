@@ -42,6 +42,26 @@ interface NewBookingModalProps {
     bookingStatus: "confirmed" | "pending" | "cancelled";
     span: number;
   }) => void;
+  mode?: "booking" | "waitlist";
+  onSubmitWaitlist?: (request: {
+    customerName: string;
+    email: string;
+    phone?: string;
+    date: string;
+    time: string;
+    timeIndex: number;
+    availableTimes: string[];
+    availableTimeIndices: number[];
+    numberOfPeople: number;
+    meetingPoint?: string;
+    flightType?: "sensational" | "classic" | "early bird";
+    notes?: string;
+    bookingSource?: string;
+    commission?: number;
+    commissionStatus?: "paid" | "unpaid";
+    status: "waitlist";
+    createdAt: Date;
+  }) => void;
   initialData?: {
     customerName?: string;
     numberOfPeople?: number;
@@ -66,6 +86,8 @@ export function NewBookingModal({
   bookings,
   isPilotAvailableForTimeSlot,
   onSubmit,
+  mode = "booking",
+  onSubmitWaitlist,
   initialData,
 }: NewBookingModalProps) {
   // Modal component for creating new bookings
@@ -87,6 +109,7 @@ export function NewBookingModal({
   // Modal-specific date and time selection
   const [selectedModalDate, setSelectedModalDate] = useState<string>("");
   const [selectedModalTimeIndex, setSelectedModalTimeIndex] = useState<number>(timeIndex);
+  const [selectedWaitlistTimeIndices, setSelectedWaitlistTimeIndices] = useState<number[]>([]);
   const [timeOverrides, setTimeOverrides] = useState<Record<number, string>>({});
   const [additionalSlots, setAdditionalSlots] = useState<string[]>([]);
 
@@ -95,6 +118,7 @@ export function NewBookingModal({
     if (open) {
       setSelectedModalDate(format(selectedDate, "yyyy-MM-dd"));
       setSelectedModalTimeIndex(timeIndex);
+      setSelectedWaitlistTimeIndices([timeIndex]);
       setAvailabilityError(false);
     }
   }, [open, selectedDate, timeIndex]);
@@ -168,6 +192,7 @@ export function NewBookingModal({
 
   // Keep selected time valid when date/slot structure changes
   useEffect(() => {
+    if (mode !== "booking") return;
     if (displaySlotOptions.length === 0) return;
     const selectedExists = displaySlotOptions.some(
       (slot) => slot.actualTimeIndex === selectedModalTimeIndex
@@ -176,6 +201,20 @@ export function NewBookingModal({
       setSelectedModalTimeIndex(displaySlotOptions[0].actualTimeIndex);
     }
   }, [displaySlotOptions, selectedModalTimeIndex]);
+
+  useEffect(() => {
+    if (mode !== "waitlist") return;
+    if (displaySlotOptions.length === 0) return;
+
+    setSelectedWaitlistTimeIndices((previous) => {
+      const validTimeIndices = new Set(displaySlotOptions.map((slot) => slot.actualTimeIndex));
+      const filtered = previous.filter((index) => validTimeIndices.has(index));
+      if (filtered.length > 0) {
+        return filtered;
+      }
+      return [displaySlotOptions[0].actualTimeIndex];
+    });
+  }, [mode, displaySlotOptions]);
 
   const selectedSlotOption = useMemo(() => {
     return displaySlotOptions.find((slot) => slot.actualTimeIndex === selectedModalTimeIndex);
@@ -378,11 +417,25 @@ export function NewBookingModal({
     }
   }, [open]);
 
+  const resetForm = () => {
+    setCustomerName("");
+    setNumberOfPeople("");
+    setPickupLocation("");
+    setBookingSource(defaultBookingSource);
+    setPhoneNumber("");
+    setEmail("");
+    setNotes("");
+    setCommission("");
+    setFemalePilotsRequired(0);
+    setFlightType("sensational");
+    setShowAdditionalOptions(false);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
     // Validation
-    if (!numberOfPeople || !bookingSource.trim()) {
+    if (!numberOfPeople || (mode === "booking" && !bookingSource.trim())) {
       alert("Please fill in all required fields");
       return;
     }
@@ -390,6 +443,60 @@ export function NewBookingModal({
     const numPeople = parseInt(numberOfPeople);
     if (isNaN(numPeople) || numPeople < 1) {
       alert("Number of people must be a valid positive number");
+      return;
+    }
+
+    if (mode === "waitlist") {
+      if (!onSubmitWaitlist) {
+        alert("Waitlist submission is not configured");
+        return;
+      }
+
+      const selectedSlots = displaySlotOptions
+        .filter((slot) => selectedWaitlistTimeIndices.includes(slot.actualTimeIndex))
+        .sort((a, b) => timeToMinutes(a.displayTime) - timeToMinutes(b.displayTime));
+
+      if (selectedSlots.length === 0) {
+        alert("Please select at least one available time");
+        return;
+      }
+
+      const waitlistData: {
+        customerName: string;
+        email: string;
+        phone?: string;
+        date: string;
+        time: string;
+        timeIndex: number;
+        availableTimes: string[];
+        availableTimeIndices: number[];
+        numberOfPeople: number;
+        meetingPoint?: string;
+        flightType?: "sensational" | "classic" | "early bird";
+        notes?: string;
+        bookingSource?: string;
+        commission?: number;
+        commissionStatus?: "paid" | "unpaid";
+        status: "waitlist";
+        createdAt: Date;
+      } = {
+        customerName: customerName.trim() || "Unknown",
+        email: email.trim(),
+        phone: phoneNumber.trim() || undefined,
+        date: selectedModalDate,
+        time: selectedSlots.map((slot) => slot.displayTime).join(", "),
+        timeIndex: selectedSlots[0].actualTimeIndex,
+        availableTimes: selectedSlots.map((slot) => slot.displayTime),
+        availableTimeIndices: selectedSlots.map((slot) => slot.actualTimeIndex),
+        numberOfPeople: numPeople,
+        notes: notes.trim() || undefined,
+        status: "waitlist",
+        createdAt: new Date(),
+      };
+
+      onSubmitWaitlist(waitlistData);
+      resetForm();
+      onOpenChange(false);
       return;
     }
 
@@ -458,33 +565,13 @@ export function NewBookingModal({
     onSubmit(bookingData);
 
     // Reset form
-    setCustomerName("");
-    setNumberOfPeople("");
-    setPickupLocation("");
-    setBookingSource(defaultBookingSource);
-    setPhoneNumber("");
-    setEmail("");
-    setNotes("");
-    setCommission("");
-    setFemalePilotsRequired(0);
-    setFlightType("sensational");
-    setShowAdditionalOptions(false);
+    resetForm();
     onOpenChange(false);
   };
 
   const handleCancel = () => {
     // Reset form
-    setCustomerName("");
-    setNumberOfPeople("");
-    setPickupLocation("");
-    setBookingSource(defaultBookingSource);
-    setPhoneNumber("");
-    setEmail("");
-    setNotes("");
-    setCommission("");
-    setFemalePilotsRequired(0);
-    setFlightType("sensational");
-    setShowAdditionalOptions(false);
+    resetForm();
     onOpenChange(false);
   };
 
@@ -496,7 +583,7 @@ export function NewBookingModal({
       >
         <form onSubmit={handleSubmit} className="space-y-4 overflow-x-hidden px-1">
           {/* Availability Error Message */}
-          {availabilityError && (
+          {mode === "booking" && availabilityError && (
             <div className={`p-3 rounded-lg border text-sm ${
               role === 'admin'
                 ? 'bg-orange-50 dark:bg-orange-900/30 border-orange-300 dark:border-orange-800 text-orange-900 dark:text-orange-200'
@@ -515,6 +602,7 @@ export function NewBookingModal({
           )}
 
           {/* Date and Time Selection */}
+          {mode === "booking" ? (
           <div className="grid grid-cols-2 gap-3 pb-2 border-b border-gray-300 dark:border-zinc-800">
             {/* Date Picker */}
             <div className="space-y-2">
@@ -591,6 +679,40 @@ export function NewBookingModal({
               </Select>
             </div>
           </div>
+          ) : (
+          <div className="space-y-3 pb-2 border-b border-gray-300 dark:border-zinc-800">
+            <div className="space-y-2">
+              <Label className="text-gray-900 dark:text-white">
+                Available Times <span className="text-red-500">*</span>
+              </Label>
+              <div className="flex flex-wrap gap-2">
+                {displaySlotOptions.map((slot) => {
+                  const isSelected = selectedWaitlistTimeIndices.includes(slot.actualTimeIndex);
+                  return (
+                    <button
+                      key={slot.actualTimeIndex}
+                      type="button"
+                      onClick={() => {
+                        setSelectedWaitlistTimeIndices((previous) => (
+                          previous.includes(slot.actualTimeIndex)
+                            ? previous.filter((index) => index !== slot.actualTimeIndex)
+                            : [...previous, slot.actualTimeIndex]
+                        ));
+                      }}
+                      className={`px-3 py-2 rounded-lg text-sm transition-colors ${
+                        isSelected
+                          ? "bg-gray-900 dark:bg-white text-white dark:text-black"
+                          : "bg-gray-100 dark:bg-zinc-800 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-zinc-700"
+                      }`}
+                    >
+                      {slot.displayTime}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          )}
 
           {/* Customer Name */}
           <div className="space-y-2">
@@ -614,7 +736,7 @@ export function NewBookingModal({
               <div className="flex gap-2 pb-2">
                 {Array.from({ length: 30 }, (_, i) => i + 1).map((num) => {
                   // Admins can overbook, regular users cannot
-                  const isDisabled = role !== 'admin' && num > availableSlots;
+                  const isDisabled = mode === "booking" && role !== 'admin' && num > availableSlots;
                   return (
                     <button
                       key={num}
@@ -637,30 +759,34 @@ export function NewBookingModal({
             </div>
           </div>
 
-          {/* Meeting Point */}
-          <MeetingPointAutocomplete
-            value={pickupLocation}
-            onChange={setPickupLocation}
-          />
-
-          {/* Booking Source */}
-          {role === 'admin' ? (
-            <BookingSourceAutocomplete
-              value={bookingSource}
-              onChange={setBookingSource}
-              required
-            />
-          ) : (
-            <div className="space-y-2">
-              <Label className="text-gray-900 dark:text-white">
-                Booking Source <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                value={bookingSource}
-                readOnly
-                className="bg-gray-100 dark:bg-zinc-800 cursor-not-allowed"
+          {mode === "booking" && (
+            <>
+              {/* Meeting Point */}
+              <MeetingPointAutocomplete
+                value={pickupLocation}
+                onChange={setPickupLocation}
               />
-            </div>
+
+              {/* Booking Source */}
+              {role === 'admin' ? (
+                <BookingSourceAutocomplete
+                  value={bookingSource}
+                  onChange={setBookingSource}
+                  required
+                />
+              ) : (
+                <div className="space-y-2">
+                  <Label className="text-gray-900 dark:text-white">
+                    Booking Source <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    value={bookingSource}
+                    readOnly
+                    className="bg-gray-100 dark:bg-zinc-800 cursor-not-allowed"
+                  />
+                </div>
+              )}
+            </>
           )}
 
           {/* Phone Number (Optional) */}
@@ -691,133 +817,146 @@ export function NewBookingModal({
             />
           </div>
 
-          {/* Additional Options - Collapsible */}
-          <div className="space-y-2">
-            <button
-              type="button"
-              onClick={() => setShowAdditionalOptions(!showAdditionalOptions)}
-              className="flex items-center justify-between w-full text-gray-900 dark:text-white hover:text-gray-600 dark:hover:text-zinc-300 transition-colors"
-            >
-              <span className="text-sm font-medium">Additional Options</span>
-              {showAdditionalOptions ? (
-                <ChevronUp className="w-4 h-4 text-gray-600 dark:text-zinc-400" />
-              ) : (
-                <ChevronDown className="w-4 h-4 text-gray-600 dark:text-zinc-400" />
-              )}
-            </button>
+          {mode === "booking" ? (
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => setShowAdditionalOptions(!showAdditionalOptions)}
+                className="flex items-center justify-between w-full text-gray-900 dark:text-white hover:text-gray-600 dark:hover:text-zinc-300 transition-colors"
+              >
+                <span className="text-sm font-medium">Additional Options</span>
+                {showAdditionalOptions ? (
+                  <ChevronUp className="w-4 h-4 text-gray-600 dark:text-zinc-400" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-gray-600 dark:text-zinc-400" />
+                )}
+              </button>
 
-            {showAdditionalOptions && (
-              <div className="space-y-4 pt-2 border-t border-gray-300 dark:border-zinc-800">
-                {/* Commission (Optional) */}
-                <div className="space-y-2">
-                  <Label htmlFor="commission" className="text-gray-900 dark:text-white">
-                    Commission (per person)
-                  </Label>
-                  <Input
-                    id="commission"
-                    type="number"
-                    step="0.01"
-                    value={commission}
-                    onChange={(e) => setCommission(e.target.value)}
-                    placeholder="0.00"
-                    autoComplete="off"
-                  />
-                </div>
+              {showAdditionalOptions && (
+                <div className="space-y-4 pt-2 border-t border-gray-300 dark:border-zinc-800">
+                  {/* Commission (Optional) */}
+                  <div className="space-y-2">
+                    <Label htmlFor="commission" className="text-gray-900 dark:text-white">
+                      Commission (per person)
+                    </Label>
+                    <Input
+                      id="commission"
+                      type="number"
+                      step="0.01"
+                      value={commission}
+                      onChange={(e) => setCommission(e.target.value)}
+                      placeholder="0.00"
+                      autoComplete="off"
+                    />
+                  </div>
 
-                {/* Commission Status */}
-                <div className="space-y-2">
-                  <Label htmlFor="commissionStatus" className="text-gray-900 dark:text-white">
-                    Commission Status
-                  </Label>
-                  <select
-                    id="commissionStatus"
-                    value={commissionStatus}
-                    onChange={(e) => setCommissionStatus(e.target.value as "paid" | "unpaid")}
-                    className="flex h-10 w-full rounded-md border border-gray-300 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-sm text-gray-900 dark:text-white ring-offset-white dark:ring-offset-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 dark:focus-visible:ring-white focus-visible:ring-offset-2"
-                  >
-                    <option value="unpaid">Unpaid</option>
-                    <option value="paid">Paid</option>
-                  </select>
-                </div>
+                  {/* Commission Status */}
+                  <div className="space-y-2">
+                    <Label htmlFor="commissionStatus" className="text-gray-900 dark:text-white">
+                      Commission Status
+                    </Label>
+                    <select
+                      id="commissionStatus"
+                      value={commissionStatus}
+                      onChange={(e) => setCommissionStatus(e.target.value as "paid" | "unpaid")}
+                      className="flex h-10 w-full rounded-md border border-gray-300 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-sm text-gray-900 dark:text-white ring-offset-white dark:ring-offset-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 dark:focus-visible:ring-white focus-visible:ring-offset-2"
+                    >
+                      <option value="unpaid">Unpaid</option>
+                      <option value="paid">Paid</option>
+                    </select>
+                  </div>
 
-                {/* Lady Pilots Required */}
-                <div className="space-y-2">
-                  <Label className="text-gray-900 dark:text-white">
-                    Lady Pilots Required
-                    {availableFemalePilots > 0 && (
-                      <span className="text-xs text-gray-600 dark:text-zinc-400 ml-2">
-                        ({availableFemalePilots} available)
-                      </span>
-                    )}
-                  </Label>
-                  <div className="overflow-x-auto">
-                    <div className="flex gap-2 pb-2">
-                      {Array.from({ length: Math.min(parseInt(numberOfPeople) || 0, availableFemalePilots) + 1 }, (_, i) => i).map((num) => (
+                  {/* Lady Pilots Required */}
+                  <div className="space-y-2">
+                    <Label className="text-gray-900 dark:text-white">
+                      Lady Pilots Required
+                      {availableFemalePilots > 0 && (
+                        <span className="text-xs text-gray-600 dark:text-zinc-400 ml-2">
+                          ({availableFemalePilots} available)
+                        </span>
+                      )}
+                    </Label>
+                    <div className="overflow-x-auto">
+                      <div className="flex gap-2 pb-2">
+                        {Array.from({ length: Math.min(parseInt(numberOfPeople) || 0, availableFemalePilots) + 1 }, (_, i) => i).map((num) => (
+                          <button
+                            key={num}
+                            type="button"
+                            onClick={() => setFemalePilotsRequired(num)}
+                            className={`flex-shrink-0 w-12 h-12 rounded-lg font-medium transition-colors ${
+                              femalePilotsRequired === num
+                                ? "bg-gray-900 dark:bg-white text-white dark:text-black"
+                                : "bg-gray-100 dark:bg-zinc-800 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-zinc-700"
+                            }`}
+                          >
+                            {num}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Flight Type */}
+                  <div className="space-y-2">
+                    <Label className="text-gray-900 dark:text-white">
+                      Flight Type
+                    </Label>
+                    <div className="flex gap-2">
+                      {([
+                        { type: "sensational", price: "CHF 180" },
+                        { type: "classic", price: "CHF 170" },
+                        { type: "early bird", price: "CHF 180" }
+                      ] as const).map(({ type, price }) => (
                         <button
-                          key={num}
+                          key={type}
                           type="button"
-                          onClick={() => setFemalePilotsRequired(num)}
-                          className={`flex-shrink-0 w-12 h-12 rounded-lg font-medium transition-colors ${
-                            femalePilotsRequired === num
+                          onClick={() => setFlightType(type)}
+                          className={`flex-1 px-3 py-3 rounded-lg font-medium transition-colors ${
+                            flightType === type
                               ? "bg-gray-900 dark:bg-white text-white dark:text-black"
                               : "bg-gray-100 dark:bg-zinc-800 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-zinc-700"
                           }`}
                         >
-                          {num}
+                          <div className="capitalize text-sm">{type}</div>
+                          <div className="text-xs mt-1 opacity-80">{price}</div>
                         </button>
                       ))}
                     </div>
                   </div>
-                </div>
 
-                {/* Flight Type */}
-                <div className="space-y-2">
-                  <Label className="text-gray-900 dark:text-white">
-                    Flight Type
-                  </Label>
-                  <div className="flex gap-2">
-                    {([
-                      { type: "sensational", price: "CHF 180" },
-                      { type: "classic", price: "CHF 170" },
-                      { type: "early bird", price: "CHF 180" }
-                    ] as const).map(({ type, price }) => (
-                      <button
-                        key={type}
-                        type="button"
-                        onClick={() => setFlightType(type)}
-                        className={`flex-1 px-3 py-3 rounded-lg font-medium transition-colors ${
-                          flightType === type
-                            ? "bg-gray-900 dark:bg-white text-white dark:text-black"
-                            : "bg-gray-100 dark:bg-zinc-800 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-zinc-700"
-                        }`}
-                      >
-                        <div className="capitalize text-sm">{type}</div>
-                        <div className="text-xs mt-1 opacity-80">{price}</div>
-                      </button>
-                    ))}
+                  {/* Additional Notes (Optional) */}
+                  <div className="space-y-2">
+                    <Label htmlFor="notes" className="text-gray-900 dark:text-white">
+                      Additional Notes
+                    </Label>
+                    <Textarea
+                      id="notes"
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      rows={3}
+                    />
                   </div>
                 </div>
-
-                {/* Additional Notes (Optional) */}
-                <div className="space-y-2">
-                  <Label htmlFor="notes" className="text-gray-900 dark:text-white">
-                    Additional Notes
-                  </Label>
-                  <Textarea
-                    id="notes"
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    rows={3}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="notes" className="text-gray-900 dark:text-white">
+                Notes
+              </Label>
+              <Textarea
+                id="notes"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={3}
+              />
+            </div>
+          )}
 
           {/* Action Buttons */}
           <div className="flex gap-3 pt-4">
             <Button type="submit" className="flex-1 bg-gray-900 dark:bg-white text-white dark:text-black hover:bg-gray-700 dark:hover:bg-zinc-200">
-              Create Booking
+              {mode === "waitlist" ? "Add to Waiting List" : "Create Booking"}
             </Button>
             <Button type="button" variant="outline" onClick={handleCancel} className="flex-1 border-gray-300 dark:border-zinc-700 text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-800">
               Cancel
