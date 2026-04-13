@@ -472,7 +472,9 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
             const dayName = format(day, 'EEE').toUpperCase();
             const monthDay = format(day, 'MMM d').toUpperCase();
             const combinedSlots = combinedDailyTimeSlots[dayIndex];
-            const isToday = format(day, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+            const dateStr = format(day, 'yyyy-MM-dd');
+            const presentPilotsCount = _pilotsAvailabilityData.pilotsSignedInPerDay.get(dateStr)?.size || 0;
+            const isToday = dateStr === format(new Date(), 'yyyy-MM-dd');
 
             return (
               <div key={dayIndex} className="flex flex-col gap-2">
@@ -489,7 +491,21 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
                   disabled={isInitialLoading || saving || !canEditDay(day)}
                 >
                   <div className={`text-xs ${!canEditDay(day) ? 'text-gray-400 dark:text-zinc-600' : isToday ? 'text-blue-600 dark:text-blue-300' : 'text-gray-600 dark:text-zinc-400'}`}>{dayName}</div>
-                  <div className={!canEditDay(day) ? '' : isToday ? 'text-blue-700 dark:text-blue-100' : ''}>{monthDay}</div>
+                  <div className="flex items-center gap-2">
+                    <div className={!canEditDay(day) ? '' : isToday ? 'text-blue-700 dark:text-blue-100' : ''}>{monthDay}</div>
+                    <div
+                      className={`min-w-[1.5rem] h-6 px-2 rounded-full text-xs font-semibold flex items-center justify-center ${
+                        !canEditDay(day)
+                          ? 'bg-gray-200 text-gray-500 dark:bg-zinc-700 dark:text-zinc-400'
+                          : isToday
+                          ? 'bg-blue-600 text-white dark:bg-blue-500'
+                          : 'bg-gray-200 text-gray-700 dark:bg-zinc-700 dark:text-zinc-200'
+                      }`}
+                      title={`${presentPilotsCount} pilot${presentPilotsCount === 1 ? '' : 's'} present`}
+                    >
+                      {presentPilotsCount}
+                    </div>
+                  </div>
                 </button>
 
                 {/* Time Slots for this day */}
