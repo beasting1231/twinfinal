@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Phone, Mail, Users, Calendar, Clock, PhoneCall, AlertTriangle, MapPin } from "lucide-react";
+import { Phone, Mail, Users, Calendar, Clock, PhoneCall, AlertTriangle, MapPin, Tag } from "lucide-react";
 import type { BookingRequest } from "../types/index";
 import { useDraggable } from "@dnd-kit/core";
 
@@ -125,6 +125,10 @@ export function BookingRequestItem({ request, onContextMenu, onDateClick, canDra
           <span className="px-2 py-0.5 bg-gray-900 dark:bg-white text-white dark:text-black text-xs font-medium rounded-full flex items-center gap-1">
             <Users className="w-3 h-3" />
             {request.numberOfPeople}
+          </span>
+          <span className="px-2 py-0.5 bg-emerald-600 text-white text-xs font-medium rounded-full flex items-center gap-1">
+            <Tag className="w-3 h-3" />
+            {request.bookingSource?.trim() || "Online"}
           </span>
           {request.meetingPoint && (
             <span className="px-2 py-0.5 bg-purple-600 text-white text-xs font-medium rounded-full flex items-center gap-1">

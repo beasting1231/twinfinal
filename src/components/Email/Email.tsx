@@ -260,7 +260,7 @@ export function Email() {
   // Show loading while settings are being fetched
   if (settingsLoading) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-stone-950">
+      <div className="h-full w-full flex items-center justify-center bg-stone-950">
         <Loader2 className="h-8 w-8 animate-spin text-stone-500" />
       </div>
     );
@@ -269,7 +269,7 @@ export function Email() {
   // Show setup prompt if not configured
   if (!isConfigured) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-4 p-6 bg-stone-950">
+      <div className="h-full w-full flex flex-col items-center justify-center gap-4 p-6 bg-stone-950">
         <div className="text-center max-w-md">
           <Mail className="h-12 w-12 text-stone-600 mx-auto mb-4" />
           <h2 className="text-xl font-semibold text-stone-100 mb-2">

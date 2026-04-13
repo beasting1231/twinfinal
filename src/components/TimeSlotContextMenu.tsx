@@ -8,6 +8,7 @@ interface TimeSlotContextMenuProps {
   onAddPilot: () => void;
   onChangeTime: () => void;
   onAddTime: () => void;
+  onCopyAvailability?: () => void;
   onRemoveTime?: () => void;
   onOnRequest?: () => void; // Handler for setting current user's availability to "on request"
   onSignIn?: () => void; // Handler for signing in (available)
@@ -24,6 +25,7 @@ export function TimeSlotContextMenu({
   onAddPilot,
   onChangeTime,
   onAddTime,
+  onCopyAvailability,
   onRemoveTime,
   onOnRequest,
   onSignIn,
@@ -110,6 +112,17 @@ export function TimeSlotContextMenu({
       >
         Add Time
       </button>
+      {onCopyAvailability && (
+        <button
+          onClick={() => {
+            onCopyAvailability();
+            onClose();
+          }}
+          className="w-full px-4 py-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
+        >
+          Copy availability
+        </button>
+      )}
       {/* Availability management options for pilots and admins */}
       {canManageAvailability && (
         <>

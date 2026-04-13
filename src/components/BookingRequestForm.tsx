@@ -865,7 +865,7 @@ export function BookingRequestForm() {
                 <span className="text-sm text-gray-700 flex-1">
                   I accept the{" "}
                   <a
-                    href="https://www.tandemparagliding.ch/gcc.html"
+                    href="https://www.interlaken-paragliding.com/gcc"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-blue-600 hover:text-blue-700 underline font-medium"

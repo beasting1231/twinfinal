@@ -538,7 +538,7 @@ export function usePilots(selectedDate: Date) {
     return () => unsubscribe();
   }, [selectedDate]);
 
-  // Helper function to check if a pilot signed in on time (>= 2 days before the target date)
+  // Helper function to check if a pilot signed in on time (>= 30 days before the target date)
   const isOnTimeSignIn = (pilotUid: string): boolean => {
     const signedInAt = pilotSignInTimes.get(pilotUid);
 
@@ -552,8 +552,8 @@ export function usePilots(selectedDate: Date) {
     // Calculate days between sign-in and target date
     const daysInAdvance = differenceInDays(targetDate, signInDay);
 
-    // On-time if signed in >= 2 days before
-    return daysInAdvance >= 2;
+    // On-time if signed in >= 30 days before
+    return daysInAdvance >= 30;
   };
 
   // Memoized sorted pilots - recalculates only when rawPilots, customOrder, or signInTimes change
