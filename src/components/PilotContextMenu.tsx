@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { X, UserCheck, Check, Copy } from "lucide-react";
-import type { Pilot } from "../types/index";
+import type { Pilot, AvailabilityStatus } from "../types/index";
 
 interface PilotContextMenuProps {
   isOpen: boolean;
@@ -11,6 +11,8 @@ interface PilotContextMenuProps {
   currentPilot?: string;
   currentUserDisplayName?: string;
   isAcknowledged?: boolean;
+  nextTimeSlot?: string | null;
+  getPilotAvailabilityStatus?: (pilotUid: string, timeSlot: string) => AvailabilityStatus;
   onSelectPilot: (pilotName: string) => void;
   onUnassign: () => void;
   onAcknowledge?: () => void;
@@ -28,6 +30,8 @@ export function PilotContextMenu({
   currentPilot,
   currentUserDisplayName,
   isAcknowledged = false,
+  nextTimeSlot,
+  getPilotAvailabilityStatus,
   onSelectPilot,
   onUnassign,
   onAcknowledge,
@@ -162,6 +166,20 @@ export function PilotContextMenu({
                 {availablePilots.map((pilot) => {
                   const isCurrent = currentPilot === pilot.displayName;
                   const flightCount = pilotFlightCounts[pilot.displayName] || 0;
+                  // Treat as "signed out next turn" when pilot is available now (this list)
+                  // but unavailable in the immediate next time slot.
+                  // Do not require signedOutAt, because older records may miss that timestamp.
+                  const isSignedOutNextSlot = Boolean(
+                    nextTimeSlot &&
+                    getPilotAvailabilityStatus?.(pilot.uid, nextTimeSlot) === "unavailable"
+                  );
+
+                  const textClass = isCurrent
+                    ? "text-green-600 dark:text-green-400"
+                    : isSignedOutNextSlot
+                      ? "text-orange-600 dark:text-orange-400"
+                      : "text-gray-900 dark:text-white";
+
                   return (
                     <button
                       key={pilot.uid}
@@ -169,9 +187,7 @@ export function PilotContextMenu({
                         onSelectPilot(pilot.displayName);
                         onClose();
                       }}
-                      className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center justify-between gap-2 ${
-                        isCurrent ? "text-green-600 dark:text-green-400" : "text-gray-900 dark:text-white"
-                      }`}
+                      className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center justify-between gap-2 ${textClass}`}
                     >
                       <div className="flex items-center gap-2">
                         <span>{pilot.displayName}</span>

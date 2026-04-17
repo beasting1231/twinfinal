@@ -318,6 +318,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     booking: Booking;
     slotIndex: number;
     timeSlot: string;
+    nextTimeSlot?: string | null;
     isPilotSelfUnassign?: boolean;
   } | null>(null);
 
@@ -538,6 +539,15 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
       },
     })
   );
+
+  const getNextTimeSlotForIndex = useCallback((currentTimeIndex: number): string | null => {
+    const currentSlotPosition = combinedTimeSlots.findIndex((slot) => slot.originalIndex === currentTimeIndex);
+    if (currentSlotPosition === -1) {
+      return null;
+    }
+
+    return combinedTimeSlots[currentSlotPosition + 1]?.time || null;
+  }, [combinedTimeSlots]);
 
   // Disable drag-and-drop on mobile (use long press move mode instead)
   const isDragEnabled = !isMobile && role === 'admin';
@@ -1235,6 +1245,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
       booking,
       slotIndex,
       timeSlot,
+      nextTimeSlot: getNextTimeSlotForIndex(booking.timeIndex),
       isPilotSelfUnassign,
     });
   };
@@ -1380,9 +1391,10 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
       booking,
       slotIndex,
       timeSlot,
+      nextTimeSlot: getNextTimeSlotForIndex(booking.timeIndex),
       isPilotSelfUnassign: true,
     });
-  }, [currentUserDisplayName, role, canEditForSelectedDate]);
+  }, [currentUserDisplayName, role, canEditForSelectedDate, getNextTimeSlotForIndex]);
 
   // Handle pilot long-press for acknowledgment
   const handlePilotNameLongPress = useCallback((booking: Booking) => (
@@ -3033,6 +3045,20 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
               return !alreadyAssignedToOtherBooking;
             })
             .sort((a, b) => {
+              const aSignedOutNextSlot = Boolean(
+                contextMenu.nextTimeSlot &&
+                getPilotAvailabilityStatus?.(a.uid, contextMenu.nextTimeSlot) === "unavailable"
+              );
+              const bSignedOutNextSlot = Boolean(
+                contextMenu.nextTimeSlot &&
+                getPilotAvailabilityStatus?.(b.uid, contextMenu.nextTimeSlot) === "unavailable"
+              );
+
+              // Push "signed out next turn" pilots to bottom of list
+              if (aSignedOutNextSlot !== bSignedOutNextSlot) {
+                return aSignedOutNextSlot ? 1 : -1;
+              }
+
               // Count flights for each pilot on the selected date
               const aFlightCount = bookings.filter(
                 (booking) =>
@@ -3046,8 +3072,12 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                   booking.assignedPilots.includes(b.displayName)
               ).length;
 
-              // Sort by flight count (least to most)
-              return aFlightCount - bFlightCount;
+              // Then sort by flight count (least to most)
+              if (aFlightCount !== bFlightCount) {
+                return aFlightCount - bFlightCount;
+              }
+
+              return a.displayName.localeCompare(b.displayName);
             })}
           pilotFlightCounts={bookings
             .filter(booking => booking.date === contextMenu.booking.date)
@@ -3062,6 +3092,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
           currentPilot={contextMenu.booking.assignedPilots[contextMenu.slotIndex]}
           currentUserDisplayName={currentUserDisplayName}
           isAcknowledged={contextMenu.booking.acknowledgedPilots?.includes(contextMenu.booking.assignedPilots[contextMenu.slotIndex]) || false}
+          nextTimeSlot={contextMenu.nextTimeSlot}
+          getPilotAvailabilityStatus={getPilotAvailabilityStatus}
           onSelectPilot={handleSelectPilot}
           onUnassign={handleUnassignPilot}
           onCopyTo={role === "admin" ? handleOpenCopyBooking : undefined}
