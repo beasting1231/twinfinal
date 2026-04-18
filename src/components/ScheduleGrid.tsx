@@ -3054,30 +3054,14 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                 getPilotAvailabilityStatus?.(b.uid, contextMenu.nextTimeSlot) === "unavailable"
               );
 
-              // Push "signed out next turn" pilots to bottom of list
+              // Push "signed out next turn" pilots to bottom of list; otherwise
+              // preserve the day's priority order (matches the header row, which
+              // admins can reorder per-day via drag-and-drop).
               if (aSignedOutNextSlot !== bSignedOutNextSlot) {
                 return aSignedOutNextSlot ? 1 : -1;
               }
 
-              // Count flights for each pilot on the selected date
-              const aFlightCount = bookings.filter(
-                (booking) =>
-                  booking.date === contextMenu.booking.date &&
-                  booking.assignedPilots.includes(a.displayName)
-              ).length;
-
-              const bFlightCount = bookings.filter(
-                (booking) =>
-                  booking.date === contextMenu.booking.date &&
-                  booking.assignedPilots.includes(b.displayName)
-              ).length;
-
-              // Then sort by flight count (least to most)
-              if (aFlightCount !== bFlightCount) {
-                return aFlightCount - bFlightCount;
-              }
-
-              return a.displayName.localeCompare(b.displayName);
+              return 0;
             })}
           pilotFlightCounts={bookings
             .filter(booking => booking.date === contextMenu.booking.date)
