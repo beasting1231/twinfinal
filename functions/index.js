@@ -3,7 +3,7 @@ const {
   onDocumentUpdated,
   onDocumentDeleted,
 } = require("firebase-functions/v2/firestore");
-const {onRequest} = require("firebase-functions/v2/https");
+const {onRequest, onCall, HttpsError} = require("firebase-functions/v2/https");
 const {defineSecret} = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const nodemailer = require("nodemailer");
@@ -169,6 +169,175 @@ async function backfillBookingSearchIndex({dryRun = false, maxBatches = 0} = {})
     durationMs,
     truncated: maxBatches > 0 && batches >= maxBatches,
   };
+}
+
+function getSwissTodayString() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Zurich",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+
+  const getPart = (type) => parts.find((part) => part.type === type)?.value || "";
+  const year = getPart("year");
+  const month = getPart("month");
+  const day = getPart("day");
+
+  return `${year}-${month}-${day}`;
+}
+
+async function cleanupInvalidPushTokens(invalidTokensByUser) {
+  const entries = Object.entries(invalidTokensByUser);
+  if (entries.length === 0) return;
+
+  await Promise.all(entries.map(async ([userId, tokens]) => {
+    if (!tokens.length) return;
+
+    await db.collection("userProfiles").doc(userId).update({
+      "pushNotifications.tokens": admin.firestore.FieldValue.arrayRemove(...tokens),
+      "pushNotifications.updatedAt": new Date().toISOString(),
+    }).catch((error) => {
+      console.error("Failed to clean invalid push tokens for user:", userId, error.message);
+    });
+  }));
+}
+
+async function sendPushNotificationToRecipients(recipients, payload) {
+  if (!Array.isArray(recipients) || recipients.length === 0) {
+    return {skipped: true, reason: "no-recipients"};
+  }
+
+  const tokenOwners = new Map();
+  const tokens = [];
+  for (const recipient of recipients) {
+    for (const token of recipient.tokens || []) {
+      if (!token) continue;
+      tokens.push(token);
+      tokenOwners.set(token, recipient.userId);
+    }
+  }
+
+  if (tokens.length === 0) {
+    return {skipped: true, reason: "no-tokens"};
+  }
+
+  const response = await admin.messaging().sendEachForMulticast({
+    tokens,
+    notification: payload.notification,
+    data: payload.data,
+    webpush: payload.webpush,
+  });
+
+  const invalidTokensByUser = {};
+  response.responses.forEach((result, index) => {
+    if (result.success) return;
+
+    const token = tokens[index];
+    const userId = tokenOwners.get(token);
+    const errorCode = result.error?.code || "";
+
+    console.error("Push send failed:", userId, errorCode, result.error?.message || "unknown");
+
+    if (
+      userId &&
+      (errorCode === "messaging/registration-token-not-registered" ||
+      errorCode === "messaging/invalid-registration-token")
+    ) {
+      invalidTokensByUser[userId] = invalidTokensByUser[userId] || [];
+      invalidTokensByUser[userId].push(token);
+    }
+  });
+
+  await cleanupInvalidPushTokens(invalidTokensByUser);
+
+  return {
+    sent: response.successCount,
+    failed: response.failureCount,
+  };
+}
+
+function getTimeSlotsForDateString(dateStr) {
+  const [y, m, d] = String(dateStr || "").split("-").map(Number);
+  if (!y || !m || !d) return [];
+  const month = m - 1;
+  const day = d;
+
+  if (month === 9 && day >= 11) return ["8:00", "9:15", "10:30", "12:00", "13:30", "14:45", "16:00"];
+  if (month === 10) return ["8:00", "9:15", "10:30", "12:00", "13:30", "14:45", "16:00"];
+  if (month === 11 || month === 0) return ["8:30", "9:45", "11:00", "12:15", "13:45", "15:00"];
+  if (month === 1) return ["8:00", "9:15", "10:30", "12:00", "13:30", "14:45", "16:00"];
+  if (month === 2) return ["7:30", "8:30", "9:45", "11:00", "12:15", "13:45", "15:00", "16:00"];
+  if (month >= 3 && (month < 9 || (month === 9 && day <= 10))) {
+    return ["7:30", "8:30", "9:45", "11:00", "12:30", "14:00", "15:30", "16:45"];
+  }
+  return ["7:30", "8:30", "9:45", "11:00", "12:30", "14:00", "15:30", "16:45"];
+}
+
+function getBookingTimeLabel(bookingData) {
+  const slots = getTimeSlotsForDateString(bookingData?.date);
+  const idx = bookingData?.timeIndex;
+  if (typeof idx === "number" && slots[idx]) return slots[idx];
+  return "";
+}
+
+async function sendTodayBookingPushNotifications(bookingId, bookingData) {
+  if (!bookingData || bookingData.date !== getSwissTodayString()) {
+    return {skipped: true, reason: "not-today"};
+  }
+
+  const adminProfilesSnapshot = await db.collection("userProfiles")
+      .where("role", "==", "admin")
+      .get();
+
+  const recipients = [];
+  for (const adminDoc of adminProfilesSnapshot.docs) {
+    const userData = adminDoc.data() || {};
+    const pushConfig = userData.pushNotifications || {};
+    const tokens = Array.isArray(pushConfig.tokens) ? pushConfig.tokens.filter(Boolean) : [];
+
+    if (!pushConfig.enabled || tokens.length === 0) {
+      continue;
+    }
+
+    if (bookingData.createdBy && userData.uid === bookingData.createdBy) {
+      continue;
+    }
+
+    recipients.push({
+      userId: adminDoc.id,
+      tokens,
+    });
+  }
+
+  const creatorName = bookingData.createdByName || "Someone";
+  const bookingTime = getBookingTimeLabel(bookingData);
+  const paxCount = Number(bookingData.numberOfPeople);
+  const paxLabel = Number.isFinite(paxCount) ? `${paxCount} pax` : "pax";
+  const timeSuffix = bookingTime ? ` at ${bookingTime}` : "";
+  const body = `${creatorName} booked ${paxLabel}${timeSuffix}`.replace(/\s+/g, " ").trim();
+
+  return sendPushNotificationToRecipients(recipients, {
+    notification: {
+      title: "Twin Paragliding",
+      body,
+    },
+    data: {
+      bookingId,
+      date: String(bookingData.date || ""),
+      url: "https://twinparagliding.web.app/",
+    },
+    webpush: {
+      fcmOptions: {
+        link: "https://twinparagliding.web.app/",
+      },
+      notification: {
+        icon: "https://twinparagliding.web.app/icon-192.png",
+        badge: "https://twinparagliding.web.app/icon-192.png",
+        tag: `booking-${bookingId}`,
+      },
+    },
+  });
 }
 
 // Configure SMTP transporter
@@ -1440,6 +1609,74 @@ exports.syncBookingSearchIndexOnCreate = onDocumentCreated(
       await db.collection(BOOKING_SEARCH_INDEX_COLLECTION).doc(bookingId).set(indexDoc, {merge: true});
     },
 );
+
+exports.sendTodayBookingPushNotifications = onDocumentCreated(
+    "bookings/{bookingId}",
+    async (event) => {
+      const bookingId = event.params.bookingId;
+      const bookingData = event.data?.data();
+
+      if (!bookingData) {
+        return {skipped: true, reason: "missing-booking-data"};
+      }
+
+      return sendTodayBookingPushNotifications(bookingId, bookingData);
+    },
+);
+
+exports.sendTestPushNotification = onCall(async (request) => {
+  if (!request.auth?.uid) {
+    throw new HttpsError("unauthenticated", "Must be signed in.");
+  }
+
+  const userId = request.auth.uid;
+  const userProfileDoc = await db.collection("userProfiles").doc(userId).get();
+  const userData = userProfileDoc.data() || {};
+
+  if (userData.role !== "admin") {
+    throw new HttpsError("permission-denied", "Admin access required.");
+  }
+
+  const pushConfig = userData.pushNotifications || {};
+  const tokens = Array.isArray(pushConfig.tokens) ? pushConfig.tokens.filter(Boolean) : [];
+
+  if (!pushConfig.enabled || tokens.length === 0) {
+    throw new HttpsError("failed-precondition", "Push not enabled on this device yet.");
+  }
+
+  const displayName = userData.name || userData.displayName || request.auth.token.name || "Admin";
+  const result = await sendPushNotificationToRecipients([
+    {
+      userId,
+      tokens,
+    },
+  ], {
+    notification: {
+      title: "Test push notification",
+      body: `Hello ${displayName}, push notifications are working.`,
+    },
+    data: {
+      type: "test-push",
+      url: "https://twinparagliding.web.app/settings/notifications",
+      sentAt: new Date().toISOString(),
+    },
+    webpush: {
+      fcmOptions: {
+        link: "https://twinparagliding.web.app/settings/notifications",
+      },
+      notification: {
+        icon: "https://twinparagliding.web.app/icon-192.png",
+        badge: "https://twinparagliding.web.app/icon-192.png",
+        tag: `test-push-${userId}`,
+      },
+    },
+  });
+
+  return {
+    ok: true,
+    ...result,
+  };
+});
 
 exports.syncBookingSearchIndexOnUpdate = onDocumentUpdated(
     "bookings/{bookingId}",

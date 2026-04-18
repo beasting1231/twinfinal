@@ -1,5 +1,5 @@
 // BUILD_TIMESTAMP: __BUILD_TIME__
-const CACHE_NAME = 'twin-scheduler-v3';
+const CACHE_NAME = 'twin-scheduler-v4';
 
 function canHandleRequest(requestUrl, method) {
   if (method !== 'GET') return false;
@@ -91,6 +91,29 @@ self.addEventListener('activate', (event) => {
           }
         })
       );
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  const targetUrl = event.notification?.data?.url || '/';
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if ('focus' in client) {
+          client.navigate(targetUrl);
+          return client.focus();
+        }
+      }
+
+      if (clients.openWindow) {
+        return clients.openWindow(targetUrl);
+      }
+
+      return undefined;
     })
   );
 });
