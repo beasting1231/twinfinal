@@ -40,9 +40,25 @@ import { doc, updateDoc, setDoc, deleteDoc, collection, query, where, onSnapshot
 import { db } from "../firebase/config";
 import { setAvailabilityStatus, unassignPilotFromBookings } from "../utils/availabilityState";
 import { formatSwissDateTime } from "../utils/timezone";
-import { DndContext, useSensor, useSensors, PointerSensor, useDraggable, useDroppable } from "@dnd-kit/core";
-import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
+import { DndContext, useSensor, useSensors, PointerSensor, useDraggable, useDroppable, rectIntersection } from "@dnd-kit/core";
+import type { DragEndEvent, DragStartEvent, CollisionDetection } from "@dnd-kit/core";
 import { Plus } from "lucide-react";
+
+// Custom collision detection: each drag type only targets matching droppable types.
+// This lets pilot-drop droppables stay always-enabled without interfering with booking drags.
+const pilotAwareCollisionDetection: CollisionDetection = (args) => {
+  const activeId = String(args.active.id);
+  let filtered = args.droppableContainers;
+  if (activeId.startsWith('pilot-drag-')) {
+    filtered = args.droppableContainers.filter(c => String(c.id).startsWith('pilot-drop-'));
+  } else if (activeId.startsWith('pilot-header-')) {
+    filtered = args.droppableContainers.filter(c => String(c.id).startsWith('pilot-header-'));
+  } else {
+    // booking / request / deleted-booking drags — keep droppable-* and pilot-header-* only
+    filtered = args.droppableContainers.filter(c => !String(c.id).startsWith('pilot-drop-'));
+  }
+  return rectIntersection({ ...args, droppableContainers: filtered });
+};
 
 interface ScheduleGridProps {
   selectedDate: Date;
@@ -391,6 +407,87 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
   const [draggedRequest, setDraggedRequest] = useState<BookingRequest | null>(null);
   const [draggedDeletedBooking, setDraggedDeletedBooking] = useState<Booking | null>(null);
   const [draggedPilotIndex, setDraggedPilotIndex] = useState<number | null>(null);
+  const [draggedPilot, setDraggedPilot] = useState<{ bookingId: string; slotIndex: number; timeIndex: number; isOverbooked: boolean } | null>(null);
+
+  const getBookingSpan = (booking: Booking) => booking.numberOfPeople || booking.span || 1;
+
+  const sortBookingsForRow = (rowBookings: Booking[]) => {
+    return [...rowBookings].sort((a, b) => {
+      const aTime = a.createdAt?.toMillis?.() || a.createdAt?.getTime?.() || 0;
+      const bTime = b.createdAt?.toMillis?.() || b.createdAt?.getTime?.() || 0;
+      return aTime - bTime;
+    });
+  };
+
+  const buildOverbookedSlotMap = (rowBookings: Booking[], availablePilotCount: number) => {
+    const slotMap = new Map<string, number[]>();
+    const allSlots: Array<{ booking: Booking; bookingId: string; slotIndex: number; globalIndex: number }> = [];
+    let globalIndex = 0;
+
+    sortBookingsForRow(rowBookings).forEach((booking) => {
+      if (!booking.id) return;
+      for (let slotIndex = 0; slotIndex < getBookingSpan(booking); slotIndex++) {
+        allSlots.push({ booking, bookingId: booking.id, slotIndex, globalIndex });
+        globalIndex++;
+      }
+    });
+
+    const overbookedCount = Math.max(0, allSlots.length - availablePilotCount);
+    if (overbookedCount === 0) return slotMap;
+
+    rowBookings.forEach((booking) => {
+      if (booking.id) {
+        slotMap.set(booking.id, []);
+      }
+    });
+
+    const hasManualSlots = rowBookings.some((booking) => (booking.overbookedSlotIndexes ?? []).length > 0);
+    const selectedKeys = new Set<string>();
+    const selectedSlots: typeof allSlots = [];
+
+    const addSlot = (slot: (typeof allSlots)[number]) => {
+      const key = `${slot.bookingId}:${slot.slotIndex}`;
+      if (selectedKeys.has(key)) return;
+      selectedKeys.add(key);
+      selectedSlots.push(slot);
+    };
+
+    if (hasManualSlots) {
+      allSlots.forEach((slot) => {
+        if (slot.booking.overbookedSlotIndexes?.includes(slot.slotIndex)) {
+          addSlot(slot);
+        }
+      });
+    }
+
+    allSlots
+      .filter((slot) => slot.globalIndex >= availablePilotCount)
+      .forEach((slot) => {
+        if (selectedSlots.length < overbookedCount) {
+          addSlot(slot);
+        }
+      });
+
+    selectedSlots.slice(0, overbookedCount).forEach((slot) => {
+      slotMap.set(slot.bookingId, [...(slotMap.get(slot.bookingId) ?? []), slot.slotIndex]);
+    });
+
+    return slotMap;
+  };
+
+  const persistOverbookedSlotMap = async (rowBookings: Booking[], slotMap: Map<string, number[]>) => {
+    if (!onUpdateBooking) return;
+
+    await Promise.all(
+      rowBookings
+        .filter((booking) => booking.id)
+        .map((booking) =>
+          onUpdateBooking(booking.id!, {
+            overbookedSlotIndexes: slotMap.get(booking.id!) ?? [],
+          })
+        )
+    );
+  };
 
   // Time slot context menu state
   const [timeSlotContextMenu, setTimeSlotContextMenu] = useState<{
@@ -1861,6 +1958,16 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
       if (booking) {
         setDraggedDeletedBooking(booking);
       }
+    } else if (typeof active.id === 'string' && active.id.startsWith('pilot-drag-')) {
+      const withoutPrefix = active.id.slice('pilot-drag-'.length);
+      const lastDash = withoutPrefix.lastIndexOf('-');
+      const bookingId = withoutPrefix.substring(0, lastDash);
+      const slotIndex = parseInt(withoutPrefix.substring(lastDash + 1));
+      const booking = bookings.find(b => b.id === bookingId);
+      if (booking && !isNaN(slotIndex)) {
+        const isOverbooked = active.data?.current?.isOverbooked === true;
+        setDraggedPilot({ bookingId, slotIndex, timeIndex: booking.timeIndex, isOverbooked });
+      }
     } else if (typeof active.id === 'string' && active.id.startsWith('booking-')) {
       const bookingId = active.id.replace('booking-', '');
       const booking = bookings.find(b => b.id === bookingId);
@@ -1885,6 +1992,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
       setDraggedRequest(null);
       setDraggedDeletedBooking(null);
       setDraggedPilotIndex(null);
+      setDraggedPilot(null);
       return;
     }
 
@@ -1929,8 +2037,132 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     setDraggedRequest(null);
     setDraggedDeletedBooking(null);
     setDraggedPilotIndex(null);
+    setDraggedPilot(null);
 
     if (!over) return;
+
+    // Handle assigned pilot being moved between slots/bookings at the same time
+    if (typeof active.id === 'string' && active.id.startsWith('pilot-drag-') &&
+        typeof over.id === 'string' && over.id.startsWith('pilot-drop-')) {
+      if (role !== 'admin') return;
+
+      const parseSlot = (id: string, prefix: string) => {
+        const withoutPrefix = id.slice(prefix.length);
+        const lastDash = withoutPrefix.lastIndexOf('-');
+        return { bookingId: withoutPrefix.substring(0, lastDash), slotIndex: parseInt(withoutPrefix.substring(lastDash + 1)) };
+      };
+
+      const src = parseSlot(active.id as string, 'pilot-drag-');
+      const tgt = parseSlot(over.id as string, 'pilot-drop-');
+
+      if (isNaN(src.slotIndex) || isNaN(tgt.slotIndex)) return;
+      if (src.bookingId === tgt.bookingId && src.slotIndex === tgt.slotIndex) return;
+
+      const srcBooking = bookings.find(b => b.id === src.bookingId);
+      const tgtBooking = bookings.find(b => b.id === tgt.bookingId);
+      if (!srcBooking || !tgtBooking || !onUpdateBooking) return;
+      if (srcBooking.timeIndex !== tgtBooking.timeIndex) return;
+      if (srcBooking.date !== tgtBooking.date) return;
+
+      const srcPilot = srcBooking.assignedPilots[src.slotIndex] ?? '';
+      const tgtPilot = tgtBooking.assignedPilots[tgt.slotIndex] ?? '';
+      // Overbooked source: MOVE (source becomes empty, target gets pilot).
+      // Normal source: SWAP (pilots exchange positions).
+      const srcIsOverbooked = active.data?.current?.isOverbooked === true;
+      const srcHasPilot = active.data?.current?.hasPilot === true;
+
+      if (srcIsOverbooked && !srcHasPilot) {
+        const timeSlot = timeSlots[srcBooking.timeIndex];
+        const availablePilotCount = pilots.filter((pilot) => isPilotAvailableForTimeSlot(pilot.uid, timeSlot)).length;
+        const rowBookings = bookings.filter((booking) => {
+          const isBlocked = booking.isBlocked || booking.bookingSource === "Blocked";
+          return !isBlocked && booking.timeIndex === srcBooking.timeIndex && booking.date === srcBooking.date;
+        });
+        const slotMap = buildOverbookedSlotMap(rowBookings, availablePilotCount);
+        const srcKey = `${src.bookingId}:${src.slotIndex}`;
+        const tgtKey = `${tgt.bookingId}:${tgt.slotIndex}`;
+
+        if (srcKey === tgtKey || slotMap.get(tgt.bookingId)?.includes(tgt.slotIndex)) return;
+
+        const nextSlotMap = new Map<string, number[]>();
+        rowBookings.forEach((booking) => {
+          if (!booking.id) return;
+          const indexes = (slotMap.get(booking.id) ?? []).filter((slotIndex) => {
+            return !(booking.id === src.bookingId && slotIndex === src.slotIndex);
+          });
+          nextSlotMap.set(booking.id, indexes);
+        });
+        nextSlotMap.set(tgt.bookingId, [...(nextSlotMap.get(tgt.bookingId) ?? []), tgt.slotIndex].sort((a, b) => a - b));
+
+        try {
+          await persistOverbookedSlotMap(rowBookings, nextSlotMap);
+          if (tgtPilot) {
+            if (src.bookingId === tgt.bookingId) {
+              const newPilots = [...srcBooking.assignedPilots];
+              newPilots[src.slotIndex] = tgtPilot;
+              newPilots[tgt.slotIndex] = '';
+              const newAcknowledged = (srcBooking.acknowledgedPilots ?? []).filter(p => p !== tgtPilot);
+              await onUpdateBooking(src.bookingId, { assignedPilots: newPilots, acknowledgedPilots: newAcknowledged });
+            } else {
+              const newSrcPilots = [...srcBooking.assignedPilots];
+              const newTgtPilots = [...tgtBooking.assignedPilots];
+              newSrcPilots[src.slotIndex] = tgtPilot;
+              newTgtPilots[tgt.slotIndex] = '';
+              const newTgtAcknowledged = (tgtBooking.acknowledgedPilots ?? []).filter(p => p !== tgtPilot);
+
+              await Promise.all([
+                onUpdateBooking(src.bookingId, { assignedPilots: newSrcPilots }),
+                onUpdateBooking(tgt.bookingId, { assignedPilots: newTgtPilots, acknowledgedPilots: newTgtAcknowledged }),
+              ]);
+            }
+          }
+        } catch (error) {
+          console.error('Error moving overbooked slot:', error);
+          alert('Failed to move overbooked slot. Please try again.');
+        }
+        return;
+      }
+
+      try {
+        if (src.bookingId === tgt.bookingId) {
+          const newPilots = [...srcBooking.assignedPilots];
+          if (srcIsOverbooked && !tgtPilot) {
+            // Overbooked → empty overbooked slot: MOVE
+            newPilots[src.slotIndex] = '';
+            newPilots[tgt.slotIndex] = srcPilot;
+          } else {
+            // Normal swap (covers non-overbooked src AND overbooked→filled-overbooked)
+            newPilots[src.slotIndex] = tgtPilot;
+            newPilots[tgt.slotIndex] = srcPilot;
+          }
+          const newAcknowledged = (srcBooking.acknowledgedPilots ?? []).filter(p => p !== srcPilot && p !== tgtPilot);
+          await onUpdateBooking(src.bookingId, { assignedPilots: newPilots, acknowledgedPilots: newAcknowledged });
+        } else {
+          const newSrcPilots = [...srcBooking.assignedPilots];
+          const newTgtPilots = [...tgtBooking.assignedPilots];
+          if (srcIsOverbooked && !tgtPilot) {
+            // Overbooked → empty overbooked slot: MOVE
+            newSrcPilots[src.slotIndex] = '';
+            newTgtPilots[tgt.slotIndex] = srcPilot;
+          } else {
+            // Normal swap (covers non-overbooked src AND overbooked→filled-overbooked)
+            newSrcPilots[src.slotIndex] = tgtPilot;
+            newTgtPilots[tgt.slotIndex] = srcPilot;
+          }
+          const newSrcAcknowledged = (srcBooking.acknowledgedPilots ?? []).filter(p => p !== srcPilot);
+          const newTgtAcknowledged = (tgtBooking.acknowledgedPilots ?? []).filter(p => p !== tgtPilot);
+
+          await Promise.all([
+            onUpdateBooking(src.bookingId, { assignedPilots: newSrcPilots, acknowledgedPilots: newSrcAcknowledged }),
+            onUpdateBooking(tgt.bookingId, { assignedPilots: newTgtPilots, acknowledgedPilots: newTgtAcknowledged }),
+          ]);
+        }
+      } catch (error) {
+        console.error('Error moving pilot:', error);
+        alert('Failed to move pilot. Please try again.');
+      }
+      return;
+    }
 
     // Parse the drop target ID (format: "droppable-timeIndex-pilotIndex")
     const overIdStr = over.id as string;
@@ -2132,6 +2364,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
   return (
     <DndContext
       sensors={sensors}
+      collisionDetection={pilotAwareCollisionDetection}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
@@ -2216,14 +2449,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
             const { time: timeSlot, displayTime, originalIndex: timeIndex, isAdditional } = slotInfo;
 
             // Get all bookings for this time slot and sort by creation time (oldest first, newest last/right)
-            const bookingsAtThisTime = bookings
-              .filter(b => b.timeIndex === timeIndex)
-              .sort((a, b) => {
-                // Sort by createdAt timestamp (oldest to newest)
-                const aTime = a.createdAt?.toMillis?.() || a.createdAt?.getTime?.() || 0;
-                const bTime = b.createdAt?.toMillis?.() || b.createdAt?.getTime?.() || 0;
-                return aTime - bTime;
-              });
+            const bookingsAtThisTime = sortBookingsForRow(bookings.filter(b => b.timeIndex === timeIndex));
 
             const isBlockedBooking = (booking: Booking) => booking.isBlocked || booking.bookingSource === "Blocked";
             const regularBookingsAtThisTime = bookingsAtThisTime.filter((booking) => !isBlockedBooking(booking));
@@ -2242,6 +2468,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
             // Determine which booking positions are overbooked
             // Positions beyond available pilot count are overbooked
             const overbookedPositionStart = totalAvailablePilotsAtThisTime;
+            const overbookedSlotMap = buildOverbookedSlotMap(regularBookingsAtThisTime, totalAvailablePilotsAtThisTime);
 
             // Collect all cells for this time slot
             const cellsForRow: Array<{
@@ -2560,6 +2787,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                         bookingStatus={booking.bookingStatus === "deleted" || booking.bookingStatus === "no show" ? "confirmed" : booking.bookingStatus}
                         span={span}
                         femalePilotsRequired={booking.femalePilotsRequired}
+                        overbookedSlotIndexes={overbookedSlotMap.get(booking.id!)}
                         flightType={booking.flightType}
                         notes={booking.notes}
                         bookingSourceColor={getSourceColor(booking.bookingSource)}
@@ -2584,6 +2812,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                         isInMoveMode={moveMode.isActive && moveMode.booking?.id === booking.id}
                         isHighlighted={highlightedBookingId === booking.id}
                         hideDetails={!canViewBooking(booking)}
+                        isValidPilotDropTarget={draggedPilot !== null && draggedPilot.timeIndex === timeIndex}
                       />
                     </div>
                   );
@@ -3102,6 +3331,26 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
         <OverbookedPilotContextMenu
           isOpen={overbookedContextMenu.isOpen}
           position={overbookedContextMenu.position}
+          availablePilots={(() => {
+            const { booking, timeSlot, slotIndex } = overbookedContextMenu;
+            // All pilots assigned at this time slot across all bookings
+            const assignedNamesAtTime = new Set(
+              bookings
+                .filter(b => b.timeIndex === booking.timeIndex && b.date === booking.date)
+                .flatMap(b => b.assignedPilots.filter(p => p && p !== ""))
+            );
+            return systemPilots.filter((pilot) => {
+              // Must be signed in at this time
+              if (!isPilotAvailableForTimeSlot(pilot.uid, timeSlot)) return false;
+              // Female pilot requirement
+              if (booking.femalePilotsRequired && slotIndex < booking.femalePilotsRequired && !pilot.femalePilot) return false;
+              // Must not already be assigned anywhere at this time (except the current slot)
+              const nameToCheck = booking.assignedPilots[slotIndex];
+              const isCurrentSlot = pilot.displayName === nameToCheck;
+              if (!isCurrentSlot && assignedNamesAtTime.has(pilot.displayName)) return false;
+              return true;
+            });
+          })()}
           unavailablePilots={systemPilots.filter((pilot) => {
             // Only show pilots who are NOT signed in at this time slot
             if (isPilotAvailableForTimeSlot(pilot.uid, overbookedContextMenu.timeSlot)) {

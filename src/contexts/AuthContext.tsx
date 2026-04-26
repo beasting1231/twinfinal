@@ -8,7 +8,9 @@ import {
   onAuthStateChanged,
   updateProfile,
   GoogleAuthProvider,
-  signInWithPopup
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult
 } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { auth, db } from "../firebase/config";
@@ -80,8 +82,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if (error.code === 'auth/popup-closed-by-user') {
         console.log("Sign-in popup was closed");
       } else if (error.code === 'auth/popup-blocked') {
-        console.error("🚨 Popup was blocked - please allow popups for this site");
-        alert("Please allow popups for this site and try again.");
+        console.log("Popup blocked; falling back to redirect sign-in...");
+        await signInWithRedirect(auth, provider);
       } else if (error.code === 'auth/unauthorized-domain') {
         console.error("🚨 UNAUTHORIZED DOMAIN - Add this domain to Firebase Console > Authentication > Settings > Authorized domains");
       } else {
@@ -89,6 +91,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
     }
   }
+
+  useEffect(() => {
+    getRedirectResult(auth).catch((error) => {
+      console.error("❌ Redirect sign-in error:", error);
+    });
+  }, []);
 
   async function logout() {
     await signOut(auth);

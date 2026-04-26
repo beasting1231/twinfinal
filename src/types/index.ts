@@ -48,6 +48,7 @@ export interface Booking {
   femalePilotsRequired?: number;
   flightType?: "sensational" | "classic" | "early bird";
   assignedPilots: string[];
+  overbookedSlotIndexes?: number[];
   acknowledgedPilots?: string[]; // Pilots who have confirmed they've seen the assignment
   bookingStatus: "unconfirmed" | "confirmed" | "pending" | "cancelled" | "deleted" | "no show";
   isBlocked?: boolean; // Reserved/blocked capacity spot (not a normal customer booking)

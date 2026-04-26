@@ -5,6 +5,7 @@ import type { Pilot } from "../types/index";
 interface OverbookedPilotContextMenuProps {
   isOpen: boolean;
   position: { x: number; y: number };
+  availablePilots: Pilot[]; // Pilots who ARE signed in and unassigned at this time
   unavailablePilots: Pilot[]; // Pilots who are NOT signed in at this time
   currentPilot?: string; // Currently assigned pilot for this slot
   onSelectPilot: (pilotName: string) => void;
@@ -15,6 +16,7 @@ interface OverbookedPilotContextMenuProps {
 export function OverbookedPilotContextMenu({
   isOpen,
   position,
+  availablePilots,
   unavailablePilots,
   currentPilot,
   onSelectPilot,
@@ -164,6 +166,36 @@ export function OverbookedPilotContextMenu({
           </>
         )}
 
+        {/* Available (signed-in, unassigned) Pilots */}
+        {availablePilots.length > 0 && (
+          <>
+            <div className="border-t border-gray-300 dark:border-zinc-700 my-1" />
+            <div className="px-3 py-1 text-xs font-medium text-green-600 dark:text-green-400">
+              Available now
+            </div>
+            <div className="py-1">
+              {availablePilots.map((pilot) => {
+                const isCurrent = currentPilot === pilot.displayName;
+                return (
+                  <button
+                    key={pilot.uid}
+                    onClick={() => {
+                      onSelectPilot(pilot.displayName);
+                      onClose();
+                    }}
+                    className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2 ${
+                      isCurrent ? "text-orange-600 dark:text-orange-400" : "text-gray-900 dark:text-white"
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
+                    <span>{pilot.displayName}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+
         {/* Unavailable Pilots */}
         <div className="border-t border-gray-300 dark:border-zinc-700 my-1" />
         {unavailablePilots.length > 0 ? (
@@ -189,11 +221,11 @@ export function OverbookedPilotContextMenu({
               );
             })}
           </div>
-        ) : (
+        ) : availablePilots.length === 0 ? (
           <div className="px-3 py-2 text-sm text-gray-500 dark:text-zinc-500">
             No pilots to assign
           </div>
-        )}
+        ) : null}
       </div>
     </>
   );

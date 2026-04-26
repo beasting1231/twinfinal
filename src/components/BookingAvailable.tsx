@@ -1,7 +1,173 @@
 import { useRef, memo, useState } from "react";
 import { Info } from "lucide-react";
-import type { PilotPayment, AvailabilityStatus } from "../types/index";
+import type { Booking, PilotPayment, AvailabilityStatus } from "../types/index";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
+
+interface PilotSlotProps {
+  bookingId: string;
+  slotIndex: number;
+  pilot?: string;
+  canDrag: boolean;
+  isValidDropTarget: boolean;
+  isAcknowledged: boolean;
+  requiresFemalePilot: boolean;
+  isOverbookedPosition: boolean;
+  numAmount?: number;
+  canClickToUnassign: boolean;
+  canLongPress: boolean;
+  onPilotNameClick?: (slotIndex: number, pilotName: string, position: { x: number; y: number }) => void;
+  onPilotNameLongPress?: (pilotName: string, position: { x: number; y: number }) => void;
+}
+
+function PilotSlot({
+  bookingId,
+  slotIndex,
+  pilot,
+  canDrag,
+  isValidDropTarget,
+  isAcknowledged,
+  requiresFemalePilot,
+  isOverbookedPosition,
+  numAmount,
+  canClickToUnassign,
+  canLongPress,
+  onPilotNameClick,
+  onPilotNameLongPress,
+}: PilotSlotProps) {
+  const longPressTimerRef = useRef<number | null>(null);
+  const hasPilot = !!(pilot && pilot.trim());
+
+  const isDraggable = canDrag && (hasPilot || isOverbookedPosition);
+
+  const { attributes, listeners, setNodeRef: setDragRef, transform, isDragging } = useDraggable({
+    id: `pilot-drag-${bookingId}-${slotIndex}`,
+    disabled: !isDraggable,
+    data: { isOverbooked: isOverbookedPosition, hasPilot },
+  });
+
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
+    id: `pilot-drop-${bookingId}-${slotIndex}`,
+    // Always registered — pilotAwareCollisionDetection in ScheduleGrid filters these
+    // out during non-pilot drags so they never interfere with booking drops.
+  });
+
+  const setRef = (el: HTMLDivElement | null) => {
+    setDragRef(el);
+    setDropRef(el);
+  };
+
+  const dragStyle: React.CSSProperties = transform
+    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, opacity: isDragging ? 0.4 : 1, zIndex: isDragging ? 50 : undefined }
+    : {};
+
+  const dragListeners = isDraggable
+    ? {
+        ...attributes,
+        ...listeners,
+        onPointerDown: (e: React.PointerEvent) => {
+          e.stopPropagation(); // prevent booking drag from firing
+          listeners?.onPointerDown?.(e);
+        },
+      }
+    : {};
+
+  const handlePilotTouchStart = (e: React.TouchEvent) => {
+    if (!canLongPress) return;
+    e.stopPropagation();
+    const touch = e.touches[0];
+    longPressTimerRef.current = window.setTimeout(() => {
+      onPilotNameLongPress?.(pilot!, { x: touch.clientX, y: touch.clientY });
+    }, 500);
+  };
+
+  const handlePilotTouchEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const handlePilotContextMenu = (e: React.MouseEvent) => {
+    if (!canLongPress || !hasPilot) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onPilotNameLongPress?.(pilot!, { x: e.clientX, y: e.clientY });
+  };
+
+  const dropHighlight = isOver && isValidDropTarget ? 'ring-2 ring-blue-400 rounded-t-lg' : '';
+
+  // Empty overbooked slot — draggable so admin can move the overbooked slot itself
+  if (!hasPilot && isOverbookedPosition) {
+    return (
+      <div
+        className="flex justify-center"
+        ref={setRef}
+        style={{ ...dragStyle, cursor: canDrag ? 'grab' : undefined }}
+        {...dragListeners}
+      >
+        <div className={`text-xs text-orange-200 bg-orange-600/90 rounded-t-lg px-2 py-0.5 w-[80%] text-center ${dropHighlight}`}>
+          overbooked
+        </div>
+      </div>
+    );
+  }
+
+  // Empty lady-pilot slot
+  if (!hasPilot && requiresFemalePilot) {
+    return (
+      <div className="flex justify-center" ref={setRef}>
+        <div className={`text-xs text-white bg-red-600/90 rounded-t-lg px-2 py-0.5 w-[80%] text-center ${dropHighlight}`}>
+          lady pilot
+        </div>
+      </div>
+    );
+  }
+
+  // Truly empty slot
+  if (!hasPilot) {
+    return (
+      <div
+        className={`flex justify-center min-h-[20px] ${isOver ? 'bg-blue-500/20 rounded-t-lg' : ''}`}
+        ref={setRef}
+      />
+    );
+  }
+
+  const bgColorClass = isAcknowledged
+    ? "bg-green-600/90"
+    : isOverbookedPosition
+    ? "bg-orange-600/90"
+    : requiresFemalePilot
+    ? "bg-red-600/90"
+    : "bg-gray-700/90 dark:bg-zinc-800/90";
+
+  return (
+    <div
+      className="flex justify-center"
+      ref={setRef}
+      style={{ ...dragStyle, cursor: canDrag ? 'grab' : undefined }}
+      {...dragListeners}
+    >
+      <div
+        className={`text-xs text-white ${bgColorClass} rounded-t-lg px-2 py-0.5 w-[80%] relative ${canClickToUnassign ? 'cursor-pointer hover:opacity-80' : ''} ${dropHighlight}`}
+        onClick={(e) => {
+          if (canClickToUnassign) {
+            e.stopPropagation();
+            onPilotNameClick?.(slotIndex, pilot!, { x: e.clientX, y: e.clientY });
+          }
+        }}
+        onTouchStart={handlePilotTouchStart}
+        onTouchEnd={handlePilotTouchEnd}
+        onContextMenu={handlePilotContextMenu}
+      >
+        <div className="text-center truncate">{pilot}</div>
+        {numAmount !== undefined && numAmount !== 0 && !isNaN(numAmount) && (
+          <span className="absolute right-2 top-0.5 font-medium text-white">{numAmount}</span>
+        )}
+      </div>
+    </div>
+  );
+}
 
 interface BookingAvailableProps {
   pilotId: string;
@@ -39,8 +205,9 @@ interface BookingAvailableProps {
   draggedItemPax?: number; // Number of passengers in the currently dragged item
   hasEnoughSpace?: boolean; // Whether there's enough space at this location for the dragged item
   overbookedCount?: number; // Number of overbooked spots (if any)
+  overbookedSlotIndexes?: number[]; // Exact slot indexes marked overbooked when manually arranged
   // Move mode props (admin only)
-  onEnterMoveMode?: (booking: any) => void; // Callback to enter move mode
+  onEnterMoveMode?: (booking: Booking) => void; // Callback to enter move mode
   isInMoveMode?: boolean; // Whether this specific booking is in move mode
   isMoveModeActive?: boolean; // Whether ANY booking/request is in move mode (affects available cell styling)
   // Highlight prop (for search results)
@@ -49,6 +216,8 @@ interface BookingAvailableProps {
   hideDetails?: boolean; // Whether to hide booking details and show blank booking
   // On request booking restriction
   canBookOnRequest?: boolean; // Whether the user can book on "on request" slots (admins and pilots only)
+  // Pilot drag-and-drop
+  isValidPilotDropTarget?: boolean; // Whether pilot slots in this booking accept pilot drops
 }
 
 export const BookingAvailable = memo(function BookingAvailable({
@@ -85,12 +254,14 @@ export const BookingAvailable = memo(function BookingAvailable({
   draggedItemPax,
   hasEnoughSpace = true,
   overbookedCount = 0,
+  overbookedSlotIndexes,
   onEnterMoveMode,
   isInMoveMode = false,
   isMoveModeActive = false,
   isHighlighted = false,
   hideDetails = false,
-  canBookOnRequest = false
+  canBookOnRequest = false,
+  isValidPilotDropTarget = false,
 }: BookingAvailableProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const longPressTimerRef = useRef<number | null>(null);
@@ -131,6 +302,12 @@ export const BookingAvailable = memo(function BookingAvailable({
     return Math.max(0, Math.min(span - 1, slotIndex));
   };
 
+  const isOverbookedSlot = (slotIndex: number): boolean => {
+    return overbookedSlotIndexes
+      ? overbookedSlotIndexes.includes(slotIndex)
+      : slotIndex >= (span - overbookedCount);
+  };
+
   // Handle right-click (desktop)
   const handleContextMenu = (e: React.MouseEvent) => {
     if (status !== "booked") return;
@@ -142,7 +319,7 @@ export const BookingAvailable = memo(function BookingAvailable({
     const slotIndex = getSlotIndexFromPosition(e.clientX);
 
     // Check if this position is overbooked
-    const isOverbookedPosition = slotIndex >= (span - overbookedCount);
+    const isOverbookedPosition = isOverbookedSlot(slotIndex);
 
     // If overbooked and handler exists, use overbooked context menu
     if (isOverbookedPosition && onOverbookedClick) {
@@ -172,7 +349,7 @@ export const BookingAvailable = memo(function BookingAvailable({
         const slotIndex = getSlotIndexFromPosition(touchStartPosRef.current.x);
 
         // Check if this position is overbooked
-        const isOverbookedPosition = slotIndex >= (span - overbookedCount);
+        const isOverbookedPosition = isOverbookedSlot(slotIndex);
 
         // If overbooked and handler exists, use overbooked context menu
         if (isOverbookedPosition && onOverbookedClick) {
@@ -200,7 +377,7 @@ export const BookingAvailable = memo(function BookingAvailable({
             id: bookingId,
             customerName,
             pickupLocation,
-            bookingSource,
+            bookingSource: bookingSource ?? "",
             assignedPilots,
             pilotPayments,
             bookingStatus,
@@ -420,127 +597,35 @@ export const BookingAvailable = memo(function BookingAvailable({
 
             {/* Pilot badges grid - includes assigned pilots and overbooked indicators */}
             <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${span}, 1fr)` }}>
-          {Array.from({ length: span }, (_, index) => {
-            const pilot = assignedPilots[index];
+              {Array.from({ length: span }, (_, index) => {
+                const pilot = assignedPilots[index];
+                const payment = pilotPayments?.find(p => p.pilotName === pilot);
+                const amount = payment?.amount;
+                const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+                const requiresFemalePilot = index < femalePilotsRequired;
+                const isOverbookedPosition = isOverbookedSlot(index);
+                const isOwnName = !!(currentUserDisplayName && pilot === currentUserDisplayName);
+                const isAcknowledged = pilot ? acknowledgedPilots.includes(pilot) : false;
 
-            // Find payment amount for this pilot
-            const payment = pilotPayments?.find(p => p.pilotName === pilot);
-            const amount = payment?.amount;
-            // Convert to number if it's a string
-            const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
-
-            // Check if this position requires a female pilot
-            const requiresFemalePilot = index < femalePilotsRequired;
-
-            // Check if this position is overbooked (past the normal capacity)
-            const isOverbookedPosition = index >= (span - overbookedCount);
-
-            // Show orange "overbooked" box for overbooked positions without assigned pilot
-            if ((!pilot || pilot === "") && isOverbookedPosition) {
-              return (
-                <div key={index} className="flex justify-center">
-                  <div className="text-xs text-orange-200 bg-orange-600/90 rounded-t-lg px-2 py-0.5 w-[80%] text-center">
-                    overbooked
-                  </div>
-                </div>
-              );
-            }
-
-            // Show red box with "lady pilot" text for unassigned positions that require female pilot
-            if (!pilot || pilot === "") {
-              if (requiresFemalePilot) {
                 return (
-                  <div key={index} className="flex justify-center">
-                    <div className="text-xs text-white bg-red-600/90 rounded-t-lg px-2 py-0.5 w-[80%] text-center">
-                      lady pilot
-                    </div>
-                  </div>
+                  <PilotSlot
+                    key={index}
+                    bookingId={bookingId!}
+                    slotIndex={index}
+                    pilot={pilot}
+                    canDrag={canDrag && !!bookingId}
+                    isValidDropTarget={isValidPilotDropTarget && !!bookingId}
+                    isAcknowledged={isAcknowledged}
+                    requiresFemalePilot={requiresFemalePilot}
+                    isOverbookedPosition={isOverbookedPosition}
+                    numAmount={numAmount}
+                    canClickToUnassign={isOwnName && !!onPilotNameClick}
+                    canLongPress={isOwnName && !!onPilotNameLongPress}
+                    onPilotNameClick={onPilotNameClick}
+                    onPilotNameLongPress={onPilotNameLongPress}
+                  />
                 );
-              }
-              return <div key={index} className="flex justify-center" />;
-            }
-
-            // Check if this is the current user's name (pilot can only unassign themselves)
-            const isOwnName = currentUserDisplayName && pilot === currentUserDisplayName;
-            const canClickToUnassign = isOwnName && onPilotNameClick;
-            const isAcknowledged = acknowledgedPilots.includes(pilot);
-            const canLongPress = isOwnName && onPilotNameLongPress;
-
-            // Long-press timer variable (using closure instead of ref to avoid hook in loop)
-            let pilotLongPressTimer: number | null = null;
-
-            const handlePilotTouchStart = (e: React.TouchEvent) => {
-              if (!canLongPress) return;
-              e.stopPropagation();
-              const touch = e.touches[0];
-              pilotLongPressTimer = window.setTimeout(() => {
-                onPilotNameLongPress(pilot, { x: touch.clientX, y: touch.clientY });
-              }, 500);
-            };
-
-            const handlePilotTouchEnd = () => {
-              if (pilotLongPressTimer) {
-                clearTimeout(pilotLongPressTimer);
-                pilotLongPressTimer = null;
-              }
-            };
-
-            const handlePilotContextMenu = (e: React.MouseEvent) => {
-              if (!canLongPress) return;
-              e.preventDefault();
-              e.stopPropagation();
-              onPilotNameLongPress(pilot, { x: e.clientX, y: e.clientY });
-            };
-
-            // Determine background color: green if acknowledged, otherwise original colors
-            const bgColorClass = isAcknowledged
-              ? "bg-green-600/90"
-              : requiresFemalePilot
-              ? "bg-red-600/90"
-              : "bg-gray-700/90 dark:bg-zinc-800/90";
-
-            // For overbooked positions with assigned pilots, show with orange or green background
-            if (isOverbookedPosition) {
-              return (
-                <div key={index} className="flex justify-center">
-                  <div
-                    className={`text-xs text-white ${isAcknowledged ? "bg-green-600/90" : "bg-orange-600/90"} rounded-t-lg px-2 py-0.5 w-[80%] relative`}
-                    onTouchStart={handlePilotTouchStart}
-                    onTouchEnd={handlePilotTouchEnd}
-                    onContextMenu={handlePilotContextMenu}
-                  >
-                    <div className="text-center truncate">{pilot}</div>
-                    {numAmount !== undefined && numAmount !== 0 && !isNaN(numAmount) && (
-                      <span className="absolute right-2 top-0.5 font-medium text-white">{numAmount}</span>
-                    )}
-                  </div>
-                </div>
-              );
-            }
-
-            // Regular assigned pilot (not overbooked)
-            return (
-              <div key={index} className="flex justify-center">
-                <div
-                  className={`text-xs text-white ${bgColorClass} rounded-t-lg px-2 py-0.5 w-[80%] relative ${canClickToUnassign ? 'cursor-pointer hover:opacity-80' : ''}`}
-                  onClick={(e) => {
-                    if (canClickToUnassign) {
-                      e.stopPropagation(); // Prevent triggering onBookedClick
-                      onPilotNameClick(index, pilot, { x: e.clientX, y: e.clientY });
-                    }
-                  }}
-                  onTouchStart={handlePilotTouchStart}
-                  onTouchEnd={handlePilotTouchEnd}
-                  onContextMenu={handlePilotContextMenu}
-                >
-                  <div className="text-center truncate">{pilot}</div>
-                  {numAmount !== undefined && numAmount !== 0 && !isNaN(numAmount) && (
-                    <span className="absolute right-2 top-0.5 font-medium text-white">{numAmount}</span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+              })}
             </div>
           </>
         )}
