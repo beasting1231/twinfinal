@@ -65,6 +65,7 @@ export function BookingDetailsModal({
     }
   }, [open, isEditing, startEditing, stopEditing]);
   const [pilotPayments, setPilotPayments] = useState<PilotPayment[]>([]);
+  const [manuallyEditedPaymentFields, setManuallyEditedPaymentFields] = useState<Set<string>>(new Set());
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [editedDateAvailability, setEditedDateAvailability] = useState<Map<string, Set<string>>>(new Map());
   const [editedDatePilots, setEditedDatePilots] = useState<Pilot[]>([]);
@@ -762,6 +763,7 @@ export function BookingDetailsModal({
   // Initialize pilot payments when booking changes
   useEffect(() => {
     if (booking) {
+      setManuallyEditedPaymentFields(new Set());
       // If booking has existing payment data, use it
       if (booking.pilotPayments && booking.pilotPayments.length > 0) {
         setPilotPayments(booking.pilotPayments);
@@ -1053,6 +1055,10 @@ export function BookingDetailsModal({
   };
 
   const handlePaymentUpdate = (pilotName: string, field: keyof PilotPayment, value: any) => {
+    if (field === 'paymentMethod' || field === 'amount') {
+      setManuallyEditedPaymentFields(prev => new Set(prev).add(`${pilotName}:${field}`));
+    }
+
     setPilotPayments(prev =>
       prev.map(payment => {
         if (payment.pilotName === pilotName) {
@@ -1069,6 +1075,75 @@ export function BookingDetailsModal({
         return payment;
       })
     );
+  };
+
+  const getReceiptSourceId = (file: ReceiptFile) => {
+    return file.sourceReceiptId || file.url || file.data || `${file.uploadedByPilotName || file.joinedFromPilotName || ""}:${file.filename}`;
+  };
+
+  const preparePaymentsForFirestore = (payments: PilotPayment[]) => JSON.parse(JSON.stringify(payments.map(payment => ({
+    pilotName: payment.pilotName,
+    amount: typeof payment.amount === 'string'
+      ? (payment.amount === '' || payment.amount === '-' ? 0 : parseFloat(payment.amount))
+      : payment.amount,
+    paymentMethod: payment.paymentMethod,
+    receiptFiles: payment.receiptFiles || []
+  }))));
+
+  const isDefaultInitialPayment = (payment: PilotPayment) => {
+    return payment.paymentMethod === 'direkt' && (payment.amount === '' || payment.amount === 0);
+  };
+
+  const handleJoinTicket = async (pilotName: string, sourcePilotName: string, sourceFile: ReceiptFile) => {
+    if (!booking?.id || !onUpdate) {
+      alert("Cannot join receipt: Booking ID not found");
+      return;
+    }
+
+    const canJoinForPilot = role === 'admin' || currentUser?.displayName === pilotName;
+    if (!canJoinForPilot) {
+      alert("You can only join receipts for your own payment section.");
+      return;
+    }
+
+    const sourceReceiptId = getReceiptSourceId(sourceFile);
+    const sourcePayment = pilotPayments.find(payment => payment.pilotName === sourcePilotName);
+    const joinedReceipt: ReceiptFile = {
+      ...sourceFile,
+      uploadedByPilotName: sourceFile.uploadedByPilotName || sourcePilotName,
+      joinedFromPilotName: sourcePilotName,
+      sourceReceiptId
+    };
+
+    try {
+      const updatedPayments = pilotPayments.map(payment => {
+        if (payment.pilotName !== pilotName) return payment;
+
+        const alreadyJoined = (payment.receiptFiles || []).some(file => getReceiptSourceId(file) === sourceReceiptId);
+        if (alreadyJoined) return payment;
+
+        const hasEditedMethod = manuallyEditedPaymentFields.has(`${pilotName}:paymentMethod`);
+        const hasEditedAmount = manuallyEditedPaymentFields.has(`${pilotName}:amount`);
+        const shouldCopyDefaults = isDefaultInitialPayment(payment);
+
+        return {
+          ...payment,
+          paymentMethod: sourcePayment && !hasEditedMethod && shouldCopyDefaults
+            ? sourcePayment.paymentMethod
+            : payment.paymentMethod,
+          amount: sourcePayment && !hasEditedAmount && shouldCopyDefaults
+            ? sourcePayment.amount
+            : payment.amount,
+          receiptFiles: [...(payment.receiptFiles || []), joinedReceipt]
+        };
+      });
+
+      await onUpdate(booking.id, { pilotPayments: preparePaymentsForFirestore(updatedPayments) });
+      setPilotPayments(updatedPayments);
+    } catch (error) {
+      console.error("Error joining receipt:", error);
+      alert("Failed to join receipt. Please try again.");
+    }
   };
 
   const handleImageUpload = async (pilotName: string, file: File) => {
@@ -1095,7 +1170,9 @@ export function BookingDetailsModal({
       // Create receipt file object with URL
       const receiptFile: ReceiptFile = {
         url: downloadURL,
-        filename: file.name
+        filename: file.name,
+        uploadedByPilotName: pilotName,
+        sourceReceiptId: downloadURL
       };
 
       // Update pilot payments with new receipt
@@ -1105,18 +1182,8 @@ export function BookingDetailsModal({
           : payment
       );
 
-      // Convert to Firestore-compatible format
-      const firestoreCompatiblePayments = JSON.parse(JSON.stringify(updatedPayments.map(payment => ({
-        pilotName: payment.pilotName,
-        amount: typeof payment.amount === 'string'
-          ? (payment.amount === '' || payment.amount === '-' ? 0 : parseFloat(payment.amount))
-          : payment.amount,
-        paymentMethod: payment.paymentMethod,
-        receiptFiles: payment.receiptFiles || []
-      }))));
-
       // Save to database immediately
-      await onUpdate(booking.id, { pilotPayments: firestoreCompatiblePayments });
+      await onUpdate(booking.id, { pilotPayments: preparePaymentsForFirestore(updatedPayments) });
 
       // Update local state
       setPilotPayments(updatedPayments);
@@ -1146,25 +1213,29 @@ export function BookingDetailsModal({
     }
 
     try {
-      // Update pilot payments with receipt removed
-      const updatedPayments = pilotPayments.map(payment =>
-        payment.pilotName === pilotName
-          ? { ...payment, receiptFiles: payment.receiptFiles?.filter((_, i) => i !== index) }
-          : payment
-      );
+      const targetPayment = pilotPayments.find(payment => payment.pilotName === pilotName);
+      const targetFile = targetPayment?.receiptFiles?.[index];
+      const targetReceiptId = targetFile ? getReceiptSourceId(targetFile) : null;
 
-      // Convert to Firestore-compatible format
-      const firestoreCompatiblePayments = JSON.parse(JSON.stringify(updatedPayments.map(payment => ({
-        pilotName: payment.pilotName,
-        amount: typeof payment.amount === 'string'
-          ? (payment.amount === '' || payment.amount === '-' ? 0 : parseFloat(payment.amount))
-          : payment.amount,
-        paymentMethod: payment.paymentMethod,
-        receiptFiles: payment.receiptFiles || []
-      }))));
+      // Removing an original uploaded receipt also removes joined links to it.
+      // Removing a joined receipt only leaves that pilot's section.
+      const updatedPayments = pilotPayments.map(payment => {
+        if (payment.pilotName === pilotName) {
+          return { ...payment, receiptFiles: payment.receiptFiles?.filter((_, i) => i !== index) };
+        }
+
+        if (targetFile?.joinedFromPilotName || !targetReceiptId) {
+          return payment;
+        }
+
+        return {
+          ...payment,
+          receiptFiles: payment.receiptFiles?.filter(file => getReceiptSourceId(file) !== targetReceiptId)
+        };
+      });
 
       // Save to database immediately
-      await onUpdate(booking.id, { pilotPayments: firestoreCompatiblePayments });
+      await onUpdate(booking.id, { pilotPayments: preparePaymentsForFirestore(updatedPayments) });
 
       // Update local state
       setPilotPayments(updatedPayments);
@@ -1180,18 +1251,7 @@ export function BookingDetailsModal({
       try {
         console.log("Saving payment details:", pilotPayments);
 
-        // Convert to Firestore-compatible format using deep clone
-        // This ensures all nested objects are plain JavaScript objects
-        const firestoreCompatiblePayments = JSON.parse(JSON.stringify(pilotPayments.map(payment => ({
-          pilotName: payment.pilotName,
-          amount: typeof payment.amount === 'string'
-            ? (payment.amount === '' || payment.amount === '-' ? 0 : parseFloat(payment.amount))
-            : payment.amount,
-          paymentMethod: payment.paymentMethod,
-          receiptFiles: payment.receiptFiles || []
-        }))));
-
-        await onUpdate(booking.id, { pilotPayments: firestoreCompatiblePayments });
+        await onUpdate(booking.id, { pilotPayments: preparePaymentsForFirestore(pilotPayments) });
         onOpenChange(false);
       } catch (error) {
         console.error("Error saving payment details:", error);
@@ -2146,6 +2206,11 @@ export function BookingDetailsModal({
               <>
                 {sortedPilotPayments.map((payment, index) => {
                   const isCurrentUser = payment.pilotName === currentUser?.displayName;
+                  const currentUserPayment = currentUser?.displayName
+                    ? pilotPayments.find(pilotPayment => pilotPayment.pilotName === currentUser.displayName)
+                    : null;
+                  const currentPilotName = currentUserPayment?.pilotName;
+                  const currentUserReceiptIds = new Set((currentUserPayment?.receiptFiles || []).map(getReceiptSourceId));
                   return (<div
                     key={payment.pilotName}
                     className={`border rounded-lg p-4 space-y-4 ${
@@ -2315,15 +2380,43 @@ export function BookingDetailsModal({
                         {/* Receipt Files List */}
                         {payment.receiptFiles && payment.receiptFiles.length > 0 && (
                           <div className="space-y-2 mt-3">
-                            {payment.receiptFiles.map((file, fileIndex) => (
+                            {payment.receiptFiles.map((file, fileIndex) => {
+                              const canJoinThisReceipt = Boolean(
+                                canEditPaymentDetails &&
+                                currentUserPayment &&
+                                currentPilotName &&
+                                payment.pilotName !== currentPilotName &&
+                                !file.joinedFromPilotName &&
+                                (file.url || file.data) &&
+                                !currentUserReceiptIds.has(getReceiptSourceId(file))
+                              );
+
+                              return (
                               <div
                                 key={fileIndex}
-                                className="flex items-center justify-between bg-gray-100 dark:bg-zinc-800 rounded-lg p-3 border border-gray-300 dark:border-zinc-700"
+                                className="flex items-center justify-between gap-3 bg-gray-100 dark:bg-zinc-800 rounded-lg p-3 border border-gray-300 dark:border-zinc-700"
                               >
-                                <span className="text-gray-900 dark:text-white text-sm truncate flex-1 mr-3">
-                                  {file.filename}
-                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <span className="block text-gray-900 dark:text-white text-sm truncate">
+                                    {file.filename}
+                                  </span>
+                                  {file.joinedFromPilotName && (
+                                    <span className="inline-flex mt-1 text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded">
+                                      Joined {file.joinedFromPilotName}'s receipt
+                                    </span>
+                                  )}
+                                </div>
                                 <div className="flex gap-2">
+                                  {canJoinThisReceipt && currentPilotName && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleJoinTicket(currentPilotName, payment.pilotName, file)}
+                                      className="px-3 py-2 rounded-lg bg-gray-900 dark:bg-white text-white dark:text-black text-sm font-medium hover:bg-gray-700 dark:hover:bg-zinc-200 transition-colors"
+                                      title="Join this receipt"
+                                    >
+                                      Join this receipt
+                                    </button>
+                                  )}
                                   <button
                                     type="button"
                                     onClick={() => setPreviewImage(file.url || file.data || "")}
@@ -2345,7 +2438,8 @@ export function BookingDetailsModal({
                                   )}
                                 </div>
                               </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         )}
                       </div>

@@ -2,6 +2,9 @@ export interface ReceiptFile {
   data?: string; // base64 encoded image (legacy)
   url?: string; // Firebase Storage URL
   filename: string;
+  uploadedByPilotName?: string;
+  joinedFromPilotName?: string;
+  sourceReceiptId?: string;
 }
 
 export interface PilotPayment {
