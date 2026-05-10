@@ -106,6 +106,15 @@ export interface DriverAssignment {
   vehicle?: string;
   driver2?: string;
   vehicle2?: string;
+  secondDriverColumnVisible?: boolean;
+  secondDriverPilots?: string[];
+}
+
+export interface DeskAssignment {
+  id?: string;
+  date: string; // ISO date string (YYYY-MM-DD)
+  timeIndex: number;
+  desk?: string | null;
 }
 
 export interface DriverLocation {

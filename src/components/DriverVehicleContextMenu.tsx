@@ -8,6 +8,7 @@ interface DriverVehicleContextMenuProps {
   onClearColumn: () => void;
   onAddSecondDriver?: () => void;
   onDeleteSecondDriver?: () => void;
+  onSelectPilots?: () => void;
   onClose: () => void;
 }
 
@@ -19,6 +20,7 @@ export function DriverVehicleContextMenu({
   onClearColumn,
   onAddSecondDriver,
   onDeleteSecondDriver,
+  onSelectPilots,
   onClose,
 }: DriverVehicleContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -139,6 +141,17 @@ export function DriverVehicleContextMenu({
           className="w-full px-4 py-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
         >
           Add second driver
+        </button>
+      )}
+      {onSelectPilots && (
+        <button
+          onClick={() => {
+            onSelectPilots();
+            onClose();
+          }}
+          className="w-full px-4 py-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
+        >
+          Select pilots
         </button>
       )}
       {onDeleteSecondDriver && (

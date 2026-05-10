@@ -9,6 +9,8 @@ import { AvailabilityContextMenu } from "./AvailabilityContextMenu";
 import { DriverVehicleCell } from "./DriverVehicleCell";
 import { DriverVehicleModal } from "./DriverVehicleModal";
 import { DriverVehicleContextMenu } from "./DriverVehicleContextMenu";
+import { DeskAssignmentCell } from "./DeskAssignmentCell";
+import { DeskAssignmentModal } from "./DeskAssignmentModal";
 import { DailyNoteSection } from "./DailyNoteSection";
 import { ScheduleBookingRequestContextMenu } from "./ScheduleBookingRequestContextMenu";
 import { BookingRequestItem } from "./BookingRequestItem";
@@ -30,6 +32,7 @@ import { BlockedSpotContextMenu } from "./BlockedSpotContextMenu";
 import { WaitlistBookingTimeModal } from "./WaitlistBookingTimeModal";
 import { useBookingSourceColors } from "../hooks/useBookingSourceColors";
 import { useDriverAssignments } from "../hooks/useDriverAssignments";
+import { useDeskAssignments } from "../hooks/useDeskAssignments";
 import { useBookingRequests } from "../hooks/useBookingRequests";
 import { useAllPilots } from "../hooks/useAllPilots";
 import { useAuth } from "../contexts/AuthContext";
@@ -229,6 +232,13 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     updateDriverAssignment,
     addDriverAssignment
   } = useDriverAssignments(dateString);
+  const {
+    deskAssignments,
+    findDeskAssignment,
+    updateDeskAssignment,
+    saveDeskAssignment,
+    addDeskAssignment
+  } = useDeskAssignments(dateString, role === "admin");
 
   // Fetch booking requests
   const { bookingRequests, updateBookingRequest, deleteBookingRequest, addBookingRequest } = useBookingRequests();
@@ -395,12 +405,24 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     timeIndex: number;
     driverColumn: 1 | 2;
   } | null>(null);
+  const [secondDriverPilotSelectionMode, setSecondDriverPilotSelectionMode] = useState(false);
 
-  // Second driver column visibility state
-  const [showSecondDriverColumn, setShowSecondDriverColumn] = useState(() => {
-    const saved = localStorage.getItem('showSecondDriverColumn');
-    return saved === 'true';
-  });
+  // Desk modal state (admin only)
+  const [isDeskModalOpen, setIsDeskModalOpen] = useState(false);
+  const [selectedDeskTimeIndex, setSelectedDeskTimeIndex] = useState<number>(0);
+
+  // Desk context menu state (admin only)
+  const [deskContextMenu, setDeskContextMenu] = useState<{
+    isOpen: boolean;
+    position: { x: number; y: number };
+    timeIndex: number;
+  } | null>(null);
+
+  const showSecondDriverColumn = useMemo(() => {
+    return driverAssignments.some((assignment) =>
+      assignment.secondDriverColumnVisible || Boolean(assignment.driver2?.trim()) || Boolean(assignment.vehicle2?.trim())
+    );
+  }, [driverAssignments]);
 
   // Drag and drop state - track active drag for validation and multi-column highlighting
   const [draggedBooking, setDraggedBooking] = useState<Booking | null>(null);
@@ -695,11 +717,6 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
 
     return availableSpace >= requiredPax;
   }, [bookings, pilots, timeSlots, selectedDate, isPilotAvailableForTimeSlot]);
-
-  // Save second driver column visibility to localStorage
-  useEffect(() => {
-    localStorage.setItem('showSecondDriverColumn', String(showSecondDriverColumn));
-  }, [showSecondDriverColumn]);
 
   // Zoom state
   const [scale, setScale] = useState(1);
@@ -1185,6 +1202,83 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     });
   };
 
+  const handleDeskCellClick = useCallback((timeIndex: number) => {
+    if (role !== "admin") return;
+    setSelectedDeskTimeIndex(timeIndex);
+    setIsDeskModalOpen(true);
+  }, [role]);
+
+  const handleDeskContextMenu = (timeIndex: number) => (
+    position: { x: number; y: number }
+  ) => {
+    if (role !== "admin") return;
+    setDeskContextMenu({
+      isOpen: true,
+      position,
+      timeIndex,
+    });
+  };
+
+  const handleDeleteDesk = async () => {
+    if (!deskContextMenu || role !== "admin") return;
+
+    const assignment = findDeskAssignment(dateString, deskContextMenu.timeIndex);
+    if (assignment?.id) {
+      await updateDeskAssignment(assignment.id, { desk: null });
+    }
+    setDeskContextMenu(null);
+  };
+
+  const handleFillDesk = async () => {
+    if (!deskContextMenu || role !== "admin") return;
+
+    const assignment = findDeskAssignment(dateString, deskContextMenu.timeIndex);
+    const desk = assignment?.desk?.trim();
+    if (!desk) {
+      setDeskContextMenu(null);
+      return;
+    }
+
+    for (let i = 0; i < timeSlots.length; i++) {
+      const existingAssignment = findDeskAssignment(dateString, i);
+      if (existingAssignment?.id) {
+        if (!existingAssignment.desk) {
+          await updateDeskAssignment(existingAssignment.id, { desk });
+        }
+      } else {
+        await addDeskAssignment({
+          date: dateString,
+          timeIndex: i,
+          desk,
+        });
+      }
+    }
+
+    setDeskContextMenu(null);
+  };
+
+  const handleClearDeskColumn = async () => {
+    if (role !== "admin") return;
+
+    for (const assignment of deskAssignments) {
+      if (assignment.id && assignment.desk) {
+        await updateDeskAssignment(assignment.id, { desk: null });
+      }
+    }
+
+    setDeskContextMenu(null);
+  };
+
+  const handleSaveDesk = async (desk: string) => {
+    if (role !== "admin") return;
+
+    await saveDeskAssignment({
+      date: dateString,
+      timeIndex: selectedDeskTimeIndex,
+      desk: desk.trim() || null,
+    });
+  };
+
   // Handle delete driver/vehicle
   const handleDeleteDriverVehicle = async () => {
     if (!driverVehicleContextMenu) return;
@@ -1293,25 +1387,77 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
   };
 
   // Handle add second driver
-  const handleAddSecondDriver = () => {
-    setShowSecondDriverColumn(true);
+  const handleAddSecondDriver = async () => {
+    if (!driverVehicleContextMenu) return;
+
+    const existingAssignment = findAssignment(dateString, driverVehicleContextMenu.timeIndex);
+    if (existingAssignment?.id) {
+      await updateDriverAssignment(existingAssignment.id, {
+        secondDriverColumnVisible: true,
+      });
+    } else {
+      await addDriverAssignment({
+        date: dateString,
+        timeIndex: driverVehicleContextMenu.timeIndex,
+        secondDriverColumnVisible: true,
+      });
+    }
     setDriverVehicleContextMenu(null);
+  };
+
+  const handleSelectSecondDriverPilots = async () => {
+    if (!driverVehicleContextMenu || !canManageDrivers()) return;
+
+    setSecondDriverPilotSelectionMode(true);
+    setDriverVehicleContextMenu(null);
+  };
+
+  const handleDoneSelectingSecondDriverPilots = () => {
+    setSecondDriverPilotSelectionMode(false);
+  };
+
+  const handleToggleSecondDriverPilot = async (timeIndex: number, pilotName: string) => {
+    if (!canManageDrivers()) return;
+    if (!secondDriverPilotSelectionMode) return;
+
+    const assignment = findAssignment(dateString, timeIndex);
+    const currentPilots = assignment?.secondDriverPilots || [];
+    const updatedPilots = currentPilots.includes(pilotName)
+      ? currentPilots.filter((name) => name !== pilotName)
+      : [...currentPilots, pilotName];
+
+    if (assignment?.id) {
+      await updateDriverAssignment(assignment.id, {
+        secondDriverColumnVisible: true,
+        secondDriverPilots: updatedPilots,
+      });
+    } else {
+      await addDriverAssignment({
+        date: dateString,
+        timeIndex,
+        secondDriverColumnVisible: true,
+        secondDriverPilots: updatedPilots,
+      });
+    }
   };
 
   // Handle delete second driver - hide column and clear all driver2/vehicle2 data
   const handleDeleteSecondDriver = async () => {
-    // Clear driver2/vehicle2 from all driver assignments
+    // Clear driver2/vehicle2 from all driver assignments and hide the shared column marker.
     for (const assignment of driverAssignments) {
-      if (assignment.id && (assignment.driver2 || assignment.vehicle2)) {
+      if (assignment.id && (assignment.driver2 || assignment.vehicle2 || assignment.secondDriverColumnVisible)) {
         await updateDriverAssignment(assignment.id, {
           driver2: "",
           vehicle2: "",
+          secondDriverColumnVisible: false,
+          secondDriverPilots: [],
         });
       }
     }
 
-    // Hide the second driver column
-    setShowSecondDriverColumn(false);
+    if (secondDriverPilotSelectionMode) {
+      setSecondDriverPilotSelectionMode(false);
+    }
     setDriverVehicleContextMenu(null);
   };
 
@@ -1384,12 +1530,17 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     });
   };
 
-  const handleOpenCopyBooking = () => {
-    if (!contextMenu || role !== "admin") return;
+  const handleOpenCopyBooking = (bookingOverride?: Booking) => {
+    if (role !== "admin") return;
+    const bookingToCopy = bookingOverride ?? contextMenu?.booking;
+    if (!bookingToCopy) return;
+
     setCopyBookingModal({
       isOpen: true,
-      booking: contextMenu.booking,
+      booking: bookingToCopy,
     });
+    setContextMenu(null);
+    setOverbookedContextMenu(null);
   };
 
   const handleCopyBookingConfirm = ({ date, timeIndex }: { date: string; timeIndex: number }) => {
@@ -2321,7 +2472,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     return (
       <div className="flex-1 overflow-auto p-4 bg-gray-50 dark:bg-zinc-950">
         <div className="inline-block">
-          <div className="grid gap-2" style={{ gridTemplateColumns: `${TIME_COLUMN_WIDTH}px repeat(5, 160px) 48px 98px 98px` }}>
+          <div className="grid gap-2" style={{ gridTemplateColumns: `${TIME_COLUMN_WIDTH}px repeat(5, 160px) 48px 98px 98px${role === 'admin' ? ' 98px' : ''}` }}>
             {/* Header Row Skeleton */}
             <div className="h-7" />
             <div className="h-7 bg-gray-200 dark:bg-zinc-900 rounded-lg animate-pulse" />
@@ -2334,6 +2485,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
             {/* Driver headers */}
             <div className="h-7 bg-yellow-400/80 rounded-lg animate-pulse" />
             <div className="h-7 bg-yellow-400/80 rounded-lg animate-pulse" />
+            {role === 'admin' && <div className="h-7 bg-blue-500/85 rounded-lg animate-pulse" />}
 
             {/* Time Slot Rows Skeleton */}
             {timeSlots.map((_timeSlot, index) => (
@@ -2351,6 +2503,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                 {/* Driver cells */}
                 <div className="h-20 bg-gray-100 dark:bg-zinc-800 rounded-lg animate-pulse" />
                 <div className="h-20 bg-gray-100 dark:bg-zinc-800 rounded-lg animate-pulse" />
+                {role === 'admin' && <div className="h-20 bg-gray-100 dark:bg-zinc-800 rounded-lg animate-pulse" />}
               </div>
             ))}
           </div>
@@ -2375,13 +2528,24 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
+      {secondDriverPilotSelectionMode && (
+        <div className="fixed top-20 left-1/2 z-50 -translate-x-1/2 pointer-events-none">
+          <button
+            type="button"
+            onClick={handleDoneSelectingSecondDriverPilots}
+            className="pointer-events-auto rounded-full border border-sky-300/70 bg-sky-500/95 px-7 py-2.5 text-sm font-semibold text-white shadow-[0_0_24px_rgba(56,189,248,0.7),0_12px_32px_rgba(14,116,144,0.35)] ring-1 ring-sky-100/40 backdrop-blur transition hover:bg-sky-400 hover:shadow-[0_0_32px_rgba(56,189,248,0.85),0_12px_34px_rgba(14,116,144,0.4)] active:scale-[0.98]"
+          >
+            Done
+          </button>
+        </div>
+      )}
       <div
         ref={gridRef}
         className={`inline-block origin-top-left ${!isPinching ? 'transition-transform duration-100' : ''}`}
         style={{ transform: `scale(${scale})` }}
       >
         <div className="flex gap-4">
-        <div className="grid gap-2" style={{ gridTemplateColumns: `${TIME_COLUMN_WIDTH}px repeat(${maxColumnsNeeded}, 160px) 48px 98px${showSecondDriverColumn ? ' 98px' : ''}` }}>
+        <div className="grid gap-2" style={{ gridTemplateColumns: `${TIME_COLUMN_WIDTH}px repeat(${maxColumnsNeeded}, 160px) 48px 98px${showSecondDriverColumn ? ' 98px' : ''}${role === 'admin' ? ' 98px' : ''}` }}>
           {/* Header Row - Shows pilots present today */}
           {role !== 'agency' ? (
             <div data-sticky-column="true" className={`h-7 ${scale === 1 ? 'sticky left-0' : ''} z-10 relative`}>
@@ -2441,6 +2605,11 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
           {showSecondDriverColumn && (
             <div className="h-7 flex items-center justify-center bg-yellow-400/80 rounded-lg font-medium text-sm text-gray-900 dark:text-zinc-900">
               Driver 2
+            </div>
+          )}
+          {role === 'admin' && (
+            <div className="h-7 flex items-center justify-center bg-blue-500/85 rounded-lg font-medium text-sm text-white">
+              Desk
             </div>
           )}
 
@@ -2751,6 +2920,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                   if (cell.status === "booked" && cell.booking) {
                     const booking = cell.booking;
                     const span = booking.numberOfPeople || booking.span || 1;
+                    const secondDriverAssignment = findAssignment(dateString, timeIndex);
+                    const secondDriverPilots = secondDriverAssignment?.secondDriverPilots || [];
 
                     // Calculate how many positions in THIS booking are overbooked
                     // based on cumulative position across all bookings
@@ -2791,13 +2962,13 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                         flightType={booking.flightType}
                         notes={booking.notes}
                         bookingSourceColor={getSourceColor(booking.bookingSource)}
-                        onBookedClick={canViewBooking(booking) ? () => handleBookedCellClick(booking) : undefined}
+                        onBookedClick={!secondDriverPilotSelectionMode && canViewBooking(booking) ? () => handleBookedCellClick(booking) : undefined}
                         onContextMenu={canViewBooking(booking) && (canManagePilots() || role === "pilot") ? handleBookingContextMenu(booking, timeSlot) : undefined}
                         onPilotNameClick={role === "pilot" ? handlePilotNameClick(booking, timeSlot) : undefined}
                         onPilotNameLongPress={(role === "pilot" || role === "admin") ? handlePilotNameLongPress(booking) : undefined}
                         currentUserDisplayName={currentUserDisplayName}
                         bookingId={booking.id}
-                        canDrag={isDragEnabled}
+                        canDrag={isDragEnabled && !secondDriverPilotSelectionMode}
                         overbookedCount={overbookedCount}
                         onOverbookedClick={role === 'admin' ? (slotIndex: number, position: { x: number; y: number }) => {
                           setOverbookedContextMenu({
@@ -2813,6 +2984,9 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                         isHighlighted={highlightedBookingId === booking.id}
                         hideDetails={!canViewBooking(booking)}
                         isValidPilotDropTarget={draggedPilot !== null && draggedPilot.timeIndex === timeIndex}
+                        secondDriverPilots={secondDriverPilots}
+                        isSecondDriverPilotSelectionMode={secondDriverPilotSelectionMode}
+                        onSecondDriverPilotToggle={(pilotName) => handleToggleSecondDriverPilot(timeIndex, pilotName)}
                       />
                     </div>
                   );
@@ -2948,6 +3122,25 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                         booking={cellBooking}
                         onClick={canManageDrivers() ? () => handleDriverVehicleCellClick(null, 2, timeIndex) : undefined}
                         onContextMenu={canManageDrivers() ? handleDriverVehicleContextMenu(null, 2, timeIndex) : undefined}
+                      />
+                    );
+                  })()}
+                </div>
+              ] : []),
+
+              ...(role === 'admin' ? [
+                <div
+                  key={`desk-${timeIndex}`}
+                  className="h-20"
+                >
+                  {(() => {
+                    const assignment = findDeskAssignment(dateString, timeIndex);
+
+                    return (
+                      <DeskAssignmentCell
+                        desk={assignment?.desk}
+                        onClick={() => handleDeskCellClick(timeIndex)}
+                        onContextMenu={handleDeskContextMenu(timeIndex)}
                       />
                     );
                   })()}
@@ -3378,6 +3571,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
           currentPilot={overbookedContextMenu.booking.assignedPilots[overbookedContextMenu.slotIndex]}
           onSelectPilot={handleSelectOverbookedPilot}
           onUnassign={handleUnassignOverbookedPilot}
+          onCopyTo={role === "admin" ? () => handleOpenCopyBooking(overbookedContextMenu.booking) : undefined}
           onClose={() => setOverbookedContextMenu(null)}
         />
       )}
@@ -3452,12 +3646,29 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
               ? handleAddSecondDriver
               : undefined
           }
+          onSelectPilots={
+            canManageDrivers()
+              ? handleSelectSecondDriverPilots
+              : undefined
+          }
           onDeleteSecondDriver={
             showSecondDriverColumn
               ? handleDeleteSecondDriver
               : undefined
           }
           onClose={() => setDriverVehicleContextMenu(null)}
+        />
+      )}
+
+      {/* Desk Context Menu */}
+      {deskContextMenu && (
+        <DriverVehicleContextMenu
+          isOpen={deskContextMenu.isOpen}
+          position={deskContextMenu.position}
+          onDelete={handleDeleteDesk}
+          onFill={handleFillDesk}
+          onClearColumn={handleClearDeskColumn}
+          onClose={() => setDeskContextMenu(null)}
         />
       )}
 
@@ -3469,6 +3680,13 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
         driverColumn={selectedDriverColumn}
         timeIndex={selectedTimeIndex}
         date={selectedDriverDate}
+      />
+
+      <DeskAssignmentModal
+        isOpen={isDeskModalOpen}
+        onClose={() => setIsDeskModalOpen(false)}
+        initialDesk={findDeskAssignment(dateString, selectedDeskTimeIndex)?.desk}
+        onSave={handleSaveDesk}
       />
 
       <WaitlistBookingTimeModal

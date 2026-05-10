@@ -15,8 +15,11 @@ interface PilotSlotProps {
   numAmount?: number;
   canClickToUnassign: boolean;
   canLongPress: boolean;
+  isSecondDriverSelected: boolean;
+  canSelectSecondDriverPilot: boolean;
   onPilotNameClick?: (slotIndex: number, pilotName: string, position: { x: number; y: number }) => void;
   onPilotNameLongPress?: (pilotName: string, position: { x: number; y: number }) => void;
+  onSecondDriverPilotToggle?: (pilotName: string) => void;
 }
 
 function PilotSlot({
@@ -31,8 +34,11 @@ function PilotSlot({
   numAmount,
   canClickToUnassign,
   canLongPress,
+  isSecondDriverSelected,
+  canSelectSecondDriverPilot,
   onPilotNameClick,
   onPilotNameLongPress,
+  onSecondDriverPilotToggle,
 }: PilotSlotProps) {
   const longPressTimerRef = useRef<number | null>(null);
   const hasPilot = !!(pilot && pilot.trim());
@@ -60,7 +66,7 @@ function PilotSlot({
     ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, opacity: isDragging ? 0.4 : 1, zIndex: isDragging ? 50 : undefined }
     : {};
 
-  const dragListeners = isDraggable
+  const dragListeners = isDraggable && !canSelectSecondDriverPilot
     ? {
         ...attributes,
         ...listeners,
@@ -149,9 +155,16 @@ function PilotSlot({
       {...dragListeners}
     >
       <div
-        className={`text-xs text-white ${bgColorClass} rounded-t-lg px-2 py-0.5 w-[80%] relative ${canClickToUnassign ? 'cursor-pointer hover:opacity-80' : ''} ${dropHighlight}`}
+        className={`text-xs text-white ${bgColorClass} rounded-t-lg px-2 py-0.5 w-[80%] relative ${
+          isSecondDriverSelected ? 'pl-3' : ''
+        } ${
+          canSelectSecondDriverPilot ? 'cursor-pointer hover:opacity-80' : canClickToUnassign ? 'cursor-pointer hover:opacity-80' : ''
+        } ${dropHighlight}`}
         onClick={(e) => {
-          if (canClickToUnassign) {
+          if (canSelectSecondDriverPilot) {
+            e.stopPropagation();
+            onSecondDriverPilotToggle?.(pilot!);
+          } else if (canClickToUnassign) {
             e.stopPropagation();
             onPilotNameClick?.(slotIndex, pilot!, { x: e.clientX, y: e.clientY });
           }
@@ -160,6 +173,9 @@ function PilotSlot({
         onTouchEnd={handlePilotTouchEnd}
         onContextMenu={handlePilotContextMenu}
       >
+        {isSecondDriverSelected && (
+          <span className="absolute left-0 top-0 bottom-0 w-2 rounded-tl-lg bg-orange-400" />
+        )}
         <div className="text-center truncate">{pilot}</div>
         {numAmount !== undefined && numAmount !== 0 && !isNaN(numAmount) && (
           <span className="absolute right-2 top-0.5 font-medium text-white">{numAmount}</span>
@@ -194,6 +210,7 @@ interface BookingAvailableProps {
   onAvailableContextMenu?: (position: { x: number; y: number }) => void;
   onPilotNameClick?: (slotIndex: number, pilotName: string, position: { x: number; y: number }) => void; // Handler for clicking on a pilot name
   onPilotNameLongPress?: (pilotName: string, position: { x: number; y: number }) => void; // Handler for long-press on pilot name
+  onSecondDriverPilotToggle?: (pilotName: string) => void;
   onOverbookedClick?: (slotIndex: number, position: { x: number; y: number }) => void; // Handler for context menu on overbooked position
   isCurrentUserPilot?: boolean; // Whether this cell is for the current user
   isFemalePilot?: boolean; // Whether this pilot is a female pilot
@@ -218,6 +235,8 @@ interface BookingAvailableProps {
   canBookOnRequest?: boolean; // Whether the user can book on "on request" slots (admins and pilots only)
   // Pilot drag-and-drop
   isValidPilotDropTarget?: boolean; // Whether pilot slots in this booking accept pilot drops
+  secondDriverPilots?: string[];
+  isSecondDriverPilotSelectionMode?: boolean;
 }
 
 export const BookingAvailable = memo(function BookingAvailable({
@@ -244,6 +263,7 @@ export const BookingAvailable = memo(function BookingAvailable({
   onAvailableContextMenu,
   onPilotNameClick,
   onPilotNameLongPress,
+  onSecondDriverPilotToggle,
   onOverbookedClick,
   isCurrentUserPilot = false,
   isFemalePilot = false,
@@ -262,6 +282,8 @@ export const BookingAvailable = memo(function BookingAvailable({
   hideDetails = false,
   canBookOnRequest = false,
   isValidPilotDropTarget = false,
+  secondDriverPilots = [],
+  isSecondDriverPilotSelectionMode = false,
 }: BookingAvailableProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const longPressTimerRef = useRef<number | null>(null);
@@ -444,12 +466,25 @@ export const BookingAvailable = memo(function BookingAvailable({
   };
 
   // Handle click - prevent if it's right after entering move mode
-  const handleClick = (e: React.MouseEvent | React.TouchEvent) => {
+  const handleClick = (e: React.MouseEvent) => {
     if (preventClickRef.current) {
       e.preventDefault();
       e.stopPropagation();
       return;
     }
+
+    if (isSecondDriverPilotSelectionMode && onSecondDriverPilotToggle) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const slotIndex = getSlotIndexFromPosition(e.clientX);
+      const pilot = assignedPilots[slotIndex];
+      if (pilot?.trim()) {
+        onSecondDriverPilotToggle(pilot);
+      }
+      return;
+    }
+
     if (onBookedClick) {
       onBookedClick();
     }
@@ -504,7 +539,7 @@ export const BookingAvailable = memo(function BookingAvailable({
           }
         }}
         data-booking-id={bookingId}
-        className={`w-full h-full rounded-lg pt-2 px-2 flex flex-col justify-between transition-all overflow-hidden relative ${onBookedClick ? 'cursor-pointer' : 'cursor-default'} ${canDrag && bookingId ? 'cursor-grab active:cursor-grabbing' : ''} ${isHighlighted ? 'animate-pulse-slow' : ''}`}
+        className={`w-full h-full rounded-lg pt-2 px-2 flex flex-col justify-between transition-all overflow-hidden relative ${onBookedClick || isSecondDriverPilotSelectionMode ? 'cursor-pointer' : 'cursor-default'} ${canDrag && bookingId ? 'cursor-grab active:cursor-grabbing' : ''} ${isHighlighted ? 'animate-pulse-slow' : ''}`}
         style={{
           backgroundColor,
           borderWidth: '1px',
@@ -621,8 +656,11 @@ export const BookingAvailable = memo(function BookingAvailable({
                     numAmount={numAmount}
                     canClickToUnassign={isOwnName && !!onPilotNameClick}
                     canLongPress={isOwnName && !!onPilotNameLongPress}
+                    isSecondDriverSelected={Boolean(pilot && secondDriverPilots.includes(pilot))}
+                    canSelectSecondDriverPilot={Boolean(pilot && isSecondDriverPilotSelectionMode && onSecondDriverPilotToggle)}
                     onPilotNameClick={onPilotNameClick}
                     onPilotNameLongPress={onPilotNameLongPress}
+                    onSecondDriverPilotToggle={onSecondDriverPilotToggle}
                   />
                 );
               })}

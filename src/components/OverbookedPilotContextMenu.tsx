@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { Copy, X } from "lucide-react";
 import type { Pilot } from "../types/index";
 
 interface OverbookedPilotContextMenuProps {
@@ -10,6 +10,7 @@ interface OverbookedPilotContextMenuProps {
   currentPilot?: string; // Currently assigned pilot for this slot
   onSelectPilot: (pilotName: string) => void;
   onUnassign: () => void;
+  onCopyTo?: () => void;
   onClose: () => void;
 }
 
@@ -21,6 +22,7 @@ export function OverbookedPilotContextMenu({
   currentPilot,
   onSelectPilot,
   onUnassign,
+  onCopyTo,
   onClose,
 }: OverbookedPilotContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -226,6 +228,22 @@ export function OverbookedPilotContextMenu({
             No pilots to assign
           </div>
         ) : null}
+
+        {onCopyTo && (
+          <>
+            <div className="border-t border-gray-300 dark:border-zinc-700 my-1" />
+            <button
+              onClick={() => {
+                onCopyTo();
+                onClose();
+              }}
+              className="w-full px-3 py-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2"
+            >
+              <Copy className="w-4 h-4" />
+              <span>Copy to</span>
+            </button>
+          </>
+        )}
       </div>
     </>
   );
