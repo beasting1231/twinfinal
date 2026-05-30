@@ -2580,7 +2580,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
   // Show skeleton loader while loading
   if (loading) {
     return (
-      <div className="flex-1 overflow-auto overscroll-x-contain overscroll-y-contain p-4 bg-gray-50 dark:bg-zinc-950">
+      <div className="flex-1 overflow-auto overscroll-x-contain p-4 bg-gray-50 dark:bg-zinc-950">
         <div className="inline-block">
           <div className="grid gap-2" style={{ gridTemplateColumns: `${TIME_COLUMN_WIDTH}px repeat(5, 160px) 48px 98px 98px${role === 'admin' ? ' 98px' : ''}` }}>
             {/* Header Row Skeleton */}
@@ -2633,7 +2633,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     >
       <div
         ref={containerRef}
-        className="flex-1 overflow-auto overscroll-x-contain overscroll-y-contain p-4 bg-gray-50 dark:bg-zinc-950"
+        className="flex-1 overflow-auto overscroll-x-contain p-4 bg-gray-50 dark:bg-zinc-950"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
