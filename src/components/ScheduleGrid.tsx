@@ -37,7 +37,7 @@ import { useBookingRequests } from "../hooks/useBookingRequests";
 import { useAllPilots } from "../hooks/useAllPilots";
 import { useAuth } from "../contexts/AuthContext";
 import { useRole } from "../hooks/useRole";
-import type { Booking, Pilot, BookingRequest, AvailabilityStatus } from "../types/index";
+import type { Booking, DeskAssignment, DriverAssignment, Pilot, BookingRequest, AvailabilityStatus } from "../types/index";
 import { format } from "date-fns";
 import { doc, updateDoc, setDoc, deleteDoc, collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase/config";
@@ -76,6 +76,8 @@ interface ScheduleGridProps {
   saveCustomPilotOrder?: (newOrder: string[]) => Promise<void>;
   loading?: boolean;
   currentUserDisplayName?: string;
+  historyMode?: boolean;
+  historyTimestamp?: Date | null;
   onAddBooking?: (booking: Omit<Booking, "id">) => void;
   onUpdateBooking?: (id: string, booking: Partial<Booking>) => void;
   onDeleteBooking?: (id: string) => void;
@@ -83,6 +85,77 @@ interface ScheduleGridProps {
 }
 
 const TIME_COLUMN_WIDTH = 112;
+
+function toDate(value: any): Date | null {
+  if (!value) return null;
+  const date = typeof value.toDate === "function"
+    ? value.toDate()
+    : value instanceof Date
+    ? value
+    : new Date(value);
+
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function isAtOrBefore(value: any, timestamp: Date) {
+  const date = toDate(value);
+  return date ? date.getTime() <= timestamp.getTime() : false;
+}
+
+function getSnapshotAt<T extends { id?: string; history?: Array<{ timestamp: any; snapshotAfter?: Record<string, any> | null }> }>(
+  item: T,
+  timestamp: Date
+): T | null {
+  const snapshotEntries = [...(item.history || [])]
+    .filter((entry) => entry.snapshotAfter !== undefined)
+    .sort((a, b) => (toDate(a.timestamp)?.getTime() || 0) - (toDate(b.timestamp)?.getTime() || 0))
+  const snapshotEntry = snapshotEntries
+    .filter((entry) => isAtOrBefore(entry.timestamp, timestamp))
+    .at(-1);
+
+  if (snapshotEntry) {
+    if (snapshotEntry.snapshotAfter === null) return null;
+    return {
+      ...snapshotEntry.snapshotAfter,
+      id: item.id,
+      history: item.history,
+    } as T;
+  }
+
+  if (snapshotEntries.length > 0) return null;
+
+  const createdAt = (item as any).createdAt;
+  if (createdAt && !isAtOrBefore(createdAt, timestamp)) return null;
+
+  const deletedAt = (item as any).deletedAt;
+  if (deletedAt && isAtOrBefore(deletedAt, timestamp)) return null;
+
+  return item;
+}
+
+function getStatusFromHistoryDetails(details?: string): Booking["bookingStatus"] | null {
+  const match = details?.match(/\b(?:to|status:)\s+(unconfirmed|confirmed|pending|cancelled|deleted|no show)\b/i);
+  return match ? match[1].toLowerCase() as Booking["bookingStatus"] : null;
+}
+
+function getBookingSnapshotAt(booking: Booking, timestamp: Date): Booking | null {
+  const snapshot = getSnapshotAt(booking, timestamp);
+  if (!snapshot) return null;
+
+  const statusEntry = [...(booking.history || [])]
+    .filter((entry) => isAtOrBefore(entry.timestamp, timestamp))
+    .filter((entry) => entry.action === "status_changed" || entry.details?.toLowerCase().includes("status"))
+    .sort((a, b) => (toDate(a.timestamp)?.getTime() || 0) - (toDate(b.timestamp)?.getTime() || 0))
+    .at(-1);
+  const replayedStatus =
+    statusEntry?.snapshotAfter?.bookingStatus ||
+    getStatusFromHistoryDetails(statusEntry?.details);
+
+  return {
+    ...snapshot,
+    bookingStatus: replayedStatus || snapshot.bookingStatus || "confirmed",
+  };
+}
 
 // Draggable Pilot Header Component
 function DraggablePilotHeader({
@@ -132,6 +205,7 @@ function DraggablePilotHeader({
 
   return (
     <div
+      data-history-ignore="true"
       ref={setNodeRef}
       style={style}
       {...(dragEnabled ? listeners : {})}
@@ -148,11 +222,20 @@ function DraggablePilotHeader({
   );
 }
 
-export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBookings = [], allBookingsForSearch = [], isPilotAvailableForTimeSlot, getPilotAvailabilityStatus, getPilotSignInTimeForTimeSlot, getPilotSignOutTimeForTimeSlot, saveCustomPilotOrder, loading = false, currentUserDisplayName, onAddBooking, onUpdateBooking, onDeleteBooking, onNavigateToDate }: ScheduleGridProps) {
+export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBookings = [], allBookingsForSearch = [], isPilotAvailableForTimeSlot, getPilotAvailabilityStatus, getPilotSignInTimeForTimeSlot, getPilotSignOutTimeForTimeSlot, saveCustomPilotOrder, loading = false, currentUserDisplayName, historyMode = false, historyTimestamp = null, onAddBooking, onUpdateBooking, onDeleteBooking, onNavigateToDate }: ScheduleGridProps) {
+  const historyBookings = useMemo(() => {
+    if (!historyMode || !historyTimestamp) return allBookings;
+
+    return allBookings
+      .map((booking) => getBookingSnapshotAt(booking, historyTimestamp))
+      .filter((booking): booking is Booking => Boolean(booking))
+      .filter((booking) => booking.date === format(selectedDate, "yyyy-MM-dd"));
+  }, [allBookings, historyMode, historyTimestamp, selectedDate]);
+
   // Filter out deleted bookings from the main grid
   const bookings = useMemo(() => {
-    return allBookings.filter(booking => booking.bookingStatus !== "deleted");
-  }, [allBookings]);
+    return historyBookings.filter(booking => booking.bookingStatus !== "deleted");
+  }, [historyBookings]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedCell, setSelectedCell] = useState<{ pilotIndex: number; timeIndex: number; timeSlot: string } | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
@@ -228,17 +311,44 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
   const dateString = format(selectedDate, "yyyy-MM-dd");
   const {
     driverAssignments,
-    findAssignment,
+    findAssignment: findLiveAssignment,
     updateDriverAssignment,
     addDriverAssignment
   } = useDriverAssignments(dateString);
   const {
     deskAssignments,
-    findDeskAssignment,
+    findDeskAssignment: findLiveDeskAssignment,
     updateDeskAssignment,
     saveDeskAssignment,
     addDeskAssignment
   } = useDeskAssignments(dateString, role === "admin");
+  const visibleDriverAssignments = useMemo(() => {
+    if (!historyMode || !historyTimestamp) return driverAssignments;
+
+    return driverAssignments
+      .map((assignment) => getSnapshotAt(assignment, historyTimestamp))
+      .filter((assignment): assignment is DriverAssignment => Boolean(assignment))
+      .filter((assignment) => assignment.date === dateString);
+  }, [dateString, driverAssignments, historyMode, historyTimestamp]);
+  const visibleDeskAssignments = useMemo(() => {
+    if (!historyMode || !historyTimestamp) return deskAssignments;
+
+    return deskAssignments
+      .map((assignment) => getSnapshotAt(assignment, historyTimestamp))
+      .filter((assignment): assignment is DeskAssignment => Boolean(assignment))
+      .filter((assignment) => assignment.date === dateString);
+  }, [dateString, deskAssignments, historyMode, historyTimestamp]);
+  const findAssignment = useCallback((assignmentDate: string, timeIndex: number) => {
+    if (!historyMode) return findLiveAssignment(assignmentDate, timeIndex);
+    return visibleDriverAssignments.find((assignment) => assignment.date === assignmentDate && assignment.timeIndex === timeIndex);
+  }, [findLiveAssignment, historyMode, visibleDriverAssignments]);
+  const findDeskAssignment = useCallback((assignmentDate: string, timeIndex: number) => {
+    if (!historyMode) return findLiveDeskAssignment(assignmentDate, timeIndex);
+    const matchingAssignments = visibleDeskAssignments.filter(
+      (assignment) => assignment.date === assignmentDate && assignment.timeIndex === timeIndex
+    );
+    return matchingAssignments.find((assignment) => assignment.desk?.trim()) || matchingAssignments[0];
+  }, [findLiveDeskAssignment, historyMode, visibleDeskAssignments]);
 
   // Fetch booking requests
   const { bookingRequests, updateBookingRequest, deleteBookingRequest, addBookingRequest } = useBookingRequests();
@@ -255,8 +365,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
 
   const deletedBookings = useMemo(() => {
     // Only show deleted bookings for the currently selected date
-    return allBookings.filter(booking => booking.bookingStatus === "deleted" && booking.date === dateString);
-  }, [allBookings, dateString]);
+    return historyBookings.filter(booking => booking.bookingStatus === "deleted" && booking.date === dateString);
+  }, [historyBookings, dateString]);
 
   // Helper function to calculate available spots for a booking request
   const getAvailableSpotsForRequest = (request: BookingRequest): number => {
@@ -419,10 +529,10 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
   } | null>(null);
 
   const showSecondDriverColumn = useMemo(() => {
-    return driverAssignments.some((assignment) =>
+    return visibleDriverAssignments.some((assignment) =>
       assignment.secondDriverColumnVisible || Boolean(assignment.driver2?.trim()) || Boolean(assignment.vehicle2?.trim())
     );
-  }, [driverAssignments]);
+  }, [visibleDriverAssignments]);
 
   // Drag and drop state - track active drag for validation and multi-column highlighting
   const [draggedBooking, setDraggedBooking] = useState<Booking | null>(null);
@@ -2470,7 +2580,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
   // Show skeleton loader while loading
   if (loading) {
     return (
-      <div className="flex-1 overflow-auto p-4 bg-gray-50 dark:bg-zinc-950">
+      <div className="flex-1 overflow-auto overscroll-x-contain overscroll-y-contain p-4 bg-gray-50 dark:bg-zinc-950">
         <div className="inline-block">
           <div className="grid gap-2" style={{ gridTemplateColumns: `${TIME_COLUMN_WIDTH}px repeat(5, 160px) 48px 98px 98px${role === 'admin' ? ' 98px' : ''}` }}>
             {/* Header Row Skeleton */}
@@ -2523,7 +2633,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     >
       <div
         ref={containerRef}
-        className="flex-1 overflow-auto p-4 bg-gray-50 dark:bg-zinc-950"
+        className="flex-1 overflow-auto overscroll-x-contain overscroll-y-contain p-4 bg-gray-50 dark:bg-zinc-950"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -2968,6 +3078,9 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                         onPilotNameLongPress={(role === "pilot" || role === "admin") ? handlePilotNameLongPress(booking) : undefined}
                         currentUserDisplayName={currentUserDisplayName}
                         bookingId={booking.id}
+                        createdByName={booking.createdByName}
+                        createdAt={booking.createdAt}
+                        history={booking.history}
                         canDrag={isDragEnabled && !secondDriverPilotSelectionMode}
                         overbookedCount={overbookedCount}
                         onOverbookedClick={role === 'admin' ? (slotIndex: number, position: { x: number; y: number }) => {
@@ -3001,6 +3114,25 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                   const cellAvailabilityStatus = cell.pilot ? getPilotAvailabilityStatus?.(cell.pilot.uid, timeSlot) : undefined;
                   const isOnRequestCell = cellAvailabilityStatus === "onRequest";
                   const canBookOnRequestCell = role === "admin" || role === "pilot";
+                  const signOutTimestamp = cell.status === "noPilot" && cell.pilot
+                    ? getPilotSignOutTimeForTimeSlot?.(cell.pilot.uid, timeSlot)
+                    : null;
+                  const signOutDate = signOutTimestamp ? toDate(signOutTimestamp) : null;
+                  const noPilotHistoryEntries = signOutTimestamp && signOutDate
+                    ? [{
+                        user: cell.pilot.displayName,
+                        text: cell.pilot.displayName,
+                        accentText: "signed out",
+                        action: "signed_out",
+                        timestamp: formatSwissDateTime(signOutDate) || undefined,
+                        timestampValue: signOutDate.toISOString(),
+                      }]
+                    : cell.status === "noPilot" && cell.pilot
+                    ? [{
+                        user: cell.pilot.displayName,
+                        text: "no sign out records found",
+                      }]
+                    : [];
 
                   // Left-click on available cell - check if in move mode first
                   const handleAvailableLeftClick = () => {
@@ -3048,6 +3180,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                             ? handleNoPilotContextMenu(role === "admin" ? cell.pilotIndex! : currentUserPilotIndex, timeIndex)
                             : undefined
                         }
+                        noPilotHistoryEntries={noPilotHistoryEntries}
                         onAvailableContextMenu={
                           cell.status === "available"
                             ? role === "admin" && !isOnRequestCell
@@ -3165,6 +3298,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
       {/* Booking Requests Inbox - Only show to admins */}
       {role === 'admin' && (
       <div
+        data-history-ignore="true"
         className="flex flex-col gap-4 max-w-4xl sticky left-4"
         style={{
           marginTop: `${24 + (gridHeight * (scale - 1))}px`

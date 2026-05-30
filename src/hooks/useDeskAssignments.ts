@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { addDoc, collection, deleteDoc, doc, onSnapshot, query, setDoc, updateDoc, where } from "firebase/firestore";
+import { addDoc, arrayUnion, collection, deleteDoc, doc, onSnapshot, query, setDoc, updateDoc, where } from "firebase/firestore";
 import { db } from "../firebase/config";
-import type { DeskAssignment } from "../types";
+import type { AssignmentHistoryEntry, DeskAssignment } from "../types";
+import { useAuth } from "../contexts/AuthContext";
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Unknown error";
@@ -11,10 +12,37 @@ function getDeskAssignmentId(date: string, timeIndex: number) {
   return `${date}_${timeIndex}`;
 }
 
+function createDeskAssignmentSnapshot(assignment: Partial<DeskAssignment>) {
+  const snapshot: Record<string, any> = {};
+
+  for (const key of ["date", "timeIndex", "desk"] as Array<keyof DeskAssignment>) {
+    const value = assignment[key];
+    if (value !== undefined) {
+      snapshot[key] = value;
+    }
+  }
+
+  return JSON.parse(JSON.stringify(snapshot));
+}
+
 export function useDeskAssignments(date?: string, enabled = true) {
   const [deskAssignments, setDeskAssignments] = useState<DeskAssignment[]>([]);
   const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
+  const { currentUser, userProfile } = useAuth();
+
+  const createHistoryEntry = (
+    action: AssignmentHistoryEntry["action"],
+    snapshotAfter: Partial<DeskAssignment> | null,
+    details?: string
+  ): AssignmentHistoryEntry => ({
+    action,
+    timestamp: new Date(),
+    userId: currentUser?.uid || "",
+    userName: userProfile?.displayName || currentUser?.displayName || currentUser?.email || "Unknown",
+    ...(details ? { details } : {}),
+    snapshotAfter: snapshotAfter ? createDeskAssignmentSnapshot(snapshotAfter) : null,
+  });
 
   useEffect(() => {
     if (!enabled) {
@@ -55,7 +83,10 @@ export function useDeskAssignments(date?: string, enabled = true) {
 
   const addDeskAssignment = async (assignment: Omit<DeskAssignment, "id">) => {
     try {
-      await addDoc(collection(db, "deskAssignments"), assignment);
+      await addDoc(collection(db, "deskAssignments"), {
+        ...assignment,
+        history: [createHistoryEntry("created", assignment)],
+      });
     } catch (err: unknown) {
       console.error("Error adding desk assignment:", err);
       setError(getErrorMessage(err));
@@ -65,7 +96,17 @@ export function useDeskAssignments(date?: string, enabled = true) {
 
   const updateDeskAssignment = async (id: string, assignment: Partial<DeskAssignment>) => {
     try {
-      await updateDoc(doc(db, "deskAssignments", id), assignment);
+      const existingAssignment = deskAssignments.find((deskAssignment) => deskAssignment.id === id);
+      const snapshotAfter = {
+        ...(existingAssignment || {}),
+        ...assignment,
+      };
+      delete (snapshotAfter as Partial<DeskAssignment>).id;
+
+      await updateDoc(doc(db, "deskAssignments", id), {
+        ...assignment,
+        history: arrayUnion(createHistoryEntry("edited", snapshotAfter)),
+      });
     } catch (err: unknown) {
       console.error("Error updating desk assignment:", err);
       setError(getErrorMessage(err));
@@ -76,7 +117,11 @@ export function useDeskAssignments(date?: string, enabled = true) {
   const saveDeskAssignment = async (assignment: Omit<DeskAssignment, "id">) => {
     try {
       const assignmentId = getDeskAssignmentId(assignment.date, assignment.timeIndex);
-      await setDoc(doc(db, "deskAssignments", assignmentId), assignment, { merge: true });
+      const existingAssignment = deskAssignments.find((deskAssignment) => deskAssignment.id === assignmentId);
+      await setDoc(doc(db, "deskAssignments", assignmentId), {
+        ...assignment,
+        history: arrayUnion(createHistoryEntry(existingAssignment ? "edited" : "created", assignment)),
+      }, { merge: true });
     } catch (err: unknown) {
       console.error("Error saving desk assignment:", err);
       setError(getErrorMessage(err));

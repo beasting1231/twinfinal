@@ -14,9 +14,10 @@ import { isAvailabilityActive, normalizeAvailabilityStatus } from "../utils/avai
 interface AvailabilityGridProps {
   weekStartDate: Date;
   timeSlots?: string[]; // Made optional for backwards compatibility
+  onShowOverview?: () => void;
 }
 
-export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
+export function AvailabilityGrid({ weekStartDate, onShowOverview }: AvailabilityGridProps) {
   // Generate the 7 days of the week starting from weekStartDate
   const days = useMemo(() => {
     return Array.from({ length: 7 }, (_, i) => addDays(weekStartDate, i));
@@ -422,22 +423,31 @@ export function AvailabilityGrid({ weekStartDate }: AvailabilityGridProps) {
     >
       {/* Admin User Selector */}
       {role === 'admin' && (
-        <div className="mb-6 max-w-xs">
-          <label className="block text-xs font-semibold text-gray-600 dark:text-zinc-400 uppercase tracking-wide mb-2">
-            Viewing Availability For
-          </label>
-          <select
-            value={selectedUserId || ''}
-            onChange={(e) => setSelectedUserId(e.target.value || undefined)}
-            className="w-full bg-white dark:bg-zinc-900 border-2 border-gray-300 dark:border-zinc-700 rounded-lg px-3 py-2.5 text-gray-900 dark:text-white text-sm font-medium shadow-sm hover:border-gray-400 dark:hover:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors cursor-pointer"
+        <div className="mb-6 flex max-w-xl flex-wrap items-end gap-3">
+          <div className="w-72 max-w-full">
+            <label className="block text-xs font-semibold text-gray-600 dark:text-zinc-400 uppercase tracking-wide mb-2">
+              Viewing Availability For
+            </label>
+            <select
+              value={selectedUserId || ''}
+              onChange={(e) => setSelectedUserId(e.target.value || undefined)}
+              className="w-full bg-white dark:bg-zinc-900 border-2 border-gray-300 dark:border-zinc-700 rounded-lg px-3 py-2.5 text-gray-900 dark:text-white text-sm font-medium shadow-sm hover:border-gray-400 dark:hover:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors cursor-pointer"
+            >
+              <option value="">My Availability</option>
+              {pilotsAndAdmins.map(user => (
+                <option key={user.uid} value={user.uid}>
+                  {user.displayName} {user.role === 'admin' ? '• Admin' : '• Pilot'}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="button"
+            onClick={onShowOverview}
+            className="h-[46px] rounded-lg border-2 border-gray-300 bg-white px-4 text-sm font-semibold text-gray-900 shadow-sm transition-colors hover:border-gray-400 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white dark:hover:border-zinc-600 dark:hover:bg-zinc-800"
           >
-            <option value="">My Availability</option>
-            {pilotsAndAdmins.map(user => (
-              <option key={user.uid} value={user.uid}>
-                {user.displayName} {user.role === 'admin' ? '• Admin' : '• Pilot'}
-              </option>
-            ))}
-          </select>
+            Overview
+          </button>
         </div>
       )}
 

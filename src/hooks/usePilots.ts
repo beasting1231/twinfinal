@@ -18,11 +18,125 @@ export type PilotSignOutTimeBySlotMap = Map<string, Map<string, string>>;
 const PILOTS_CACHE_PREFIX = 'twin_pilots_cache_';
 const CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
 
-export function usePilots(selectedDate: Date) {
+interface AvailabilityRecord {
+  userId: string;
+  timeSlot: string;
+  status?: AvailabilityStatus;
+  signedInAt?: string;
+  signedOutAt?: string;
+}
+
+function parseAvailabilityTimestamp(value?: string): number | null {
+  if (!value) return null;
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? null : timestamp;
+}
+
+function isAvailabilityTimestampAtOrBefore(value: string | undefined, targetTime: number): boolean {
+  const timestamp = parseAvailabilityTimestamp(value);
+  return timestamp !== null && timestamp <= targetTime;
+}
+
+function getAvailabilityStatusAt(record: AvailabilityRecord, historyTimestamp?: Date | null): AvailabilityStatus {
+  const currentStatus = normalizeAvailabilityStatus(record.status);
+
+  if (!historyTimestamp) {
+    return currentStatus;
+  }
+
+  const targetTime = historyTimestamp.getTime();
+  const signedInTime = parseAvailabilityTimestamp(record.signedInAt);
+  const signedOutTime = parseAvailabilityTimestamp(record.signedOutAt);
+
+  if (!signedInTime || signedInTime > targetTime) {
+    return "unavailable";
+  }
+
+  const signedOutAfterLatestSignIn =
+    signedOutTime !== null && signedOutTime >= signedInTime;
+
+  if (signedOutAfterLatestSignIn && signedOutTime <= targetTime) {
+    return "unavailable";
+  }
+
+  if (isAvailabilityActive(currentStatus)) {
+    return currentStatus;
+  }
+
+  return "available";
+}
+
+function buildAvailabilityState(records: AvailabilityRecord[], historyTimestamp?: Date | null) {
+  const pilotIds = new Set<string>();
+  const availabilityMap = new Map<string, Set<string>>();
+  const statusMap: PilotAvailabilityStatusMap = new Map();
+  const signInTimesMap = new Map<string, string>();
+  const signInTimesBySlotMap: PilotSignInTimeBySlotMap = new Map();
+  const signOutTimesBySlotMap: PilotSignOutTimeBySlotMap = new Map();
+  const historyTime = historyTimestamp?.getTime();
+
+  records.forEach((data) => {
+    const status = getAvailabilityStatusAt(data, historyTimestamp);
+
+    if (isAvailabilityActive(status)) {
+      pilotIds.add(data.userId);
+      if (!availabilityMap.has(data.userId)) {
+        availabilityMap.set(data.userId, new Set());
+      }
+      availabilityMap.get(data.userId)!.add(data.timeSlot);
+    }
+
+    if (!statusMap.has(data.userId)) {
+      statusMap.set(data.userId, new Map());
+    }
+    statusMap.get(data.userId)!.set(data.timeSlot, status);
+
+    const signedInAt = data.signedInAt;
+    const signedOutAt = data.signedOutAt;
+
+    if (signedInAt && (!historyTime || isAvailabilityTimestampAtOrBefore(signedInAt, historyTime))) {
+      const existingTime = signInTimesMap.get(data.userId);
+      if (!existingTime || signedInAt < existingTime) {
+        signInTimesMap.set(data.userId, signedInAt);
+      }
+
+      if (!signInTimesBySlotMap.has(data.userId)) {
+        signInTimesBySlotMap.set(data.userId, new Map());
+      }
+      const existingSlotTime = signInTimesBySlotMap.get(data.userId)!.get(data.timeSlot);
+      if (!existingSlotTime || signedInAt > existingSlotTime) {
+        signInTimesBySlotMap.get(data.userId)!.set(data.timeSlot, signedInAt);
+      }
+    }
+
+    if (signedOutAt && (!historyTime || isAvailabilityTimestampAtOrBefore(signedOutAt, historyTime))) {
+      if (!signOutTimesBySlotMap.has(data.userId)) {
+        signOutTimesBySlotMap.set(data.userId, new Map());
+      }
+      const existingSignOutTime = signOutTimesBySlotMap.get(data.userId)!.get(data.timeSlot);
+      if (!existingSignOutTime || signedOutAt > existingSignOutTime) {
+        signOutTimesBySlotMap.get(data.userId)!.set(data.timeSlot, signedOutAt);
+      }
+    }
+  });
+
+  return {
+    pilotIds,
+    availabilityMap,
+    statusMap,
+    signInTimesMap,
+    signInTimesBySlotMap,
+    signOutTimesBySlotMap,
+  };
+}
+
+export function usePilots(selectedDate: Date, historyTimestamp?: Date | null) {
   const dateStr = format(selectedDate, "yyyy-MM-dd");
   const cacheKey = `${PILOTS_CACHE_PREFIX}${dateStr}`;
+  const isHistoryMode = Boolean(historyTimestamp);
 
   const [rawPilots, setRawPilots] = useState<Pilot[]>(() => {
+    if (isHistoryMode) return [];
     // Try to load from cache on initialization
     try {
       const cached = localStorage.getItem(cacheKey);
@@ -40,6 +154,7 @@ export function usePilots(selectedDate: Date) {
     return [];
   });
   const [pilotAvailability, setPilotAvailability] = useState<Map<string, Set<string>>>(() => {
+    if (isHistoryMode) return new Map();
     // Try to load from cache on initialization
     try {
       const cached = localStorage.getItem(cacheKey);
@@ -60,6 +175,7 @@ export function usePilots(selectedDate: Date) {
     return new Map();
   });
   const [pilotAvailabilityStatus, setPilotAvailabilityStatus] = useState<PilotAvailabilityStatusMap>(() => {
+    if (isHistoryMode) return new Map();
     // Try to load from cache on initialization
     try {
       const cached = localStorage.getItem(cacheKey);
@@ -84,6 +200,7 @@ export function usePilots(selectedDate: Date) {
     return new Map();
   });
   const [pilotSignInTimes, setPilotSignInTimes] = useState<Map<string, string>>(() => {
+    if (isHistoryMode) return new Map();
     // Try to load from cache on initialization
     try {
       const cached = localStorage.getItem(cacheKey);
@@ -100,6 +217,7 @@ export function usePilots(selectedDate: Date) {
     return new Map();
   });
   const [pilotSignInTimesBySlot, setPilotSignInTimesBySlot] = useState<PilotSignInTimeBySlotMap>(() => {
+    if (isHistoryMode) return new Map();
     // Try to load from cache on initialization
     try {
       const cached = localStorage.getItem(cacheKey);
@@ -120,6 +238,7 @@ export function usePilots(selectedDate: Date) {
     return new Map();
   });
   const [pilotSignOutTimesBySlot, setPilotSignOutTimesBySlot] = useState<PilotSignOutTimeBySlotMap>(() => {
+    if (isHistoryMode) return new Map();
     try {
       const cached = localStorage.getItem(cacheKey);
       if (cached) {
@@ -139,6 +258,7 @@ export function usePilots(selectedDate: Date) {
     return new Map();
   });
   const [customOrder, setCustomOrder] = useState<string[] | null>(() => {
+    if (isHistoryMode) return null;
     // Try to load from cache on initialization
     try {
       const cached = localStorage.getItem(cacheKey);
@@ -155,6 +275,7 @@ export function usePilots(selectedDate: Date) {
     return null;
   });
   const [loading, setLoading] = useState(() => {
+    if (isHistoryMode) return true;
     // If we have cached data for this date, set loading to false immediately
     try {
       const cached = localStorage.getItem(cacheKey);
@@ -171,11 +292,17 @@ export function usePilots(selectedDate: Date) {
     return true;
   });
   const [error, setError] = useState<string | null>(null);
+  const [availabilityRecords, setAvailabilityRecords] = useState<AvailabilityRecord[] | null>(null);
   const prevPilotsRef = useRef<Pilot[]>([]);
   const prevDateStrRef = useRef(dateStr);
+  const pilotProfileCacheRef = useRef<Map<string, Pilot>>(new Map());
 
   // Synchronize state immediately when date changes to prevent showing stale data
   useEffect(() => {
+    if (isHistoryMode) {
+      return;
+    }
+
     // Skip on initial mount
     if (prevDateStrRef.current === dateStr) {
       prevDateStrRef.current = dateStr;
@@ -260,26 +387,29 @@ export function usePilots(selectedDate: Date) {
     setPilotSignInTimes(new Map());
     setPilotSignInTimesBySlot(new Map());
     setPilotSignOutTimesBySlot(new Map());
+    setAvailabilityRecords(null);
     setCustomOrder(null);
-  }, [dateStr, cacheKey]);
+  }, [dateStr, cacheKey, isHistoryMode]);
 
   useEffect(() => {
     const pilotsStartTime = performance.now();
-    console.log(`📡 Starting pilots subscription for ${dateStr}...`);
+    console.log(`📡 Starting pilots subscription for ${dateStr}${isHistoryMode ? " in history mode" : ""}...`);
 
     // Check if we have valid cache for this date
     let hasValidCache = false;
-    try {
-      const cached = localStorage.getItem(cacheKey);
-      if (cached) {
-        const { data, timestamp } = JSON.parse(cached);
-        const age = Date.now() - timestamp;
-        if (age < CACHE_EXPIRY_MS && data.length > 0) {
-          hasValidCache = true;
+    if (!isHistoryMode) {
+      try {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          const { data, timestamp } = JSON.parse(cached);
+          const age = Date.now() - timestamp;
+          if (age < CACHE_EXPIRY_MS && data.length > 0) {
+            hasValidCache = true;
+          }
         }
+      } catch (error) {
+        console.error('Error checking pilots cache:', error);
       }
-    } catch (error) {
-      console.error('Error checking pilots cache:', error);
     }
 
     // Only set loading to true if we don't have valid cache
@@ -287,6 +417,7 @@ export function usePilots(selectedDate: Date) {
       setLoading(true);
     }
     setError(null);
+    setAvailabilityRecords(null);
 
     // Fetch custom pilot order for this date (if any)
     const fetchCustomOrder = async () => {
@@ -316,123 +447,105 @@ export function usePilots(selectedDate: Date) {
     // Subscribe to real-time updates
     const unsubscribe = onSnapshot(
       availabilityQuery,
-      async (availabilitySnapshot) => {
-        try {
-          // Track pilots with at least one active slot for the day
-          const pilotIds = new Set<string>();
-          const availabilityMap = new Map<string, Set<string>>();
-          const statusMap: PilotAvailabilityStatusMap = new Map();
-          const signInTimesMap = new Map<string, string>(); // Track earliest sign-in time per pilot
-          const signInTimesBySlotMap: PilotSignInTimeBySlotMap = new Map();
-          const signOutTimesBySlotMap: PilotSignOutTimeBySlotMap = new Map();
+      (availabilitySnapshot) => {
+        const records = availabilitySnapshot.docs.map((docSnapshot) => docSnapshot.data() as AvailabilityRecord);
+        setAvailabilityRecords(records);
+        const pilotsTime = performance.now() - pilotsStartTime;
+        console.log(`⏱️ Availability records loaded in ${pilotsTime.toFixed(0)}ms (${records.length} records)`);
+      },
+      (err) => {
+        console.error("Error fetching pilots:", err);
+        setError(err.message);
+        setLoading(false);
+      }
+    );
 
-          availabilitySnapshot.docs.forEach((doc) => {
-            const data = doc.data();
-            const status = normalizeAvailabilityStatus(data.status);
+    // Cleanup subscription on unmount or date change
+    return () => unsubscribe();
+  }, [selectedDate, isHistoryMode, cacheKey, dateStr]);
 
-            if (isAvailabilityActive(status)) {
-              pilotIds.add(data.userId);
-              if (!availabilityMap.has(data.userId)) {
-                availabilityMap.set(data.userId, new Set());
-              }
-              availabilityMap.get(data.userId)!.add(data.timeSlot);
-            }
+  useEffect(() => {
+    let cancelled = false;
 
-            if (!statusMap.has(data.userId)) {
-              statusMap.set(data.userId, new Map());
-            }
-            statusMap.get(data.userId)!.set(data.timeSlot, status);
+    const applyAvailabilityState = async () => {
+      if (!availabilityRecords) {
+        return;
+      }
 
-            if (data.signedInAt) {
-              const existingTime = signInTimesMap.get(data.userId);
-              if (!existingTime || data.signedInAt < existingTime) {
-                signInTimesMap.set(data.userId, data.signedInAt);
-              }
+      try {
+        const {
+          pilotIds,
+          availabilityMap,
+          statusMap,
+          signInTimesMap,
+          signInTimesBySlotMap,
+          signOutTimesBySlotMap,
+        } = buildAvailabilityState(availabilityRecords, historyTimestamp);
 
-              if (!signInTimesBySlotMap.has(data.userId)) {
-                signInTimesBySlotMap.set(data.userId, new Map());
-              }
-              const existingSlotTime = signInTimesBySlotMap.get(data.userId)!.get(data.timeSlot);
-              if (!existingSlotTime || data.signedInAt > existingSlotTime) {
-                signInTimesBySlotMap.get(data.userId)!.set(data.timeSlot, data.signedInAt);
-              }
-            }
-
-            if (data.signedOutAt) {
-              if (!signOutTimesBySlotMap.has(data.userId)) {
-                signOutTimesBySlotMap.set(data.userId, new Map());
-              }
-              const existingSignOutTime = signOutTimesBySlotMap.get(data.userId)!.get(data.timeSlot);
-              if (!existingSignOutTime || data.signedOutAt > existingSignOutTime) {
-                signOutTimesBySlotMap.get(data.userId)!.set(data.timeSlot, data.signedOutAt);
-              }
-            }
-          });
-
-          // If no pilots are actively available for the day, keep the top row empty
-          if (pilotIds.size === 0) {
-            setRawPilots([]);
-            setPilotAvailability(new Map());
-            setPilotAvailabilityStatus(statusMap);
-            setPilotSignInTimes(signInTimesMap);
-            setPilotSignInTimesBySlot(signInTimesBySlotMap);
-            setPilotSignOutTimesBySlot(signOutTimesBySlotMap);
-            // Clear cached pilot columns for this date since no one is actively available
+        if (pilotIds.size === 0) {
+          setRawPilots([]);
+          setPilotAvailability(new Map());
+          setPilotAvailabilityStatus(statusMap);
+          setPilotSignInTimes(signInTimesMap);
+          setPilotSignInTimesBySlot(signInTimesBySlotMap);
+          setPilotSignOutTimesBySlot(signOutTimesBySlotMap);
+          if (!isHistoryMode) {
             try {
               localStorage.removeItem(cacheKey);
             } catch (error) {
               console.error('Error clearing pilots cache:', error);
             }
-            setLoading(false);
-            return;
+          }
+          setLoading(false);
+          return;
+        }
+
+        const pilotsData = await Promise.all(Array.from(pilotIds).map(async (uid) => {
+          const cachedPilot = isHistoryMode ? pilotProfileCacheRef.current.get(uid) : undefined;
+          if (cachedPilot) {
+            return cachedPilot;
           }
 
-          // Fetch pilot details from userProfiles
-          const pilotPromises = Array.from(pilotIds).map(async (uid) => {
-            const profileQuery = query(
-              collection(db, "userProfiles"),
-              where("uid", "==", uid)
-            );
-            const profileSnapshot = await getDocs(profileQuery);
+          const profileQuery = query(
+            collection(db, "userProfiles"),
+            where("uid", "==", uid)
+          );
+          const profileSnapshot = await getDocs(profileQuery);
 
-            if (profileSnapshot.empty) {
-              // Fallback: if no profile exists, return basic info
-              return {
+          const pilot = profileSnapshot.empty
+            ? {
                 uid,
                 displayName: "Unknown Pilot",
                 femalePilot: false,
-              };
-            }
+              }
+            : (() => {
+                const profileData = profileSnapshot.docs[0].data();
+                return {
+                  uid: profileData.uid,
+                  displayName: profileData.displayName || "Unknown Pilot",
+                  email: profileData.email || "",
+                  femalePilot: profileData.femalePilot || false,
+                  priority: profileData.priority || undefined,
+                };
+              })();
 
-            const profileData = profileSnapshot.docs[0].data();
-            return {
-              uid: profileData.uid,
-              displayName: profileData.displayName || "Unknown Pilot",
-              email: profileData.email || "",
-              femalePilot: profileData.femalePilot || false,
-              priority: profileData.priority || undefined,
-            };
-          });
+          if (isHistoryMode) {
+            pilotProfileCacheRef.current.set(uid, pilot);
+          }
+          return pilot;
+        }));
 
-          const pilotsData = await Promise.all(pilotPromises);
+        if (cancelled) return;
 
-          // Differential update: only update if pilots actually changed
-          setRawPilots(prevPilots => {
-            // If this is the first load, just set all pilots
-            if (prevPilots.length === 0) {
-              console.log("First pilot load - setting all pilots");
-              // Note: Cache is updated after availability data is set (see below)
-              // so we skip caching here to avoid partial data
-              return pilotsData;
-            }
+        setRawPilots(prevPilots => {
+          if (prevPilots.length === 0) {
+            return pilotsData;
+          }
 
-            // Create a map of previous pilots by UID for quick lookup
-            const prevPilotsMap = new Map(prevPilots.map(p => [p.uid, p]));
+          const prevPilotsMap = new Map(prevPilots.map(p => [p.uid, p]));
+          let hasChanges = prevPilots.length !== pilotsData.length;
 
-            // Check if anything actually changed
-            let hasChanges = false;
-
-            // Check for added or modified pilots
+          if (!hasChanges) {
             for (const newPilot of pilotsData) {
               const prevPilot = prevPilotsMap.get(newPilot.uid);
               if (!prevPilot || JSON.stringify(prevPilot) !== JSON.stringify(newPilot)) {
@@ -440,45 +553,28 @@ export function usePilots(selectedDate: Date) {
                 break;
               }
             }
+          }
 
-            // Check for deleted pilots
-            if (!hasChanges && prevPilots.length !== pilotsData.length) {
-              hasChanges = true;
-            }
+          if (!hasChanges) {
+            return prevPilots;
+          }
 
-            // If nothing changed, return the same reference to prevent re-renders
-            if (!hasChanges) {
-              console.log("No pilot data changes detected - skipping update");
-              return prevPilots;
-            }
-
-            console.log("Pilot data changes detected - updating");
-
-            // Build new array, reusing unchanged pilot objects
-            const updatedPilots = pilotsData.map(newPilot => {
-              const prevPilot = prevPilotsMap.get(newPilot.uid);
-              // If pilot exists and hasn't changed, reuse the old reference
-              if (prevPilot && JSON.stringify(prevPilot) === JSON.stringify(newPilot)) {
-                return prevPilot;
-              }
-              return newPilot;
-            });
-
-            // Note: Cache is updated after availability data is set (see below)
-            // so we skip caching here to avoid partial data
-
-            return updatedPilots;
+          return pilotsData.map(newPilot => {
+            const prevPilot = prevPilotsMap.get(newPilot.uid);
+            return prevPilot && JSON.stringify(prevPilot) === JSON.stringify(newPilot)
+              ? prevPilot
+              : newPilot;
           });
+        });
 
-          setPilotAvailability(availabilityMap);
-          setPilotAvailabilityStatus(statusMap);
-          setPilotSignInTimes(signInTimesMap);
-          setPilotSignInTimesBySlot(signInTimesBySlotMap);
-          setPilotSignOutTimesBySlot(signOutTimesBySlotMap);
+        setPilotAvailability(availabilityMap);
+        setPilotAvailabilityStatus(statusMap);
+        setPilotSignInTimes(signInTimesMap);
+        setPilotSignInTimesBySlot(signInTimesBySlotMap);
+        setPilotSignOutTimesBySlot(signOutTimesBySlotMap);
 
-          // Update cache with complete data including availability
+        if (!isHistoryMode) {
           try {
-            // Convert Maps and Sets to serializable format
             const availabilityObj: Record<string, string[]> = {};
             availabilityMap.forEach((slots, pilotId) => {
               availabilityObj[pilotId] = Array.from(slots);
@@ -493,11 +589,11 @@ export function usePilots(selectedDate: Date) {
               statusObj[pilotId] = slots;
             });
 
-            const signInTimesObj = Object.fromEntries(signInTimesMap);
             const signInTimesBySlotObj: Record<string, Record<string, string>> = {};
             signInTimesBySlotMap.forEach((slotMap, pilotId) => {
               signInTimesBySlotObj[pilotId] = Object.fromEntries(slotMap);
             });
+
             const signOutTimesBySlotObj: Record<string, Record<string, string>> = {};
             signOutTimesBySlotMap.forEach((slotMap, pilotId) => {
               signOutTimesBySlotObj[pilotId] = Object.fromEntries(slotMap);
@@ -507,7 +603,7 @@ export function usePilots(selectedDate: Date) {
               data: pilotsData,
               availability: availabilityObj,
               availabilityStatus: statusObj,
-              signInTimes: signInTimesObj,
+              signInTimes: Object.fromEntries(signInTimesMap),
               signInTimesBySlot: signInTimesBySlotObj,
               signOutTimesBySlot: signOutTimesBySlotObj,
               customPilotOrder: customOrder,
@@ -516,27 +612,23 @@ export function usePilots(selectedDate: Date) {
           } catch (error) {
             console.error('Error caching pilots data:', error);
           }
-
-          setLoading(false);
-
-          const pilotsTime = performance.now() - pilotsStartTime;
-          console.log(`⏱️ Pilots loaded in ${pilotsTime.toFixed(0)}ms (${pilotsData.length} pilots)`);
-        } catch (err: any) {
-          console.error("Error processing pilots:", err);
-          setError(err.message);
-          setLoading(false);
         }
-      },
-      (err) => {
-        console.error("Error fetching pilots:", err);
+
+        setLoading(false);
+      } catch (err: any) {
+        if (cancelled) return;
+        console.error("Error processing pilots:", err);
         setError(err.message);
         setLoading(false);
       }
-    );
+    };
 
-    // Cleanup subscription on unmount or date change
-    return () => unsubscribe();
-  }, [selectedDate]);
+    applyAvailabilityState();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [availabilityRecords, historyTimestamp, isHistoryMode, cacheKey, customOrder]);
 
   // Helper function to check if a pilot signed in on time (>= 30 days before the target date)
   const isOnTimeSignIn = (pilotUid: string): boolean => {
@@ -692,6 +784,20 @@ export function usePilots(selectedDate: Date) {
     return signOutTimesForPilot.get(timeSlot) || null;
   };
 
+  const availabilityTimelineEvents = useMemo(() => {
+    const timestamps = new Map<number, Date>();
+
+    availabilityRecords?.forEach((record) => {
+      [record.signedInAt, record.signedOutAt].forEach((timestamp) => {
+        const date = parseAvailabilityTimestamp(timestamp);
+        if (date === null) return;
+        timestamps.set(date, new Date(date));
+      });
+    });
+
+    return Array.from(timestamps.values()).sort((a, b) => a.getTime() - b.getTime());
+  }, [availabilityRecords]);
+
   const saveCustomPilotOrder = async (newOrder: string[]) => {
     const dateStr = format(selectedDate, "yyyy-MM-dd");
     try {
@@ -709,5 +815,5 @@ export function usePilots(selectedDate: Date) {
     }
   };
 
-  return { pilots, loading, error, isPilotAvailableForTimeSlot, getPilotAvailabilityStatus, getPilotSignInTimeForTimeSlot, getPilotSignOutTimeForTimeSlot, saveCustomPilotOrder };
+  return { pilots, loading, error, isPilotAvailableForTimeSlot, getPilotAvailabilityStatus, getPilotSignInTimeForTimeSlot, getPilotSignOutTimeForTimeSlot, availabilityTimelineEvents, saveCustomPilotOrder };
 }

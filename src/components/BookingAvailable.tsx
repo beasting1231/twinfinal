@@ -1,7 +1,17 @@
 import { useRef, memo, useState } from "react";
 import { Info } from "lucide-react";
-import type { Booking, PilotPayment, AvailabilityStatus } from "../types/index";
+import type { Booking, BookingHistoryEntry, PilotPayment, AvailabilityStatus } from "../types/index";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
+import { formatSwissDateTime } from "../utils/timezone";
+
+interface HistoryTooltipData {
+  user: string;
+  action?: string;
+  timestamp?: string;
+  timestampValue?: string;
+  text?: string;
+  accentText?: string;
+}
 
 interface PilotSlotProps {
   bookingId: string;
@@ -17,6 +27,10 @@ interface PilotSlotProps {
   canLongPress: boolean;
   isSecondDriverSelected: boolean;
   canSelectSecondDriverPilot: boolean;
+  assignedHistory?: HistoryTooltipData;
+  assignedHistoryEntries?: HistoryTooltipData[];
+  paymentHistory?: HistoryTooltipData;
+  paymentHistoryEntries?: HistoryTooltipData[];
   onPilotNameClick?: (slotIndex: number, pilotName: string, position: { x: number; y: number }) => void;
   onPilotNameLongPress?: (pilotName: string, position: { x: number; y: number }) => void;
   onSecondDriverPilotToggle?: (pilotName: string) => void;
@@ -36,6 +50,10 @@ function PilotSlot({
   canLongPress,
   isSecondDriverSelected,
   canSelectSecondDriverPilot,
+  assignedHistory,
+  assignedHistoryEntries = [],
+  paymentHistory,
+  paymentHistoryEntries = [],
   onPilotNameClick,
   onPilotNameLongPress,
   onSecondDriverPilotToggle,
@@ -155,6 +173,12 @@ function PilotSlot({
       {...dragListeners}
     >
       <div
+        data-history-hover-target="pilot-assignment"
+        data-history-user={assignedHistory?.user}
+        data-history-action={assignedHistory?.action}
+        data-history-timestamp={assignedHistory?.timestamp}
+        data-history-timestamp-value={assignedHistory?.timestampValue}
+        data-history-entries={JSON.stringify(assignedHistoryEntries)}
         className={`text-xs text-white ${bgColorClass} rounded-t-lg px-2 py-0.5 w-[80%] relative ${
           isSecondDriverSelected ? 'pl-3' : ''
         } ${
@@ -178,7 +202,17 @@ function PilotSlot({
         )}
         <div className="text-center truncate">{pilot}</div>
         {numAmount !== undefined && numAmount !== 0 && !isNaN(numAmount) && (
-          <span className="absolute right-2 top-0.5 font-medium text-white">{numAmount}</span>
+          <span
+            data-history-hover-target="pilot-payment-amount"
+            data-history-user={paymentHistory?.user}
+            data-history-action={paymentHistory?.action}
+            data-history-timestamp={paymentHistory?.timestamp}
+            data-history-timestamp-value={paymentHistory?.timestampValue}
+            data-history-entries={JSON.stringify(paymentHistoryEntries)}
+            className="absolute right-2 top-0.5 font-medium text-white"
+          >
+            {numAmount}
+          </span>
         )}
       </div>
     </div>
@@ -207,6 +241,7 @@ interface BookingAvailableProps {
   onContextMenu?: (slotIndex: number, position: { x: number; y: number }) => void;
   onNoPilotClick?: () => void; // Handler for left-clicking on "no pilot" cell (admin sign-in)
   onNoPilotContextMenu?: (position: { x: number; y: number }) => void;
+  noPilotHistoryEntries?: HistoryTooltipData[];
   onAvailableContextMenu?: (position: { x: number; y: number }) => void;
   onPilotNameClick?: (slotIndex: number, pilotName: string, position: { x: number; y: number }) => void; // Handler for clicking on a pilot name
   onPilotNameLongPress?: (pilotName: string, position: { x: number; y: number }) => void; // Handler for long-press on pilot name
@@ -217,6 +252,9 @@ interface BookingAvailableProps {
   currentUserDisplayName?: string; // Current user's display name to check if they're clicking their own name
   // Drag and drop props
   bookingId?: string; // ID for drag source
+  createdByName?: string;
+  createdAt?: any;
+  history?: BookingHistoryEntry[];
   droppableId?: string; // ID for drop target
   canDrag?: boolean; // Whether this booking can be dragged (admin only)
   draggedItemPax?: number; // Number of passengers in the currently dragged item
@@ -260,6 +298,7 @@ export const BookingAvailable = memo(function BookingAvailable({
   onContextMenu,
   onNoPilotClick,
   onNoPilotContextMenu,
+  noPilotHistoryEntries = [],
   onAvailableContextMenu,
   onPilotNameClick,
   onPilotNameLongPress,
@@ -269,6 +308,9 @@ export const BookingAvailable = memo(function BookingAvailable({
   isFemalePilot = false,
   currentUserDisplayName,
   bookingId,
+  createdByName,
+  createdAt,
+  history = [],
   droppableId,
   canDrag = false,
   draggedItemPax,
@@ -311,6 +353,247 @@ export const BookingAvailable = memo(function BookingAvailable({
   const dropZoneWidth = draggedItemPax || 1;
 
   console.log("BookingAvailable render:", { pilotId, status, isCurrentUserPilot, hasNoPilotHandler: !!onNoPilotContextMenu, hasAvailableHandler: !!onAvailableContextMenu });
+
+  const getHistoryDate = (timestamp: any) => {
+    if (!timestamp) return undefined;
+
+    const date =
+      typeof timestamp.toDate === "function"
+        ? timestamp.toDate()
+        : timestamp instanceof Date
+        ? timestamp
+        : new Date(timestamp);
+
+    if (Number.isNaN(date.getTime())) return undefined;
+
+    return date;
+  };
+
+  const formatHistoryTimestamp = (timestamp: any) => {
+    const date = getHistoryDate(timestamp);
+    if (!date) return undefined;
+
+    return formatSwissDateTime(date) || undefined;
+  };
+
+  const formatHistoryTimestampValue = (timestamp: any) => {
+    return getHistoryDate(timestamp)?.toISOString();
+  };
+
+  const getStatusFromDetails = (details?: string) => {
+    const match = details?.match(/\b(?:to|status:)\s+([a-z ]+)/i);
+    return match?.[1]?.trim();
+  };
+
+  const getChangedFieldLabel = (details?: string) => {
+    if (!details) return undefined;
+
+    const firstDetail = details.split(",")[0].trim().toLowerCase();
+    if (firstDetail.startsWith("name:")) return "name";
+    if (firstDetail.startsWith("location:")) return "pickup";
+    if (firstDetail.startsWith("source:")) return "source";
+    if (firstDetail.startsWith("phone:")) return "phone";
+    if (firstDetail.startsWith("email:")) return "email";
+    if (firstDetail.startsWith("notes ")) return "notes";
+    if (firstDetail.includes("people")) return "number of people";
+    if (firstDetail.startsWith("commission")) return "commission";
+    if (firstDetail.includes("lady pilots")) return "lady pilots";
+    if (firstDetail.startsWith("flight:")) return "flight";
+
+    return undefined;
+  };
+
+  const getPilotListFromDetails = (details?: string) => {
+    const match = details?.match(/pilots:\s*([^,]+)/i);
+    return match?.[1]?.split(/\s+and\s+|,\s*/).map((name) => name.trim()).filter(Boolean) || [];
+  };
+
+  const getPresentPilotFromDetails = (details?: string) => {
+    const match = details?.match(/present:\s*([^,]+)/i) || details?.match(/acknowledgedpilots:\s*([^,]+)/i);
+    return match?.[1]?.split(/\s+and\s+|,\s*/)[0]?.trim();
+  };
+
+  const getHistoryText = (entry: BookingHistoryEntry, contextPilotName?: string): Pick<HistoryTooltipData, "text" | "accentText" | "action"> => {
+    const user = entry.userName;
+    const details = entry.details || "";
+
+    if (entry.action === "status_changed") {
+      const status = getStatusFromDetails(details);
+      return {
+        text: user,
+        accentText: status ? `status ${status}` : "status changed",
+        action: "status_changed",
+      };
+    }
+
+    if (entry.action === "created") {
+      return { text: user, accentText: "created", action: "created" };
+    }
+
+    if (entry.action === "moved") {
+      return { text: user, accentText: "moved", action: "moved" };
+    }
+
+    if (entry.action === "restored") {
+      return { text: user, accentText: "restored", action: "restored" };
+    }
+
+    const presentPilot = getPresentPilotFromDetails(details);
+    if (presentPilot && (!contextPilotName || presentPilot.toLowerCase() === contextPilotName.toLowerCase())) {
+      return {
+        text: presentPilot,
+        accentText: "present",
+        action: "present",
+      };
+    }
+
+    const assignedPilots = getPilotListFromDetails(details);
+    if (assignedPilots.length > 0) {
+      const pilotLabel = contextPilotName || assignedPilots[0];
+      return {
+        text: user,
+        accentText: `assigned ${pilotLabel}`,
+        action: "pilot_assigned",
+      };
+    }
+
+    if (details.toLowerCase().includes("payment")) {
+      return { text: user, accentText: `updated ${contextPilotName ? `${contextPilotName} ` : ""}payment`, action: "payment" };
+    }
+
+    if (entry.action === "edited") {
+      const field = getChangedFieldLabel(details);
+      if (field) {
+        const verb = details.toLowerCase().includes("cleared") ? "removed" : "updated";
+        return { text: user, accentText: `${verb} ${field}`, action: "edited" };
+      }
+      return { text: user, accentText: "edited", action: "edited" };
+    }
+
+    return { text: user, accentText: entry.action.replace(/_/g, " "), action: entry.action };
+  };
+
+  const toHistoryTooltip = (entry?: BookingHistoryEntry, fallbackUser?: string, fallbackAction?: string, fallbackTimestamp?: any, contextPilotName?: string): HistoryTooltipData | undefined => {
+    const user = entry?.userName || fallbackUser;
+    if (!user) return undefined;
+    const textParts = entry ? getHistoryText(entry, contextPilotName) : {};
+
+    return {
+      user,
+      action: textParts.action || entry?.action || fallbackAction,
+      timestamp: formatHistoryTimestamp(entry?.timestamp || fallbackTimestamp),
+      timestampValue: formatHistoryTimestampValue(entry?.timestamp || fallbackTimestamp),
+      text: textParts.text,
+      accentText: textParts.accentText,
+    };
+  };
+
+  const toHistoryTooltipEntries = (entries: BookingHistoryEntry[], fallback?: HistoryTooltipData, contextPilotName?: string) => {
+    const tooltipEntries = entries
+      .map((entry) => toHistoryTooltip(entry, undefined, undefined, undefined, contextPilotName))
+      .filter((entry): entry is HistoryTooltipData => Boolean(entry));
+
+    if (tooltipEntries.length === 0 && fallback) {
+      return [fallback];
+    }
+
+    return tooltipEntries;
+  };
+
+  const latestHistoryEntry = (predicate: (entry: BookingHistoryEntry) => boolean) => {
+    return [...history].reverse().find(predicate);
+  };
+
+  const isBookingDetailsHistoryEntry = (entry: BookingHistoryEntry) => {
+    if (entry.action === "deleted") return false;
+    if (entry.action === "created" || entry.action === "moved" || entry.action === "status_changed" || entry.action === "restored") {
+      return true;
+    }
+    if (entry.action !== "edited") return false;
+
+    const details = entry.details?.toLowerCase() || "";
+    if (!details.trim()) return false;
+
+    return !["payment", "pilot", "driver", "vehicle"].some((blockedDetail) => details.includes(blockedDetail));
+  };
+
+  const latestBookingEntry = latestHistoryEntry(isBookingDetailsHistoryEntry);
+  const latestBookingHistory = toHistoryTooltip(latestBookingEntry, createdByName || "Unknown", "created", createdAt);
+  const bookingHistoryEntries = toHistoryTooltipEntries(
+    history.filter(isBookingDetailsHistoryEntry),
+    latestBookingHistory
+  );
+
+  const isPaymentHistoryForPilot = (entry: BookingHistoryEntry, pilotName?: string) => {
+    const details = entry.details?.toLowerCase() || "";
+    if (!details.includes("payment")) return false;
+    if (!pilotName) return true;
+
+    return details.includes(pilotName.toLowerCase());
+  };
+
+  const getPaymentHistoryEntries = (pilotName?: string) => {
+    const paymentEntries = history.filter((entry) => isPaymentHistoryForPilot(entry, pilotName));
+    return toHistoryTooltipEntries(paymentEntries, undefined, pilotName);
+  };
+
+  const getLatestPaymentHistory = (pilotName?: string) => {
+    const latestPaymentEntry = latestHistoryEntry((entry) => isPaymentHistoryForPilot(entry, pilotName));
+    return toHistoryTooltip(latestPaymentEntry, undefined, undefined, undefined, pilotName);
+  };
+
+  const getPilotAssignmentHistoryEntries = (pilotName?: string) => {
+    if (!pilotName) return latestBookingHistory ? [latestBookingHistory] : [];
+
+    const pilotEntries = history.filter((entry) => {
+      const details = entry.details?.toLowerCase() || "";
+      return details.includes("pilots") && details.includes(pilotName.toLowerCase());
+    });
+    const presentEntries = history.filter((entry) => {
+      const details = entry.details?.toLowerCase() || "";
+      return (
+        (details.includes("present:") || details.includes("acknowledgedpilots:")) &&
+        details.includes(pilotName.toLowerCase())
+      );
+    });
+    const combinedPilotEntries = [...pilotEntries, ...presentEntries].sort((a, b) => {
+      const getTime = (entry: BookingHistoryEntry) => {
+        const timestamp = entry.timestamp;
+        const date =
+          typeof timestamp?.toDate === "function"
+            ? timestamp.toDate()
+            : timestamp instanceof Date
+            ? timestamp
+            : new Date(timestamp);
+        return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+      };
+      return getTime(a) - getTime(b);
+    });
+
+    if (combinedPilotEntries.length > 0) {
+      return toHistoryTooltipEntries(combinedPilotEntries, undefined, pilotName);
+    }
+
+    const actionEntries = history.filter((entry) => entry.action === "pilot_assigned");
+    if (actionEntries.length > 0) {
+      return toHistoryTooltipEntries(actionEntries, undefined, pilotName);
+    }
+
+    return latestBookingHistory ? [latestBookingHistory] : [];
+  };
+
+  const getPilotAssignedByName = (pilotName?: string) => {
+    if (!pilotName) return latestBookingHistory;
+
+    const latestPilotEntry =
+      [...history].reverse().find((entry) => {
+        const details = entry.details?.toLowerCase() || "";
+        return details.includes("pilots") && details.includes(pilotName.toLowerCase());
+      }) ||
+      latestHistoryEntry((entry) => entry.action === "pilot_assigned");
+
+    return toHistoryTooltip(latestPilotEntry, latestBookingHistory?.user, "pilot_assigned", latestBookingEntry?.timestamp || createdAt);
+  };
 
   // Detect which slot was clicked based on x position
   const getSlotIndexFromPosition = (clientX: number): number => {
@@ -539,6 +822,12 @@ export const BookingAvailable = memo(function BookingAvailable({
           }
         }}
         data-booking-id={bookingId}
+        data-history-hover-target="booking"
+        data-history-user={latestBookingHistory?.user}
+        data-history-action={latestBookingHistory?.action}
+        data-history-timestamp={latestBookingHistory?.timestamp}
+        data-history-timestamp-value={latestBookingHistory?.timestampValue}
+        data-history-entries={JSON.stringify(bookingHistoryEntries)}
         className={`w-full h-full rounded-lg pt-2 px-2 flex flex-col justify-between transition-all overflow-hidden relative ${onBookedClick || isSecondDriverPilotSelectionMode ? 'cursor-pointer' : 'cursor-default'} ${canDrag && bookingId ? 'cursor-grab active:cursor-grabbing' : ''} ${isHighlighted ? 'animate-pulse-slow' : ''}`}
         style={{
           backgroundColor,
@@ -641,6 +930,10 @@ export const BookingAvailable = memo(function BookingAvailable({
                 const isOverbookedPosition = isOverbookedSlot(index);
                 const isOwnName = !!(currentUserDisplayName && pilot === currentUserDisplayName);
                 const isAcknowledged = pilot ? acknowledgedPilots.includes(pilot) : false;
+                const assignedHistory = getPilotAssignedByName(pilot);
+                const assignedHistoryEntries = getPilotAssignmentHistoryEntries(pilot);
+                const paymentHistory = getLatestPaymentHistory(pilot);
+                const paymentHistoryEntries = getPaymentHistoryEntries(pilot);
 
                 return (
                   <PilotSlot
@@ -658,6 +951,10 @@ export const BookingAvailable = memo(function BookingAvailable({
                     canLongPress={isOwnName && !!onPilotNameLongPress}
                     isSecondDriverSelected={Boolean(pilot && secondDriverPilots.includes(pilot))}
                     canSelectSecondDriverPilot={Boolean(pilot && isSecondDriverPilotSelectionMode && onSecondDriverPilotToggle)}
+                    assignedHistory={assignedHistory}
+                    assignedHistoryEntries={assignedHistoryEntries}
+                    paymentHistory={paymentHistory}
+                    paymentHistoryEntries={paymentHistoryEntries}
                     onPilotNameClick={onPilotNameClick}
                     onPilotNameLongPress={onPilotNameLongPress}
                     onSecondDriverPilotToggle={onSecondDriverPilotToggle}
@@ -729,6 +1026,8 @@ export const BookingAvailable = memo(function BookingAvailable({
     const isOnRequest = pilotAvailabilityStatus === "onRequest";
     return (
       <div
+        data-history-hover-target="no-pilot-cell"
+        data-history-entries={JSON.stringify(noPilotHistoryEntries)}
         className={`w-full h-full rounded-lg flex items-center justify-center ${
           isMoveModeActive
             ? 'bg-blue-200 dark:bg-blue-900/40 hover:bg-blue-300 dark:hover:bg-blue-800/50 border-2 border-blue-400 dark:border-blue-600 cursor-pointer'

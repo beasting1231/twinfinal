@@ -226,14 +226,14 @@ export function NewBookingModal({
   }, [selectedSlotOption, timeSlot]);
 
   const { startEditing, stopEditing } = useEditing();
-  const { currentUser } = useAuth();
+  const { currentUser, userProfile } = useAuth();
   const { role } = useRole();
 
   // Determine the default booking source based on role
   // Admins default to "twin", non-admins use their display name
   const defaultBookingSource = role === 'admin'
     ? "twin"
-    : (currentUser?.displayName || "");
+    : (userProfile?.displayName || currentUser?.displayName || "");
 
   // Exclude deleted bookings from capacity calculations
   const filteredBookings = useMemo(() => {

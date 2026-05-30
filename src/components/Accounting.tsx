@@ -13,6 +13,7 @@ import { doc, updateDoc, onSnapshot, collection, getDocs } from "firebase/firest
 import { db } from "../firebase/config";
 
 interface AccountingRow {
+  annualFlightNumber: number;
   date: string;
   time: string;
   timeIndex: number;
@@ -215,6 +216,7 @@ export function Accounting() {
 
     // Create rows - one row per assigned pilot per booking
     const rows: AccountingRow[] = [];
+    const flightCountByYear = new Map<string, number>();
 
     sortedBookings.forEach((booking) => {
       // Skip if no pilots assigned
@@ -258,6 +260,10 @@ export function Accounting() {
       if (uniquePilots.length === 0) return;
 
       uniquePilots.forEach((pilotName) => {
+        const bookingYear = booking.date.slice(0, 4);
+        const annualFlightNumber = (flightCountByYear.get(bookingYear) || 0) + 1;
+        flightCountByYear.set(bookingYear, annualFlightNumber);
+
         // Try to find payment info for this pilot
         const pilotPayment = booking.pilotPayments?.find(p => p.pilotName === pilotName);
 
@@ -267,6 +273,7 @@ export function Accounting() {
           .filter((url): url is string => !!url) || [];
 
         rows.push({
+          annualFlightNumber,
           date: booking.date,
           time: timeSlot,
           timeIndex: booking.timeIndex,
@@ -593,7 +600,7 @@ export function Accounting() {
 
       const rowData = role === "pilot"
         ? [
-            index + 1,
+            row.annualFlightNumber,
             formatDate(row.date),
             row.time,
             row.pilot,
@@ -602,7 +609,7 @@ export function Accounting() {
             row.bookingSource,
           ]
         : [
-            index + 1,
+            row.annualFlightNumber,
             calculatePilotInvoice(),
             formatDate(row.date),
             row.time,
@@ -831,7 +838,7 @@ export function Accounting() {
                       key={`${row.date}-${row.time}-${row.pilot}-${index}`}
                       className="border-b border-gray-200 dark:border-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors"
                     >
-                      <td className="px-4 py-3 text-center text-gray-500 dark:text-zinc-500 whitespace-nowrap w-12">{index + 1}</td>
+                      <td className="px-4 py-3 text-center text-gray-500 dark:text-zinc-500 whitespace-nowrap w-12">{row.annualFlightNumber}</td>
                       {role !== "pilot" && (
                         <td className="px-4 py-3 text-right text-gray-900 dark:text-white whitespace-nowrap">
                           {typeof row.payment === "number"

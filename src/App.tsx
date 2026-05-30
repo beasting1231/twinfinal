@@ -1,10 +1,11 @@
-import { useState, useMemo, lazy, Suspense } from "react";
+import { useState, useMemo, useCallback, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { startOfWeek, startOfMonth, format, addDays, subDays } from "date-fns";
 import { Header } from "./components/Header";
 import { ScheduleGrid } from "./components/ScheduleGrid";
 import { AvailabilityGrid } from "./components/AvailabilityGrid";
 import { AvailabilityMonthGrid } from "./components/AvailabilityMonthGrid";
+import { AvailabilityOverviewTable } from "./components/AvailabilityOverviewTable";
 import { Account } from "./components/Account/Account";
 import { BookingSources } from "./components/BookingSources";
 import { Accounting } from "./components/Accounting";
@@ -45,17 +46,44 @@ import { BookingRequestForm } from "./components/BookingRequestForm";
 import { useBookings } from "./hooks/useBookings";
 import { usePilots } from "./hooks/usePilots";
 import { useDriverLocation } from "./hooks/useDriverLocation";
+import { useRole } from "./hooks/useRole";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { EditingProvider } from "./contexts/EditingContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { Login } from "./components/Auth/Login";
 import { ProtectedRoute } from "./components/Auth/ProtectedRoute";
 import { getTimeSlotsByDate } from "./utils/timeSlots";
+import { SWISS_TIME_ZONE } from "./utils/timezone";
+
+function toDate(value: any): Date | null {
+  if (!value) return null;
+  const date =
+    typeof value.toDate === "function"
+      ? value.toDate()
+      : value instanceof Date
+      ? value
+      : new Date(value);
+
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function getSwissDateKey(value: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: SWISS_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(value);
+}
 
 // Component for the Daily Plan route
 function DailyPlanPage() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [weekStartDate, setWeekStartDate] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
+  const [historyState, setHistoryState] = useState<{ isActive: boolean; timestamp: Date | null }>({
+    isActive: false,
+    timestamp: null,
+  });
 
   const { currentUser, userProfile } = useAuth();
 
@@ -75,7 +103,39 @@ function DailyPlanPage() {
     return bookings.filter(booking => booking.date === selectedDateStr);
   }, [bookings, selectedDate]);
 
-  const { pilots, loading: pilotsLoading, isPilotAvailableForTimeSlot, getPilotAvailabilityStatus, getPilotSignInTimeForTimeSlot, getPilotSignOutTimeForTimeSlot, saveCustomPilotOrder } = usePilots(selectedDate);
+  const { pilots, loading: pilotsLoading, isPilotAvailableForTimeSlot, getPilotAvailabilityStatus, getPilotSignInTimeForTimeSlot, getPilotSignOutTimeForTimeSlot, availabilityTimelineEvents, saveCustomPilotOrder } = usePilots(
+    selectedDate,
+    historyState.isActive ? historyState.timestamp : null
+  );
+
+  const getHistoryTimelineEvents = useCallback((historyDate: Date) => {
+    const visibleDateKey = format(selectedDate, "yyyy-MM-dd");
+    const historyDateKey = format(historyDate, "yyyy-MM-dd");
+    const timestamps = new Map<number, Date>();
+
+    bookings.forEach((booking) => {
+      if (booking.date !== visibleDateKey) return;
+
+      booking.history?.forEach((entry) => {
+        const entryDate = toDate(entry.timestamp);
+        if (!entryDate || getSwissDateKey(entryDate) !== historyDateKey) return;
+        timestamps.set(entryDate.getTime(), entryDate);
+      });
+
+      const createdAt = toDate(booking.createdAt);
+      if (createdAt && getSwissDateKey(createdAt) === historyDateKey) {
+        timestamps.set(createdAt.getTime(), createdAt);
+      }
+    });
+
+    availabilityTimelineEvents.forEach((eventDate) => {
+      if (getSwissDateKey(eventDate) === historyDateKey) {
+        timestamps.set(eventDate.getTime(), eventDate);
+      }
+    });
+
+    return Array.from(timestamps.values()).sort((a, b) => a.getTime() - b.getTime());
+  }, [availabilityTimelineEvents, bookings, selectedDate]);
 
   // Progressive loading: Only wait for pilots data, not bookings
   // The grid will show immediately with pilots, and bookings will populate as they load
@@ -89,6 +149,8 @@ function DailyPlanPage() {
         onDateChange={setSelectedDate}
         weekStartDate={weekStartDate}
         onWeekChange={setWeekStartDate}
+        onHistoryStateChange={setHistoryState}
+        getHistoryTimelineEvents={getHistoryTimelineEvents}
       />
       <ScheduleGrid
         selectedDate={selectedDate}
@@ -103,6 +165,8 @@ function DailyPlanPage() {
         saveCustomPilotOrder={saveCustomPilotOrder}
         loading={isLoading}
         currentUserDisplayName={currentUserDisplayName}
+        historyMode={historyState.isActive}
+        historyTimestamp={historyState.timestamp}
         onAddBooking={addBooking}
         onUpdateBooking={updateBooking}
         onDeleteBooking={deleteBooking}
@@ -114,10 +178,17 @@ function DailyPlanPage() {
 
 // Component for the Availability route
 function AvailabilityPage() {
+  const { role } = useRole();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [weekStartDate, setWeekStartDate] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [monthStartDate, setMonthStartDate] = useState(startOfMonth(new Date()));
-  const [availabilityViewMode, setAvailabilityViewMode] = useState<'week' | 'month'>('week');
+  const [availabilityViewMode, setAvailabilityViewMode] = useState<'week' | 'month' | 'overview'>('week');
+
+  const showOverviewForDate = (date: Date) => {
+    if (role !== 'admin') return;
+    setMonthStartDate(startOfMonth(date));
+    setAvailabilityViewMode('overview');
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-zinc-950">
@@ -132,9 +203,20 @@ function AvailabilityPage() {
         onAvailabilityViewModeChange={setAvailabilityViewMode}
       />
       {availabilityViewMode === 'week' ? (
-        <AvailabilityGrid weekStartDate={weekStartDate} />
+        <AvailabilityGrid
+          weekStartDate={weekStartDate}
+          onShowOverview={() => showOverviewForDate(weekStartDate)}
+        />
+      ) : availabilityViewMode === 'month' || role !== 'admin' ? (
+        <AvailabilityMonthGrid
+          monthStartDate={monthStartDate}
+          onShowOverview={() => showOverviewForDate(monthStartDate)}
+        />
       ) : (
-        <AvailabilityMonthGrid monthStartDate={monthStartDate} />
+        <AvailabilityOverviewTable
+          monthStartDate={monthStartDate}
+          onBack={() => setAvailabilityViewMode('month')}
+        />
       )}
     </div>
   );

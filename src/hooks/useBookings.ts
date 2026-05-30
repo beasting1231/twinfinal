@@ -9,6 +9,78 @@ import { format } from "date-fns";
 
 const BOOKINGS_CACHE_KEY = 'twin_bookings_cache';
 const CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
+const BOOKING_SNAPSHOT_FIELDS: Array<keyof Booking> = [
+  "date",
+  "pilotIndex",
+  "timeIndex",
+  "customerName",
+  "numberOfPeople",
+  "pickupLocation",
+  "bookingSource",
+  "phoneNumber",
+  "email",
+  "preferredContact",
+  "notes",
+  "officeNotes",
+  "commission",
+  "commissionStatus",
+  "femalePilotsRequired",
+  "flightType",
+  "assignedPilots",
+  "overbookedSlotIndexes",
+  "acknowledgedPilots",
+  "bookingStatus",
+  "isBlocked",
+  "span",
+  "pilotPayments",
+  "driver",
+  "vehicle",
+  "driver2",
+  "vehicle2",
+  "createdBy",
+  "createdByName",
+  "createdAt",
+  "deletedBy",
+  "deletedByName",
+  "deletedAt",
+];
+
+function createBookingSnapshot(booking: Partial<Booking>) {
+  const snapshot: Record<string, any> = {};
+
+  for (const key of BOOKING_SNAPSHOT_FIELDS) {
+    const value = booking[key];
+    if (value !== undefined) {
+      snapshot[key] = value;
+    }
+  }
+
+  return JSON.parse(JSON.stringify(snapshot));
+}
+
+function applyBookingPatchToSnapshot(existingBooking: Booking | undefined, patch: Partial<Booking>, now: Date) {
+  const snapshotSource: Record<string, any> = existingBooking
+    ? createBookingSnapshot(existingBooking)
+    : {};
+
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === undefined) continue;
+
+    if (value === "") {
+      delete snapshotSource[key];
+    } else if (key === "assignedPilots" && Array.isArray(value)) {
+      snapshotSource[key] = value.map((pilot) => pilot === undefined ? "" : pilot);
+    } else {
+      snapshotSource[key] = value;
+    }
+  }
+
+  if (patch.hasOwnProperty("date") || patch.hasOwnProperty("timeIndex")) {
+    snapshotSource.createdAt = now;
+  }
+
+  return createBookingSnapshot(snapshotSource as Partial<Booking>);
+}
 
 interface UseBookingsOptions {
   dateRange?: {
@@ -53,7 +125,7 @@ export function useBookings(options?: UseBookingsOptions) {
   });
   const [error, setError] = useState<string | null>(null);
   const { isEditing, incrementPendingUpdates } = useEditing();
-  const { currentUser } = useAuth();
+  const { currentUser, userProfile } = useAuth();
   const pendingUpdateRef = useRef<Booking[] | null>(null);
 
   useEffect(() => {
@@ -208,11 +280,14 @@ export function useBookings(options?: UseBookingsOptions) {
       }
 
       // Create history entry for booking creation (use regular Date since serverTimestamp() can't be used in arrays)
+      const creatorName = userProfile?.displayName || currentUser?.displayName || currentUser?.email || "Unknown";
+      const now = new Date();
+
       const historyEntry: BookingHistoryEntry = {
         action: "created",
-        timestamp: new Date(),
+        timestamp: now,
         userId: currentUser?.uid || "",
-        userName: currentUser?.displayName || currentUser?.email || "Unknown",
+        userName: creatorName,
         details: createdDetails,
       };
 
@@ -220,10 +295,15 @@ export function useBookings(options?: UseBookingsOptions) {
       const bookingWithCreator = {
         ...booking,
         createdBy: currentUser?.uid || "",
-        createdByName: currentUser?.displayName || currentUser?.email || "",
+        createdByName: creatorName,
         createdAt: serverTimestamp(),
-        history: [historyEntry],
       };
+      const snapshotSource = {
+        ...bookingWithCreator,
+        createdAt: now,
+      };
+      historyEntry.snapshotAfter = createBookingSnapshot(snapshotSource);
+      bookingWithCreator.history = [historyEntry];
       await addDoc(collection(db, "bookings"), bookingWithCreator);
     } catch (err: any) {
       console.error("Error adding booking:", err);
@@ -237,6 +317,7 @@ export function useBookings(options?: UseBookingsOptions) {
       // Filter out undefined values from the update object (Firebase doesn't accept undefined)
       const sanitizedBooking: any = {};
       const existingBooking = bookings.find((b) => b.id === id);
+      const now = new Date();
 
       // Check if this is a move operation (timeIndex or date changed)
       const isMove = booking.hasOwnProperty('timeIndex') || booking.hasOwnProperty('date');
@@ -286,6 +367,13 @@ export function useBookings(options?: UseBookingsOptions) {
               return `pilots: ${pilots.join(', ')}`;
             }
             return 'pilots changed';
+          case 'acknowledgedPilots':
+            if (Array.isArray(value)) {
+              const pilots = value.filter((p: string) => p && p !== "");
+              if (pilots.length === 0) return 'present cleared';
+              return `present: ${pilots.join(', ')}`;
+            }
+            return 'present changed';
           case 'customerName':
             return `name: ${value}`;
           case 'bookingStatus':
@@ -309,6 +397,14 @@ export function useBookings(options?: UseBookingsOptions) {
           case 'flightType':
             return `flight: ${value}`;
           case 'pilotPayments':
+            if (Array.isArray(value)) {
+              const pilotNames = value
+                .map((payment: { pilotName?: string }) => payment.pilotName)
+                .filter((pilotName: string | undefined) => pilotName && pilotName.trim());
+              return pilotNames.length > 0
+                ? `payment details updated for ${pilotNames.join(', ')}`
+                : 'payment details updated';
+            }
             return 'payment details updated';
           case 'span':
             return `span: ${value}`;
@@ -379,17 +475,20 @@ export function useBookings(options?: UseBookingsOptions) {
         }
       }
 
-      // Create history entry (use regular Date since serverTimestamp() can't be used in arrayUnion)
-      const historyEntry: BookingHistoryEntry = {
-        action: historyAction,
-        timestamp: new Date(),
-        userId: currentUser?.uid || "",
-        userName: currentUser?.displayName || currentUser?.email || "Unknown",
-        ...(historyDetails ? { details: historyDetails } : {}),
-      };
+      if (historyAction !== "edited" || historyDetails) {
+        // Create history entry (use regular Date since serverTimestamp() can't be used in arrayUnion)
+        const historyEntry: BookingHistoryEntry = {
+          action: historyAction,
+          timestamp: now,
+          userId: currentUser?.uid || "",
+          userName: currentUser?.displayName || currentUser?.email || "Unknown",
+          ...(historyDetails ? { details: historyDetails } : {}),
+          snapshotAfter: applyBookingPatchToSnapshot(existingBooking, booking, now),
+        };
 
-      // Use arrayUnion to append to history array
-      sanitizedBooking.history = arrayUnion(historyEntry);
+        // Use arrayUnion to append to history array
+        sanitizedBooking.history = arrayUnion(historyEntry);
+      }
 
       await updateDoc(doc(db, "bookings", id), sanitizedBooking);
     } catch (err: any) {
@@ -402,11 +501,19 @@ export function useBookings(options?: UseBookingsOptions) {
   const deleteBooking = async (id: string) => {
     try {
       // Create history entry for deletion (use regular Date since serverTimestamp() can't be used in arrayUnion)
+      const now = new Date();
       const historyEntry: BookingHistoryEntry = {
         action: "deleted",
-        timestamp: new Date(),
+        timestamp: now,
         userId: currentUser?.uid || "",
         userName: currentUser?.displayName || currentUser?.email || "Unknown",
+        snapshotAfter: applyBookingPatchToSnapshot(bookings.find((b) => b.id === id), {
+          bookingStatus: "deleted",
+          assignedPilots: [],
+          deletedBy: currentUser?.uid || "",
+          deletedByName: currentUser?.displayName || currentUser?.email || "",
+          deletedAt: now,
+        }, now),
       };
 
       await updateDoc(doc(db, "bookings", id), {

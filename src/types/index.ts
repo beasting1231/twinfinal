@@ -30,6 +30,16 @@ export interface BookingHistoryEntry {
   userId: string;
   userName: string;
   details?: string; // Optional details about the change (e.g., "from 10:00 to 11:00")
+  snapshotAfter?: Record<string, any>; // Full read-only state after this change, used for history replay
+}
+
+export interface AssignmentHistoryEntry {
+  action: "created" | "edited" | "deleted";
+  timestamp: any;
+  userId: string;
+  userName: string;
+  details?: string;
+  snapshotAfter?: Record<string, any> | null;
 }
 
 export interface Booking {
@@ -108,6 +118,7 @@ export interface DriverAssignment {
   vehicle2?: string;
   secondDriverColumnVisible?: boolean;
   secondDriverPilots?: string[];
+  history?: AssignmentHistoryEntry[];
 }
 
 export interface DeskAssignment {
@@ -115,6 +126,7 @@ export interface DeskAssignment {
   date: string; // ISO date string (YYYY-MM-DD)
   timeIndex: number;
   desk?: string | null;
+  history?: AssignmentHistoryEntry[];
 }
 
 export interface DriverLocation {
