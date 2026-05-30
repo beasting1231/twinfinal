@@ -28,8 +28,8 @@ service cloud.firestore {
       let oldPilots = resource.data.assignedPilots;
       let newPilots = request.resource.data.assignedPilots;
 
-      // Check that only assignedPilots field is being changed
-      let onlyPilotsChanged = request.resource.data.diff(resource.data).affectedKeys().hasOnly(['assignedPilots']);
+      // Check that only assignedPilots and audit history are being changed
+      let onlyPilotsChanged = request.resource.data.diff(resource.data).affectedKeys().hasOnly(['assignedPilots', 'history']);
 
       // Check that the user's name was in the old array
       let wasAssigned = userDisplayName in oldPilots;

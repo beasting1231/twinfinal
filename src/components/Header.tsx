@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Menu } from "lucide-react";
+import { ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { addDays, format } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -118,13 +118,39 @@ export function Header({
     return Math.min(1440, Math.max(0, hour * 60 + minute));
   };
 
+  const getCurrentSwissDate = () => {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: SWISS_TIME_ZONE,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new Date());
+
+    const getPart = (type: Intl.DateTimeFormatPartTypes) =>
+      parts.find((part) => part.type === type)?.value ?? "";
+    const year = Number(getPart("year"));
+    const month = Number(getPart("month"));
+    const day = Number(getPart("day"));
+
+    if (Number.isNaN(year) || Number.isNaN(month) || Number.isNaN(day)) {
+      return new Date();
+    }
+
+    return new Date(year, month - 1, day);
+  };
+
   const handleHistoryButtonClick = () => {
     setHistoryOpen((open) => {
       if (!open) {
+        setHistoryDate(getCurrentSwissDate());
         setHistoryMinute(getCurrentSwissMinute());
       }
       return !open;
     });
+  };
+
+  const exitHistoryMode = () => {
+    setHistoryOpen(false);
   };
 
   const handleLogout = async () => {
@@ -504,7 +530,7 @@ export function Header({
               onClick={handleHistoryButtonClick}
               className="h-9 px-3 text-sm font-medium text-gray-900 hover:bg-gray-100 dark:text-white dark:hover:bg-zinc-800"
             >
-              history
+              {historyOpen ? "exit history" : "history"}
             </Button>
           ) : (
             <span className="text-sm font-medium text-gray-900 dark:text-white">{currentUser?.displayName || currentUser?.email}</span>
@@ -573,7 +599,15 @@ export function Header({
           </div>
         )}
         <div className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+10px)] z-[2147483647] flex justify-center px-3 pointer-events-none">
-          <div className="history-bar-border pointer-events-auto flex min-h-20 w-[min(1100px,calc(100vw-24px))] flex-col gap-2 rounded-md border border-zinc-200 bg-white px-4 py-3 shadow-[0_10px_32px_rgba(0,0,0,0.18)] backdrop-blur dark:border-zinc-800 dark:bg-zinc-950">
+          <div className="history-bar-border pointer-events-auto relative flex min-h-20 w-[min(1100px,calc(100vw-24px))] flex-col gap-2 rounded-md border border-zinc-200 bg-white px-4 py-3 shadow-[0_10px_32px_rgba(0,0,0,0.18)] backdrop-blur dark:border-zinc-800 dark:bg-zinc-950">
+            <button
+              type="button"
+              onClick={exitHistoryMode}
+              className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-950 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white"
+              aria-label="Exit history mode"
+            >
+              <X className="h-4 w-4" />
+            </button>
             <div className="flex items-center justify-center gap-4">
               <button
                 type="button"
