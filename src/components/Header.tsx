@@ -528,7 +528,9 @@ export function Header({
               type="button"
               variant="ghost"
               onClick={handleHistoryButtonClick}
-              className="h-9 px-3 text-sm font-medium text-gray-900 hover:bg-gray-100 dark:text-white dark:hover:bg-zinc-800"
+              className={`h-9 px-3 text-sm font-medium text-gray-900 hover:bg-gray-100 dark:text-white dark:hover:bg-zinc-800 ${
+                historyOpen ? "relative z-[2147483647]" : ""
+              }`}
             >
               {historyOpen ? "exit history" : "history"}
             </Button>
