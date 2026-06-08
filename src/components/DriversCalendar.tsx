@@ -221,6 +221,14 @@ export function DriversCalendar({ monthStartDate }: DriversCalendarProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { currentUser, userProfile } = useAuth();
+  const [scale, setScale] = useState(1);
+  const [isPinching, setIsPinching] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const initialDistanceRef = useRef<number | null>(null);
+  const initialScaleRef = useRef(1);
+  const rafRef = useRef<number | null>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTriggeredRef = useRef(false);
   const calendarStart = startOfWeek(startOfMonth(monthStartDate), { weekStartsOn: 1 });
   const calendarEnd = endOfWeek(endOfMonth(monthStartDate), { weekStartsOn: 1 });
   const calendarStartKey = format(calendarStart, "yyyy-MM-dd");
@@ -377,10 +385,135 @@ export function DriversCalendar({ monthStartDate }: DriversCalendarProps) {
     }
   };
 
+  const getDistance = (touch1: React.Touch, touch2: React.Touch) => {
+    const dx = touch1.clientX - touch2.clientX;
+    const dy = touch1.clientY - touch2.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  const handleTouchStart = (event: React.TouchEvent) => {
+    if (event.touches.length === 2) {
+      event.preventDefault();
+      setIsPinching(true);
+      initialDistanceRef.current = getDistance(event.touches[0], event.touches[1]);
+      initialScaleRef.current = scale;
+    }
+  };
+
+  const handleTouchMove = (event: React.TouchEvent) => {
+    if (event.touches.length === 2 && initialDistanceRef.current) {
+      event.preventDefault();
+
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+      }
+
+      rafRef.current = requestAnimationFrame(() => {
+        const distance = getDistance(event.touches[0], event.touches[1]);
+        const scaleChange = distance / initialDistanceRef.current!;
+        setScale(Math.max(0.15, Math.min(2, initialScaleRef.current * scaleChange)));
+      });
+    }
+  };
+
+  const handleTouchEnd = () => {
+    initialDistanceRef.current = null;
+    setIsPinching(false);
+
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+  };
+
+  const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    if (!event.ctrlKey && !event.metaKey) return;
+
+    event.preventDefault();
+    const direction = event.deltaY > 0 ? -1 : 1;
+    setScale((currentScale) => Math.max(0.15, Math.min(2, currentScale + direction * 0.08)));
+  };
+
+  const openDriverContextMenu = (dateKey: string, position: { x: number; y: number }) => {
+    setContextMenu({
+      isOpen: true,
+      dateKey,
+      position,
+    });
+  };
+
+  const clearLongPressTimer = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const handleCellTouchStart = (dateKey: string) => (event: React.TouchEvent<HTMLDivElement>) => {
+    if (event.touches.length !== 1) return;
+
+    clearLongPressTimer();
+    longPressTriggeredRef.current = false;
+
+    const touch = event.touches[0];
+    longPressTimerRef.current = setTimeout(() => {
+      longPressTriggeredRef.current = true;
+      if (navigator.vibrate) {
+        navigator.vibrate(50);
+      }
+      openDriverContextMenu(dateKey, { x: touch.clientX, y: touch.clientY });
+    }, 550);
+  };
+
+  const handleCellTouchMove = () => {
+    clearLongPressTimer();
+  };
+
+  const handleCellTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+    clearLongPressTimer();
+
+    if (longPressTriggeredRef.current) {
+      event.preventDefault();
+      event.stopPropagation();
+      longPressTriggeredRef.current = false;
+    }
+  };
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const preventDefault = (event: TouchEvent) => {
+      if (event.touches.length === 2) {
+        event.preventDefault();
+      }
+    };
+
+    container.addEventListener("touchmove", preventDefault, { passive: false });
+
+    return () => {
+      container.removeEventListener("touchmove", preventDefault);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => clearLongPressTimer();
+  }, []);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-gray-50 p-3 dark:bg-zinc-950 sm:p-4">
-      <div className="min-h-0 flex-1 overflow-auto overscroll-contain [-webkit-overflow-scrolling:touch]">
-        <div className="min-w-[760px]">
+      <div
+        ref={containerRef}
+        className="min-h-0 flex-1 overflow-auto overscroll-contain [-webkit-overflow-scrolling:touch]"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onWheel={handleWheel}
+      >
+        <div
+          className={`inline-block min-w-[760px] origin-top-left ${!isPinching ? "transition-transform duration-100" : ""}`}
+          style={{ transform: `scale(${scale})` }}
+        >
           <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(7, minmax(92px, 1fr))" }}>
             {WEEK_DAYS.map((day) => (
               <div
@@ -413,12 +546,12 @@ export function DriversCalendar({ monthStartDate }: DriversCalendarProps) {
                       }`}
                       onContextMenu={(event) => {
                         event.preventDefault();
-                        setContextMenu({
-                          isOpen: true,
-                          dateKey,
-                          position: { x: event.clientX, y: event.clientY },
-                        });
+                        openDriverContextMenu(dateKey, { x: event.clientX, y: event.clientY });
                       }}
+                      onTouchStart={handleCellTouchStart(dateKey)}
+                      onTouchMove={handleCellTouchMove}
+                      onTouchEnd={handleCellTouchEnd}
+                      onTouchCancel={handleCellTouchMove}
                     >
                       <div className="flex justify-center">
                         <span
