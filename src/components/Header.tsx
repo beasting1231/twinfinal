@@ -387,6 +387,16 @@ export function Header({
                   Booking Sources
                 </button>
               )}
+              {(role === "admin" || role === "driver") && (
+                <button
+                  onClick={() => handleNavigate("/drivers")}
+                  className={`w-full text-left px-4 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors text-gray-900 dark:text-white ${
+                    isActive("/drivers") ? "bg-gray-100 dark:bg-zinc-800" : ""
+                  }`}
+                >
+                  Drivers
+                </button>
+              )}
               {permissions.canAccessAccounting && (
                 <button
                   onClick={() => handleNavigate("/accounting")}
@@ -417,16 +427,6 @@ export function Header({
                   Forms
                 </button>
               )}
-              {role === 'admin' && (
-                <button
-                  onClick={() => handleNavigate("/gift-vouchers")}
-                  className={`w-full text-left px-4 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors text-gray-900 dark:text-white ${
-                    isActive("/gift-vouchers") ? "bg-gray-100 dark:bg-zinc-800" : ""
-                  }`}
-                >
-                  Gift Vouchers
-                </button>
-              )}
               {permissions.canManageNotifications && (
                 <button
                   onClick={() => handleNavigate("/notifications")}
@@ -453,18 +453,6 @@ export function Header({
                   }`}
                 >
                   User Management
-                </button>
-              )}
-              {(role === "pilot" || role === "admin") && (
-                <button
-                  onClick={() => handleNavigate("/liability-form")}
-                  className={`w-full text-left px-4 py-3 rounded-lg transition-colors text-white font-medium ${
-                    isActive("/liability-form")
-                      ? "bg-blue-700 dark:bg-blue-600"
-                      : "bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
-                  }`}
-                >
-                  Liability Form
                 </button>
               )}
               <div className="my-2 border-t border-gray-200 dark:border-zinc-700" />

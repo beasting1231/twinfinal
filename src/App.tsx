@@ -191,7 +191,7 @@ function AvailabilityPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-zinc-950">
+    <div className="flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-gray-50 dark:bg-zinc-950">
       <Header
         date={selectedDate}
         onDateChange={setSelectedDate}
@@ -254,6 +254,22 @@ function LazyLoadingFallback() {
   );
 }
 
+function DriversPage() {
+  const { role } = useRole();
+
+  if (role !== "admin" && role !== "driver") {
+    return <Navigate to="/" replace />;
+  }
+
+  return (
+    <PageWrapper>
+      <div className="p-4 sm:p-6">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Drivers</h1>
+      </div>
+    </PageWrapper>
+  );
+}
+
 function AppContent() {
   // Automatically track driver location for users with driver role
   useDriverLocation();
@@ -293,6 +309,12 @@ function AppContent() {
           <PageWrapper>
             <BookingSources />
           </PageWrapper>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/drivers" element={
+        <ProtectedRoute>
+          <DriversPage />
         </ProtectedRoute>
       } />
 

@@ -174,8 +174,8 @@ export function AvailabilityOverviewTable({ monthStartDate, onBack }: Availabili
   const loading = pilotsLoading || availabilityLoading;
 
   return (
-    <div className="flex-1 overflow-auto bg-gray-50 p-4 dark:bg-zinc-950">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-gray-50 p-4 dark:bg-zinc-950">
+      <div className="mb-4 flex flex-none flex-wrap items-center justify-between gap-3">
         <div>
           <div className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-zinc-400">
             Availability Overview
@@ -198,8 +198,8 @@ export function AvailabilityOverviewTable({ monthStartDate, onBack }: Availabili
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-500 dark:border-zinc-700"></div>
         </div>
       ) : (
-        <div className="overflow-auto rounded-lg border border-gray-300 bg-white dark:border-zinc-800 dark:bg-zinc-950">
-          <table className="min-w-full border-separate border-spacing-0 text-sm">
+        <div className="min-h-0 flex-1 overflow-auto overscroll-contain rounded-lg border border-gray-300 bg-white [-webkit-overflow-scrolling:touch] dark:border-zinc-800 dark:bg-zinc-950">
+          <table className="w-max min-w-full border-separate border-spacing-0 text-sm">
             <thead>
               <tr>
                 <th className="sticky left-0 top-0 z-20 w-20 min-w-20 border-b border-r border-gray-300 bg-gray-100 px-2 py-3 text-left font-semibold text-gray-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">

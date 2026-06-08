@@ -884,6 +884,8 @@ export function BookingDetailsModal({
 
       // Build update object with only changed fields
       const updates: any = {};
+      const numberOfPeopleChanged = editedBooking.numberOfPeople !== booking.numberOfPeople;
+      const bookingSizeReduced = numberOfPeopleChanged && editedBooking.numberOfPeople < booking.numberOfPeople;
 
       // Check if date or time has changed
       const dateOrTimeChanged =
@@ -902,7 +904,7 @@ export function BookingDetailsModal({
       if (editedBooking.customerName !== booking.customerName) {
         updates.customerName = editedBooking.customerName;
       }
-      if (editedBooking.numberOfPeople !== booking.numberOfPeople) {
+      if (numberOfPeopleChanged) {
         updates.numberOfPeople = editedBooking.numberOfPeople;
       }
       if (editedBooking.pickupLocation !== booking.pickupLocation) {
@@ -940,6 +942,23 @@ export function BookingDetailsModal({
       }
       if (editedBooking.flightType !== booking.flightType) {
         updates.flightType = editedBooking.flightType;
+      }
+
+      if (bookingSizeReduced && !dateOrTimeChanged) {
+        const keptPilots = (booking.assignedPilots || [])
+          .slice(0, editedBooking.numberOfPeople)
+          .map((pilotName) => pilotName || "");
+        const keptPilotNames = new Set(keptPilots.filter(Boolean));
+
+        updates.assignedPilots = keptPilots;
+        updates.acknowledgedPilots = (booking.acknowledgedPilots || [])
+          .filter((pilotName) => keptPilotNames.has(pilotName));
+
+        if (booking.pilotPayments) {
+          updates.pilotPayments = preparePaymentsForFirestore(
+            booking.pilotPayments.filter((payment) => keptPilotNames.has(payment.pilotName))
+          );
+        }
       }
 
       // If date or time changed, clear assigned pilots and payment info
