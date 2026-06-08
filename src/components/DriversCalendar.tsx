@@ -219,6 +219,7 @@ export function DriversCalendar({ monthStartDate }: DriversCalendarProps) {
   const [driverAssignments, setDriverAssignments] = useState<DriverAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingDateKeys, setSavingDateKeys] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const { currentUser, userProfile } = useAuth();
   const [scale, setScale] = useState(1);
@@ -229,6 +230,8 @@ export function DriversCalendar({ monthStartDate }: DriversCalendarProps) {
   const rafRef = useRef<number | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTriggeredRef = useRef(false);
+  const longPressStartRef = useRef<{ dateKey: string; x: number; y: number } | null>(null);
+  const suppressContextMenuUntilRef = useRef(0);
   const calendarStart = startOfWeek(startOfMonth(monthStartDate), { weekStartsOn: 1 });
   const calendarEnd = endOfWeek(endOfMonth(monthStartDate), { weekStartsOn: 1 });
   const calendarStartKey = format(calendarStart, "yyyy-MM-dd");
@@ -317,6 +320,7 @@ export function DriversCalendar({ monthStartDate }: DriversCalendarProps) {
     if (!trimmedDriverName) return;
 
     setSaving(true);
+    setSavingDateKeys((currentDateKeys) => new Set(currentDateKeys).add(dateKey));
     setError(null);
 
     try {
@@ -353,11 +357,17 @@ export function DriversCalendar({ monthStartDate }: DriversCalendarProps) {
       setError("Unable to save driver schedule");
     } finally {
       setSaving(false);
+      setSavingDateKeys((currentDateKeys) => {
+        const nextDateKeys = new Set(currentDateKeys);
+        nextDateKeys.delete(dateKey);
+        return nextDateKeys;
+      });
     }
   };
 
   const clearDriverForDay = async (dateKey: string) => {
     setSaving(true);
+    setSavingDateKeys((currentDateKeys) => new Set(currentDateKeys).add(dateKey));
     setError(null);
 
     try {
@@ -382,6 +392,11 @@ export function DriversCalendar({ monthStartDate }: DriversCalendarProps) {
       setError("Unable to clear driver schedule");
     } finally {
       setSaving(false);
+      setSavingDateKeys((currentDateKeys) => {
+        const nextDateKeys = new Set(currentDateKeys);
+        nextDateKeys.delete(dateKey);
+        return nextDateKeys;
+      });
     }
   };
 
@@ -456,8 +471,10 @@ export function DriversCalendar({ monthStartDate }: DriversCalendarProps) {
     longPressTriggeredRef.current = false;
 
     const touch = event.touches[0];
+    longPressStartRef.current = { dateKey, x: touch.clientX, y: touch.clientY };
     longPressTimerRef.current = setTimeout(() => {
       longPressTriggeredRef.current = true;
+      suppressContextMenuUntilRef.current = Date.now() + 900;
       if (navigator.vibrate) {
         navigator.vibrate(50);
       }
@@ -465,12 +482,22 @@ export function DriversCalendar({ monthStartDate }: DriversCalendarProps) {
     }, 550);
   };
 
-  const handleCellTouchMove = () => {
-    clearLongPressTimer();
+  const handleCellTouchMove = (event: React.TouchEvent<HTMLDivElement>) => {
+    const touch = event.touches[0];
+    const start = longPressStartRef.current;
+    if (!touch || !start) return;
+
+    const movedX = Math.abs(touch.clientX - start.x);
+    const movedY = Math.abs(touch.clientY - start.y);
+    if (movedX > 12 || movedY > 12) {
+      clearLongPressTimer();
+      longPressStartRef.current = null;
+    }
   };
 
   const handleCellTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
     clearLongPressTimer();
+    longPressStartRef.current = null;
 
     if (longPressTriggeredRef.current) {
       event.preventDefault();
@@ -510,10 +537,11 @@ export function DriversCalendar({ monthStartDate }: DriversCalendarProps) {
         onTouchEnd={handleTouchEnd}
         onWheel={handleWheel}
       >
-        <div
-          className={`inline-block min-w-[760px] origin-top-left ${!isPinching ? "transition-transform duration-100" : ""}`}
-          style={{ transform: `scale(${scale})` }}
-        >
+        <div className="flex min-w-full justify-center">
+          <div
+            className={`inline-block min-w-[760px] origin-top-left ${!isPinching ? "transition-transform duration-100" : ""}`}
+            style={{ transform: `scale(${scale})` }}
+          >
           <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(7, minmax(92px, 1fr))" }}>
             {WEEK_DAYS.map((day) => (
               <div
@@ -531,11 +559,12 @@ export function DriversCalendar({ monthStartDate }: DriversCalendarProps) {
                   const inMonth = isSameMonth(day, monthStartDate);
                   const today = isToday(day);
                   const assignedDrivers = driversByDate[dateKey];
+                  const isSavingCell = savingDateKeys.has(dateKey);
 
                   return (
                     <div
                       key={day.toISOString()}
-                      className={`relative h-28 rounded-lg border p-2 transition-colors ${
+                      className={`relative h-28 overflow-hidden rounded-lg border p-2 transition-colors ${
                         today
                           ? "border-blue-300 bg-blue-500/10 hover:bg-blue-500/15 dark:border-blue-500/40 dark:bg-blue-500/15 dark:hover:bg-blue-500/20"
                           : assignedDrivers
@@ -546,6 +575,7 @@ export function DriversCalendar({ monthStartDate }: DriversCalendarProps) {
                       }`}
                       onContextMenu={(event) => {
                         event.preventDefault();
+                        if (Date.now() < suppressContextMenuUntilRef.current) return;
                         openDriverContextMenu(dateKey, { x: event.clientX, y: event.clientY });
                       }}
                       onTouchStart={handleCellTouchStart(dateKey)}
@@ -573,6 +603,9 @@ export function DriversCalendar({ monthStartDate }: DriversCalendarProps) {
                           </span>
                         </div>
                       )}
+                      {isSavingCell && (
+                        <div className="pointer-events-none absolute inset-0 rounded-lg bg-gradient-to-r from-transparent via-white/45 to-transparent opacity-80 animate-pulse dark:via-white/20" />
+                      )}
                     </div>
                   );
                 })}
@@ -589,6 +622,7 @@ export function DriversCalendar({ monthStartDate }: DriversCalendarProps) {
               {error}
             </div>
           )}
+          </div>
         </div>
       </div>
       <DriversContextMenu
