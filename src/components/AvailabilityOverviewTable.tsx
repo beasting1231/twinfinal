@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { eachDayOfInterval, endOfMonth, format, parseISO, startOfMonth } from "date-fns";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../firebase/config";
@@ -43,16 +43,32 @@ const EXCLUDED_OVERVIEW_PILOTS = new Set([
   "basting",
 ]);
 
+const MIN_OVERVIEW_SCALE = 0.15;
+const MAX_OVERVIEW_SCALE = 2;
+const OVERVIEW_SCALE_STEP = 0.15;
+
+function clampOverviewScale(value: number) {
+  return Math.max(MIN_OVERVIEW_SCALE, Math.min(MAX_OVERVIEW_SCALE, value));
+}
+
 export function AvailabilityOverviewTable({ monthStartDate, onBack }: AvailabilityOverviewTableProps) {
   const [pilots, setPilots] = useState<UserProfile[]>([]);
   const [availability, setAvailability] = useState<AvailabilityRecord[]>([]);
   const [pilotsLoading, setPilotsLoading] = useState(true);
   const [availabilityLoading, setAvailabilityLoading] = useState(true);
   const [openCellKey, setOpenCellKey] = useState<string | null>(null);
+  const [scale, setScale] = useState(1);
+  const [isPinching, setIsPinching] = useState(false);
+  const [tableSize, setTableSize] = useState({ width: 0, height: 0 });
+  const tableRef = useRef<HTMLTableElement>(null);
+  const initialDistanceRef = useRef<number | null>(null);
+  const initialScaleRef = useRef<number>(1);
+  const rafRef = useRef<number | null>(null);
 
   const monthStart = useMemo(() => startOfMonth(monthStartDate), [monthStartDate]);
   const monthEnd = useMemo(() => endOfMonth(monthStartDate), [monthStartDate]);
   const days = useMemo(() => eachDayOfInterval({ start: monthStart, end: monthEnd }), [monthStart, monthEnd]);
+  const loading = pilotsLoading || availabilityLoading;
 
   useEffect(() => {
     setPilotsLoading(true);
@@ -130,6 +146,29 @@ export function AvailabilityOverviewTable({ monthStartDate, onBack }: Availabili
     };
   }, [openCellKey]);
 
+  useEffect(() => {
+    const table = tableRef.current;
+    if (!table) return;
+
+    const updateTableSize = () => {
+      setTableSize({
+        width: table.offsetWidth,
+        height: table.offsetHeight,
+      });
+    };
+
+    updateTableSize();
+
+    const resizeObserver = new ResizeObserver(updateTableSize);
+    resizeObserver.observe(table);
+    window.addEventListener("resize", updateTableSize);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", updateTableSize);
+    };
+  }, [days.length, pilots.length, loading]);
+
   const cellByDateAndPilot = useMemo(() => {
     const recordsByCell = new Map<string, AvailabilityRecord[]>();
 
@@ -171,7 +210,54 @@ export function AvailabilityOverviewTable({ monthStartDate, onBack }: Availabili
     return cells;
   }, [availability]);
 
-  const loading = pilotsLoading || availabilityLoading;
+  const getDistance = (touch1: React.Touch, touch2: React.Touch) => {
+    const dx = touch1.clientX - touch2.clientX;
+    const dy = touch1.clientY - touch2.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  const handleTouchStart = (event: React.TouchEvent) => {
+    if (event.touches.length === 2) {
+      event.preventDefault();
+      setIsPinching(true);
+      initialDistanceRef.current = getDistance(event.touches[0], event.touches[1]);
+      initialScaleRef.current = scale;
+    }
+  };
+
+  const handleTouchMove = (event: React.TouchEvent) => {
+    if (event.touches.length === 2 && initialDistanceRef.current) {
+      event.preventDefault();
+
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+      }
+
+      rafRef.current = requestAnimationFrame(() => {
+        const distance = getDistance(event.touches[0], event.touches[1]);
+        const scaleChange = distance / initialDistanceRef.current!;
+        setScale(clampOverviewScale(initialScaleRef.current * scaleChange));
+      });
+    }
+  };
+
+  const handleTouchEnd = () => {
+    initialDistanceRef.current = null;
+    setIsPinching(false);
+
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+  };
+
+  const zoomOut = () => {
+    setScale((currentScale) => clampOverviewScale(currentScale - OVERVIEW_SCALE_STEP));
+  };
+
+  const zoomIn = () => {
+    setScale((currentScale) => clampOverviewScale(currentScale + OVERVIEW_SCALE_STEP));
+  };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-gray-50 p-4 dark:bg-zinc-950">
@@ -184,13 +270,44 @@ export function AvailabilityOverviewTable({ monthStartDate, onBack }: Availabili
             {format(monthStartDate, "MMMM yyyy")}
           </h2>
         </div>
-        <button
-          type="button"
-          onClick={onBack}
-          className="rounded-lg border-2 border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-900 shadow-sm transition-colors hover:border-gray-400 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white dark:hover:border-zinc-600 dark:hover:bg-zinc-800"
-        >
-          Back to Availability
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center rounded-lg border-2 border-gray-300 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+            <button
+              type="button"
+              onClick={zoomOut}
+              className="h-10 w-10 border-r border-gray-300 text-lg font-bold text-gray-900 transition-colors hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-700 dark:text-white dark:hover:bg-zinc-800"
+              aria-label="Zoom out"
+              title="Zoom out"
+            >
+              -
+            </button>
+            <button
+              type="button"
+              onClick={() => setScale(1)}
+              className="h-10 min-w-14 border-r border-gray-300 px-2 text-xs font-bold text-gray-700 transition-colors hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              aria-label="Reset zoom"
+              title="Reset zoom"
+            >
+              {Math.round(scale * 100)}%
+            </button>
+            <button
+              type="button"
+              onClick={zoomIn}
+              className="h-10 w-10 text-lg font-bold text-gray-900 transition-colors hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-white dark:hover:bg-zinc-800"
+              aria-label="Zoom in"
+              title="Zoom in"
+            >
+              +
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={onBack}
+            className="rounded-lg border-2 border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-900 shadow-sm transition-colors hover:border-gray-400 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white dark:hover:border-zinc-600 dark:hover:bg-zinc-800"
+          >
+            Back to Availability
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -198,8 +315,24 @@ export function AvailabilityOverviewTable({ monthStartDate, onBack }: Availabili
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-500 dark:border-zinc-700"></div>
         </div>
       ) : (
-        <div className="min-h-0 flex-1 overflow-auto overscroll-contain rounded-lg border border-gray-300 bg-white [-webkit-overflow-scrolling:touch] dark:border-zinc-800 dark:bg-zinc-950">
-          <table className="w-max min-w-full border-separate border-spacing-0 text-sm">
+        <div
+          className="min-h-0 flex-1 overflow-auto overscroll-contain rounded-lg border border-gray-300 bg-white [-webkit-overflow-scrolling:touch] dark:border-zinc-800 dark:bg-zinc-950"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          <div
+            className="inline-block"
+            style={{
+              width: tableSize.width ? `${tableSize.width * scale}px` : undefined,
+              height: tableSize.height ? `${tableSize.height * scale}px` : undefined,
+            }}
+          >
+            <div
+              className={`inline-block origin-top-left ${!isPinching ? "transition-transform duration-100" : ""}`}
+              style={{ transform: `scale(${scale})` }}
+            >
+          <table ref={tableRef} className="w-max min-w-full border-separate border-spacing-0 text-sm">
             <thead>
               <tr>
                 <th className="sticky left-0 top-0 z-20 w-20 min-w-20 border-b border-r border-gray-300 bg-gray-100 px-2 py-3 text-left font-semibold text-gray-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
@@ -286,6 +419,8 @@ export function AvailabilityOverviewTable({ monthStartDate, onBack }: Availabili
               })}
             </tbody>
           </table>
+            </div>
+          </div>
         </div>
       )}
     </div>
