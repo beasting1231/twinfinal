@@ -485,6 +485,8 @@ export function Header({
         <div className="flex-1 flex justify-center items-center gap-2">
           {location.pathname === "/" && date && onDateChange ? (
             <DatePicker date={date} onDateChange={onDateChange} />
+          ) : location.pathname === "/drivers" && monthStartDate && onMonthChange ? (
+            <MonthPicker monthStartDate={monthStartDate} onMonthChange={onMonthChange} />
           ) : location.pathname === "/availability" ? (
             <>
               {/* View mode selector */}

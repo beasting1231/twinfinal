@@ -12,6 +12,7 @@ import { Accounting } from "./components/Accounting";
 import { Priority } from "./components/Priority";
 import { Forms } from "./components/Forms";
 import { GiftVouchers } from "./components/GiftVouchers";
+import { DriversCalendar } from "./components/DriversCalendar";
 import { GiftVoucherForm } from "./components/GiftVoucherForm";
 import { LiabilityForm } from "./components/LiabilityForm";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -256,17 +257,20 @@ function LazyLoadingFallback() {
 
 function DriversPage() {
   const { role } = useRole();
+  const [monthStartDate, setMonthStartDate] = useState(startOfMonth(new Date()));
 
   if (role !== "admin" && role !== "driver") {
     return <Navigate to="/" replace />;
   }
 
   return (
-    <PageWrapper>
-      <div className="p-4 sm:p-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Drivers</h1>
-      </div>
-    </PageWrapper>
+    <div className="flex h-screen flex-col overflow-hidden bg-gray-50 dark:bg-zinc-950">
+      <Header
+        monthStartDate={monthStartDate}
+        onMonthChange={setMonthStartDate}
+      />
+      <DriversCalendar monthStartDate={monthStartDate} />
+    </div>
   );
 }
 
