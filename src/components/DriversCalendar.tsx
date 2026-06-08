@@ -537,11 +537,10 @@ export function DriversCalendar({ monthStartDate }: DriversCalendarProps) {
         onTouchEnd={handleTouchEnd}
         onWheel={handleWheel}
       >
-        <div className="flex min-w-full justify-center">
-          <div
-            className={`inline-block min-w-[760px] origin-top-left ${!isPinching ? "transition-transform duration-100" : ""}`}
-            style={{ transform: `scale(${scale})` }}
-          >
+        <div
+          className={`inline-block min-w-[760px] origin-top-left ${!isPinching ? "transition-transform duration-100" : ""}`}
+          style={{ transform: `scale(${scale})` }}
+        >
           <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(7, minmax(92px, 1fr))" }}>
             {WEEK_DAYS.map((day) => (
               <div
@@ -622,7 +621,6 @@ export function DriversCalendar({ monthStartDate }: DriversCalendarProps) {
               {error}
             </div>
           )}
-          </div>
         </div>
       </div>
       <DriversContextMenu
