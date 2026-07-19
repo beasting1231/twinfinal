@@ -161,8 +161,21 @@ select {
   }
 }
 
+@keyframes driver-cell-shimmer {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(220%);
+  }
+}
+
 .animate-pulse-slow {
   animation: pulse-slow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-driver-cell-shimmer {
+  animation: driver-cell-shimmer 0.65s ease-in-out infinite;
 }
 
 .history-bar-border {

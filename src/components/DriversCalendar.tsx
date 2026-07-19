@@ -10,10 +10,9 @@ import {
   startOfWeek,
 } from "date-fns";
 import { UserCheck, X } from "lucide-react";
-import { addDoc, arrayUnion, collection, doc, onSnapshot, query, updateDoc, where } from "firebase/firestore";
+import { addDoc, collection, deleteField, doc, onSnapshot, query, updateDoc, where } from "firebase/firestore";
 import { db } from "../firebase/config";
 import type { DriverAssignment } from "../types";
-import { useAuth } from "../contexts/AuthContext";
 import { getTimeSlotsByDate } from "../utils/timeSlots";
 
 interface DriversCalendarProps {
@@ -221,7 +220,6 @@ export function DriversCalendar({ monthStartDate }: DriversCalendarProps) {
   const [saving, setSaving] = useState(false);
   const [savingDateKeys, setSavingDateKeys] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
-  const { currentUser, userProfile } = useAuth();
   const [scale, setScale] = useState(1);
   const [isPinching, setIsPinching] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -230,8 +228,6 @@ export function DriversCalendar({ monthStartDate }: DriversCalendarProps) {
   const rafRef = useRef<number | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTriggeredRef = useRef(false);
-  const longPressStartRef = useRef<{ dateKey: string; x: number; y: number } | null>(null);
-  const suppressContextMenuUntilRef = useRef(0);
   const calendarStart = startOfWeek(startOfMonth(monthStartDate), { weekStartsOn: 1 });
   const calendarEnd = endOfWeek(endOfMonth(monthStartDate), { weekStartsOn: 1 });
   const calendarStartKey = format(calendarStart, "yyyy-MM-dd");
@@ -302,19 +298,6 @@ export function DriversCalendar({ monthStartDate }: DriversCalendarProps) {
     return () => unsubscribe();
   }, [calendarEndKey, calendarStartKey]);
 
-  const createAssignmentHistoryEntry = (
-    action: "created" | "edited",
-    snapshotAfter: Partial<DriverAssignment>,
-    details: string
-  ) => ({
-    action,
-    timestamp: new Date(),
-    userId: currentUser?.uid || "",
-    userName: userProfile?.displayName || currentUser?.displayName || currentUser?.email || "Unknown",
-    details,
-    snapshotAfter: JSON.parse(JSON.stringify(snapshotAfter)),
-  });
-
   const setDriverForDay = async (dateKey: string, driverName: string) => {
     const trimmedDriverName = driverName.trim();
     if (!trimmedDriverName) return;
@@ -330,25 +313,17 @@ export function DriversCalendar({ monthStartDate }: DriversCalendarProps) {
 
       for (let timeIndex = 0; timeIndex < timeSlots.length; timeIndex++) {
         const existingAssignment = assignmentsForDay.find((assignment) => assignment.timeIndex === timeIndex);
-        const snapshotAfter = {
-          ...(existingAssignment || {}),
-          date: dateKey,
-          timeIndex,
-          driver: trimmedDriverName,
-        };
-        delete (snapshotAfter as Partial<DriverAssignment>).id;
 
         if (existingAssignment?.id) {
           await updateDoc(doc(db, "driverAssignments", existingAssignment.id), {
             driver: trimmedDriverName,
-            history: arrayUnion(createAssignmentHistoryEntry("edited", snapshotAfter, `driver set to ${trimmedDriverName}`)),
+            history: deleteField(),
           });
         } else {
           await addDoc(collection(db, "driverAssignments"), {
             date: dateKey,
             timeIndex,
             driver: trimmedDriverName,
-            history: [createAssignmentHistoryEntry("created", snapshotAfter, `driver set to ${trimmedDriverName}`)],
           });
         }
       }
@@ -376,15 +351,9 @@ export function DriversCalendar({ monthStartDate }: DriversCalendarProps) {
       );
 
       for (const assignment of assignmentsForDay) {
-        const snapshotAfter = {
-          ...assignment,
-          driver: "",
-        };
-        delete (snapshotAfter as Partial<DriverAssignment>).id;
-
         await updateDoc(doc(db, "driverAssignments", assignment.id!), {
           driver: "",
-          history: arrayUnion(createAssignmentHistoryEntry("edited", snapshotAfter, "driver cleared")),
+          history: deleteField(),
         });
       }
     } catch (err) {
@@ -471,39 +440,21 @@ export function DriversCalendar({ monthStartDate }: DriversCalendarProps) {
     longPressTriggeredRef.current = false;
 
     const touch = event.touches[0];
-    longPressStartRef.current = { dateKey, x: touch.clientX, y: touch.clientY };
+    const x = touch.clientX;
+    const y = touch.clientY;
+
     longPressTimerRef.current = setTimeout(() => {
       longPressTriggeredRef.current = true;
-      suppressContextMenuUntilRef.current = Date.now() + 900;
-      if (navigator.vibrate) {
-        navigator.vibrate(50);
-      }
-      openDriverContextMenu(dateKey, { x: touch.clientX, y: touch.clientY });
-    }, 550);
+      openDriverContextMenu(dateKey, { x, y });
+    }, 500);
   };
 
-  const handleCellTouchMove = (event: React.TouchEvent<HTMLDivElement>) => {
-    const touch = event.touches[0];
-    const start = longPressStartRef.current;
-    if (!touch || !start) return;
-
-    const movedX = Math.abs(touch.clientX - start.x);
-    const movedY = Math.abs(touch.clientY - start.y);
-    if (movedX > 12 || movedY > 12) {
-      clearLongPressTimer();
-      longPressStartRef.current = null;
-    }
-  };
-
-  const handleCellTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+  const handleCellTouchMove = () => {
     clearLongPressTimer();
-    longPressStartRef.current = null;
+  };
 
-    if (longPressTriggeredRef.current) {
-      event.preventDefault();
-      event.stopPropagation();
-      longPressTriggeredRef.current = false;
-    }
+  const handleCellTouchEnd = () => {
+    clearLongPressTimer();
   };
 
   useEffect(() => {
@@ -574,7 +525,6 @@ export function DriversCalendar({ monthStartDate }: DriversCalendarProps) {
                       }`}
                       onContextMenu={(event) => {
                         event.preventDefault();
-                        if (Date.now() < suppressContextMenuUntilRef.current) return;
                         openDriverContextMenu(dateKey, { x: event.clientX, y: event.clientY });
                       }}
                       onTouchStart={handleCellTouchStart(dateKey)}
@@ -603,7 +553,9 @@ export function DriversCalendar({ monthStartDate }: DriversCalendarProps) {
                         </div>
                       )}
                       {isSavingCell && (
-                        <div className="pointer-events-none absolute inset-0 rounded-lg bg-gradient-to-r from-transparent via-white/45 to-transparent opacity-80 animate-pulse dark:via-white/20" />
+                        <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-lg">
+                          <div className="animate-driver-cell-shimmer absolute inset-y-0 left-0 w-full bg-gradient-to-r from-transparent via-white/55 to-transparent opacity-90 dark:via-white/25" />
+                        </div>
                       )}
                     </div>
                   );

@@ -447,6 +447,19 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     }
   };
 
+  const handleSearchWaitlistClick = (request: BookingRequest) => {
+    if (!request.date || !onNavigateToDate) return;
+
+    try {
+      const [year, month, day] = request.date.split('-').map(Number);
+      const date = new Date(year, month - 1, day);
+
+      onNavigateToDate(date);
+    } catch (error) {
+      console.error('Error navigating to waitlist date:', error);
+    }
+  };
+
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
     isOpen: boolean;
@@ -4141,6 +4154,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
         bookings={allBookingsForSearch}
         timeSlots={timeSlots}
         onBookingClick={handleSearchBookingClick}
+        onWaitlistClick={handleSearchWaitlistClick}
       />
 
       {/* Dim overlay when in move mode */}

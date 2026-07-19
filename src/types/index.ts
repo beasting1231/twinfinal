@@ -140,6 +140,8 @@ export interface DriverLocation {
 
 export interface BookingRequest {
   id?: string;
+  formId?: string; // Stable source form identifier ("main" for the main booking form)
+  formName?: string; // Source form name at the time the request was submitted
   customerName: string;
   email: string;
   phone?: string;

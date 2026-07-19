@@ -44,6 +44,7 @@ export function BookingRequestForm() {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [activeFormId, setActiveFormId] = useState("main");
   const [customFormData, setCustomFormData] = useState<{ name: string; commissionRate: number; onlySensational: boolean } | null>(null);
   const [timeOverrides, setTimeOverrides] = useState<Record<number, string>>({});
   const [additionalSlots, setAdditionalSlots] = useState<string[]>([]);
@@ -90,6 +91,7 @@ export function BookingRequestForm() {
               commissionRate: data.commissionRate || 0,
               onlySensational: formOnlySensational,
             });
+            setActiveFormId(formId);
             // Use the custom form's settings - don't fall through to main form settings
             setOnlySensational(formOnlySensational);
             setHideAvailability(formHideAvailability);
@@ -425,6 +427,8 @@ export function BookingRequestForm() {
       const numberOfPeople = Number(formData.numberOfPeople);
 
       const bookingRequestData: Record<string, unknown> = {
+        formId: activeFormId,
+        formName: customFormData?.name || "Main Booking Form",
         customerName: formData.customerName,
         email: formData.email,
         phone: fullPhoneNumber,

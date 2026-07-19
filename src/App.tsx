@@ -9,6 +9,7 @@ import { AvailabilityOverviewTable } from "./components/AvailabilityOverviewTabl
 import { Account } from "./components/Account/Account";
 import { BookingSources } from "./components/BookingSources";
 import { Accounting } from "./components/Accounting";
+import { Analytics } from "./components/Analytics";
 import { Priority } from "./components/Priority";
 import { Forms } from "./components/Forms";
 import { GiftVouchers } from "./components/GiftVouchers";
@@ -274,6 +275,20 @@ function DriversPage() {
   );
 }
 
+function AnalyticsPage() {
+  const { role } = useRole();
+
+  if (role !== "admin") {
+    return <Navigate to="/" replace />;
+  }
+
+  return (
+    <PageWrapper>
+      <Analytics />
+    </PageWrapper>
+  );
+}
+
 function AppContent() {
   // Automatically track driver location for users with driver role
   useDriverLocation();
@@ -297,6 +312,12 @@ function AppContent() {
       <Route path="/availability" element={
         <ProtectedRoute>
           <AvailabilityPage />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/analytics" element={
+        <ProtectedRoute>
+          <AnalyticsPage />
         </ProtectedRoute>
       } />
 

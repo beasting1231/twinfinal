@@ -1,40 +1,12 @@
 import { useState, useEffect } from "react";
-import { arrayUnion, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, where } from "firebase/firestore";
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, where, deleteField } from "firebase/firestore";
 import { db } from "../firebase/config";
-import type { AssignmentHistoryEntry, DriverAssignment } from "../types/index";
-import { useAuth } from "../contexts/AuthContext";
-
-function createDriverAssignmentSnapshot(assignment: Partial<DriverAssignment>) {
-  const snapshot: Record<string, any> = {};
-
-  for (const key of ["date", "timeIndex", "driver", "vehicle", "driver2", "vehicle2", "secondDriverColumnVisible", "secondDriverPilots"] as Array<keyof DriverAssignment>) {
-    const value = assignment[key];
-    if (value !== undefined) {
-      snapshot[key] = value;
-    }
-  }
-
-  return JSON.parse(JSON.stringify(snapshot));
-}
+import type { DriverAssignment } from "../types/index";
 
 export function useDriverAssignments(date?: string) {
   const [driverAssignments, setDriverAssignments] = useState<DriverAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { currentUser, userProfile } = useAuth();
-
-  const createHistoryEntry = (
-    action: AssignmentHistoryEntry["action"],
-    snapshotAfter: Partial<DriverAssignment> | null,
-    details?: string
-  ): AssignmentHistoryEntry => ({
-    action,
-    timestamp: new Date(),
-    userId: currentUser?.uid || "",
-    userName: userProfile?.displayName || currentUser?.displayName || currentUser?.email || "Unknown",
-    ...(details ? { details } : {}),
-    snapshotAfter: snapshotAfter ? createDriverAssignmentSnapshot(snapshotAfter) : null,
-  });
 
   useEffect(() => {
     // If no date provided, subscribe to all driver assignments
@@ -69,10 +41,7 @@ export function useDriverAssignments(date?: string) {
   // Add a new driver assignment
   const addDriverAssignment = async (assignment: Omit<DriverAssignment, "id">) => {
     try {
-      await addDoc(collection(db, "driverAssignments"), {
-        ...assignment,
-        history: [createHistoryEntry("created", assignment)],
-      });
+      await addDoc(collection(db, "driverAssignments"), assignment);
     } catch (err: any) {
       console.error("Error adding driver assignment:", err);
       setError(err.message);
@@ -83,16 +52,9 @@ export function useDriverAssignments(date?: string) {
   // Update an existing driver assignment
   const updateDriverAssignment = async (id: string, assignment: Partial<DriverAssignment>) => {
     try {
-      const existingAssignment = driverAssignments.find((driverAssignment) => driverAssignment.id === id);
-      const snapshotAfter = {
-        ...(existingAssignment || {}),
-        ...assignment,
-      };
-      delete (snapshotAfter as Partial<DriverAssignment>).id;
-
       await updateDoc(doc(db, "driverAssignments", id), {
         ...assignment,
-        history: arrayUnion(createHistoryEntry("edited", snapshotAfter)),
+        history: deleteField(),
       });
     } catch (err: any) {
       console.error("Error updating driver assignment:", err);

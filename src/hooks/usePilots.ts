@@ -95,9 +95,14 @@ function buildAvailabilityState(records: AvailabilityRecord[], historyTimestamp?
     const signedOutAt = data.signedOutAt;
 
     if (signedInAt && (!historyTime || isAvailabilityTimestampAtOrBefore(signedInAt, historyTime))) {
-      const existingTime = signInTimesMap.get(data.userId);
-      if (!existingTime || signedInAt < existingTime) {
-        signInTimesMap.set(data.userId, signedInAt);
+      // Only active slots can establish the pilot's day-priority timestamp.
+      // Otherwise, an old sign-in on a slot that is still signed out can let a
+      // pilot keep their original position after signing out and back in.
+      if (isAvailabilityActive(status)) {
+        const existingTime = signInTimesMap.get(data.userId);
+        if (!existingTime || signedInAt < existingTime) {
+          signInTimesMap.set(data.userId, signedInAt);
+        }
       }
 
       if (!signInTimesBySlotMap.has(data.userId)) {

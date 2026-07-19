@@ -1,9 +1,9 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Input } from "./ui/input";
-import type { Booking } from "../types/index";
+import type { Booking, BookingRequest } from "../types/index";
 import { format, parse } from "date-fns";
-import { collection, getDocs, orderBy, query } from "firebase/firestore";
+import { collection, getDocs, orderBy, query, where } from "firebase/firestore";
 import { db } from "../firebase/config";
 
 interface SearchBookingModalProps {
@@ -12,9 +12,14 @@ interface SearchBookingModalProps {
   bookings: Booking[];
   timeSlots: string[];
   onBookingClick: (booking: Booking) => void;
+  onWaitlistClick?: (request: BookingRequest) => void;
 }
 
 const RESULTS_PER_PAGE = 10;
+
+type SearchResult =
+  | { type: "booking"; booking: Booking }
+  | { type: "waitlist"; request: BookingRequest };
 
 function normalizeSearchText(value: string): string {
   return value
@@ -76,10 +81,12 @@ export function SearchBookingModal({
   bookings,
   timeSlots,
   onBookingClick,
+  onWaitlistClick,
 }: SearchBookingModalProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [displayCount, setDisplayCount] = useState(RESULTS_PER_PAGE);
   const [allBookings, setAllBookings] = useState<Booking[]>([]);
+  const [waitlistRequests, setWaitlistRequests] = useState<BookingRequest[]>([]);
   const [hasLoadedAllBookings, setHasLoadedAllBookings] = useState(false);
   const [isLoadingAllBookings, setIsLoadingAllBookings] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -106,6 +113,33 @@ export function SearchBookingModal({
         })) as Booking[];
 
         setAllBookings(fetchedBookings);
+
+        try {
+          const waitlistQuery = query(
+            collection(db, "bookingRequests"),
+            where("status", "==", "waitlist")
+          );
+          const waitlistSnapshot = await getDocs(waitlistQuery);
+          if (cancelled) return;
+
+          const fetchedWaitlist = waitlistSnapshot.docs.map((doc) => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              ...data,
+              createdAt: data.createdAt?.toDate?.() || data.createdAt || new Date(),
+            } as BookingRequest;
+          });
+
+          setWaitlistRequests(fetchedWaitlist);
+        } catch (error) {
+          console.error("Error loading waitlist entries for search:", error);
+          if (!cancelled) {
+            setWaitlistRequests([]);
+            setLoadError("Could not load waiting list entries. Showing bookings only.");
+          }
+        }
+
         setHasLoadedAllBookings(true);
       } catch (error) {
         console.error("Error loading all bookings for search:", error);
@@ -113,6 +147,7 @@ export function SearchBookingModal({
 
         // Fallback to currently loaded bookings in memory
         setAllBookings(bookings);
+        setWaitlistRequests([]);
         setHasLoadedAllBookings(true);
         setLoadError("Could not load all bookings. Showing currently loaded bookings.");
       } finally {
@@ -129,11 +164,11 @@ export function SearchBookingModal({
     };
   }, [open, bookings]);
 
-  const filteredBookings = useMemo(() => {
+  const filteredResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
     if (!hasLoadedAllBookings) return [];
 
-    return allBookings
+    const bookingResults: SearchResult[] = allBookings
       .filter((booking) => {
         if (booking.isBlocked || booking.bookingSource === "Blocked") {
           return false;
@@ -151,16 +186,34 @@ export function SearchBookingModal({
           matchesQuery(searchQuery, bookingSource)
         );
       })
-      .sort((a, b) => {
-        const dateA = a.date || "";
-        const dateB = b.date || "";
-        return dateB.localeCompare(dateA);
-      });
-  }, [allBookings, hasLoadedAllBookings, searchQuery]);
+      .map((booking) => ({ type: "booking", booking }));
 
-  const displayedBookings = useMemo(() => {
-    return filteredBookings.slice(0, displayCount);
-  }, [filteredBookings, displayCount]);
+    const waitlistResults: SearchResult[] = waitlistRequests
+      .filter((request) => {
+        const customerName = request.customerName || "";
+        const phoneNumber = `${request.phoneCountryCode || ""} ${request.phone || ""}`.trim();
+        const email = request.email || "";
+        const bookingSource = request.bookingSource || "";
+
+        return (
+          matchesQuery(searchQuery, customerName) ||
+          matchesQuery(searchQuery, phoneNumber, true) ||
+          matchesQuery(searchQuery, email) ||
+          matchesQuery(searchQuery, bookingSource)
+        );
+      })
+      .map((request) => ({ type: "waitlist", request }));
+
+    return [...bookingResults, ...waitlistResults].sort((a, b) => {
+      const dateA = a.type === "booking" ? a.booking.date || "" : a.request.date || "";
+      const dateB = b.type === "booking" ? b.booking.date || "" : b.request.date || "";
+      return dateB.localeCompare(dateA);
+    });
+  }, [allBookings, hasLoadedAllBookings, searchQuery, waitlistRequests]);
+
+  const displayedResults = useMemo(() => {
+    return filteredResults.slice(0, displayCount);
+  }, [filteredResults, displayCount]);
 
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(e.target.value);
@@ -173,13 +226,19 @@ export function SearchBookingModal({
     const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
     const scrolledToBottom = scrollHeight - scrollTop - clientHeight < 50;
 
-    if (scrolledToBottom && displayCount < filteredBookings.length) {
-      setDisplayCount((prev) => Math.min(prev + RESULTS_PER_PAGE, filteredBookings.length));
+    if (scrolledToBottom && displayCount < filteredResults.length) {
+      setDisplayCount((prev) => Math.min(prev + RESULTS_PER_PAGE, filteredResults.length));
     }
-  }, [displayCount, filteredBookings.length]);
+  }, [displayCount, filteredResults.length]);
 
   const handleBookingClick = (booking: Booking) => {
     onBookingClick(booking);
+    onOpenChange(false);
+    setSearchQuery("");
+  };
+
+  const handleWaitlistClick = (request: BookingRequest) => {
+    onWaitlistClick?.(request);
     onOpenChange(false);
     setSearchQuery("");
   };
@@ -189,6 +248,7 @@ export function SearchBookingModal({
       setSearchQuery("");
       setDisplayCount(RESULTS_PER_PAGE);
       setAllBookings([]);
+      setWaitlistRequests([]);
       setHasLoadedAllBookings(false);
       setIsLoadingAllBookings(false);
       setLoadError(null);
@@ -236,13 +296,75 @@ export function SearchBookingModal({
                   Enter a search query to find bookings
                 </div>
               )
-            ) : filteredBookings.length === 0 && hasLoadedAllBookings && !isLoadingAllBookings ? (
+            ) : filteredResults.length === 0 && hasLoadedAllBookings && !isLoadingAllBookings ? (
               <div className="flex items-center justify-center py-12 text-gray-500 dark:text-zinc-400">
                 No bookings found
               </div>
             ) : (
               <>
-                {displayedBookings.map((booking) => {
+                {displayedResults.map((result) => {
+                  if (result.type === "waitlist") {
+                    const request = result.request;
+                    const timeSlot = request.availableTimes?.length
+                      ? request.availableTimes.join(", ")
+                      : request.time || timeSlots[request.timeIndex] || "Unknown time";
+                    const dateStr = request.date || "";
+                    let formattedDate = "";
+                    try {
+                      const date = parse(dateStr, "yyyy-MM-dd", new Date());
+                      formattedDate = format(date, "MMM dd, yyyy");
+                    } catch {
+                      formattedDate = dateStr;
+                    }
+
+                    return (
+                      <div
+                        key={`waitlist-${request.id}`}
+                        onClick={() => handleWaitlistClick(request)}
+                        className="p-4 rounded-lg cursor-pointer transition-colors border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-950/50"
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <div className="font-semibold text-gray-900 dark:text-white">
+                              {request.customerName}
+                            </div>
+                            <div className="text-sm text-gray-600 dark:text-gray-400 mt-1 space-y-0.5">
+                              {request.bookingSource && (
+                                <div>Source: {request.bookingSource}</div>
+                              )}
+                              {request.phone && (
+                                <div>Phone: {[request.phoneCountryCode, request.phone].filter(Boolean).join(" ")}</div>
+                              )}
+                              {request.email && (
+                                <div>Email: {request.email}</div>
+                              )}
+                              <div>People: {request.numberOfPeople}</div>
+                              {request.notes && (
+                                <div className="text-gray-500 dark:text-zinc-500 italic">
+                                  {request.notes}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right ml-4 flex-shrink-0">
+                            <div className="text-sm font-medium text-gray-900 dark:text-white">
+                              {formattedDate}
+                            </div>
+                            <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                              {timeSlot}
+                            </div>
+                            <div className="mt-1">
+                              <span className="inline-block px-2 py-0.5 text-xs rounded bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300">
+                                waiting list
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  const booking = result.booking;
                   const timeSlot = timeSlots[booking.timeIndex] || "Unknown time";
                   const dateStr = booking.date || "";
                   let formattedDate = "";
@@ -309,15 +431,15 @@ export function SearchBookingModal({
                   );
                 })}
 
-                {displayCount < filteredBookings.length && (
+                {displayCount < filteredResults.length && (
                   <div className="py-4 text-center text-sm text-gray-500 dark:text-zinc-400">
-                    Showing {displayCount} of {filteredBookings.length} results. Scroll down to load more...
+                    Showing {displayCount} of {filteredResults.length} results. Scroll down to load more...
                   </div>
                 )}
 
-                {displayCount >= filteredBookings.length && filteredBookings.length > RESULTS_PER_PAGE && (
+                {displayCount >= filteredResults.length && filteredResults.length > RESULTS_PER_PAGE && (
                   <div className="py-4 text-center text-sm text-gray-500 dark:text-zinc-400">
-                    All {filteredBookings.length} results loaded
+                    All {filteredResults.length} results loaded
                   </div>
                 )}
               </>
