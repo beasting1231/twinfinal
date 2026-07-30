@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { X, UserCheck, Check, Copy } from "lucide-react";
+import { X, UserCheck, Check, Copy, ArrowRightToLine } from "lucide-react";
 import type { Pilot, AvailabilityStatus } from "../types/index";
 
 interface PilotContextMenuProps {
@@ -17,6 +17,7 @@ interface PilotContextMenuProps {
   onUnassign: () => void;
   onAcknowledge?: () => void;
   onCopyTo?: () => void;
+  onMoveToBack?: () => void;
   onClose: () => void;
   isPilotSelfUnassign?: boolean; // Whether this is a pilot unassigning themselves
 }
@@ -36,6 +37,7 @@ export function PilotContextMenu({
   onUnassign,
   onAcknowledge,
   onCopyTo,
+  onMoveToBack,
   onClose,
   isPilotSelfUnassign = false,
 }: PilotContextMenuProps) {
@@ -211,19 +213,33 @@ export function PilotContextMenu({
         )}
 
         {/* Bottom Actions */}
-        {onCopyTo && !isPilotSelfUnassign && (
+        {(onCopyTo || onMoveToBack) && !isPilotSelfUnassign && (
           <>
             <div className="border-t border-gray-300 dark:border-zinc-700 my-1" />
-            <button
-              onClick={() => {
-                onCopyTo();
-                onClose();
-              }}
-              className="w-full px-3 py-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2"
-            >
-              <Copy className="w-4 h-4" />
-              <span>Copy to</span>
-            </button>
+            {onMoveToBack && (
+              <button
+                onClick={() => {
+                  onMoveToBack();
+                  onClose();
+                }}
+                className="w-full px-3 py-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2"
+              >
+                <ArrowRightToLine className="w-4 h-4" />
+                <span>Move to the back</span>
+              </button>
+            )}
+            {onCopyTo && (
+              <button
+                onClick={() => {
+                  onCopyTo();
+                  onClose();
+                }}
+                className="w-full px-3 py-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2"
+              >
+                <Copy className="w-4 h-4" />
+                <span>Copy to</span>
+              </button>
+            )}
           </>
         )}
       </div>

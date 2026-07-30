@@ -39,7 +39,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useRole } from "../hooks/useRole";
 import type { Booking, DeskAssignment, DriverAssignment, Pilot, BookingRequest, AvailabilityStatus } from "../types/index";
 import { format } from "date-fns";
-import { doc, updateDoc, setDoc, deleteDoc, collection, query, where, onSnapshot } from "firebase/firestore";
+import { doc, updateDoc, setDoc, deleteDoc, collection, query, where, onSnapshot, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { setAvailabilityStatus, unassignPilotFromBookings } from "../utils/availabilityState";
 import { formatSwissDateTime } from "../utils/timezone";
@@ -1664,6 +1664,15 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     });
     setContextMenu(null);
     setOverbookedContextMenu(null);
+  };
+
+  const handleMoveBookingToBack = () => {
+    if (role !== "admin" || !contextMenu?.booking.id || !onUpdateBooking) return;
+
+    onUpdateBooking(contextMenu.booking.id, {
+      createdAt: serverTimestamp(),
+    });
+    setContextMenu(null);
   };
 
   const handleCopyBookingConfirm = ({ date, timeIndex }: { date: string; timeIndex: number }) => {
@@ -3649,6 +3658,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
           getPilotAvailabilityStatus={getPilotAvailabilityStatus}
           onSelectPilot={handleSelectPilot}
           onUnassign={handleUnassignPilot}
+          onMoveToBack={role === "admin" ? handleMoveBookingToBack : undefined}
           onCopyTo={role === "admin" ? handleOpenCopyBooking : undefined}
           onAcknowledge={async () => {
             const currentPilot = contextMenu.booking.assignedPilots[contextMenu.slotIndex];
