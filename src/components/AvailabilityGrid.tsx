@@ -79,7 +79,7 @@ export function AvailabilityGrid({ weekStartDate, onShowOverview }: Availability
   // For non-admins, always use currentUser
   const targetUserId = role === 'admin' && selectedUserId ? selectedUserId : undefined;
 
-  const { isAvailable, getAvailabilityStatus, toggleAvailability, toggleDay, loading, saving, justSaved } = useAvailability(targetUserId);
+  const { isAvailable, getAvailabilityStatus, toggleAvailability, toggleDay, loading, error: availabilityError, saving, justSaved } = useAvailability(targetUserId);
   const { bookings } = useBookings();
 
   // State to track all pilots' availability data (currently unused but kept for potential future use)
@@ -472,6 +472,12 @@ export function AvailabilityGrid({ weekStartDate, onShowOverview }: Availability
         </div>
       )}
 
+      {availabilityError && (
+        <div className="mb-4 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+          {availabilityError}
+        </div>
+      )}
+
       <div
         className={`inline-block origin-top-left ${!isPinching ? 'transition-transform duration-100' : ''}`}
         style={{ transform: `scale(${scale})` }}
@@ -519,7 +525,7 @@ export function AvailabilityGrid({ weekStartDate, onShowOverview }: Availability
                 </button>
 
                 {/* Time Slots for this day */}
-                {isInitialLoading ? (
+                {isInitialLoading || loading || availabilityError ? (
                   // Loading skeleton
                   combinedSlots.map((_, slotIndex) => (
                     <div key={`skeleton-${dayIndex}-${slotIndex}`} className="h-14">

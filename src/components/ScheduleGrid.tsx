@@ -47,6 +47,8 @@ import { DndContext, useSensor, useSensors, PointerSensor, useDraggable, useDrop
 import type { DragEndEvent, DragStartEvent, CollisionDetection } from "@dnd-kit/core";
 import { Plus } from "lucide-react";
 
+const AUTO_ASSIGN_EMAIL = "pccbasting@gmail.com";
+
 // Custom collision detection: each drag type only targets matching droppable types.
 // This lets pilot-drop droppables stay always-enabled without interfering with booking drags.
 const pilotAwareCollisionDetection: CollisionDetection = (args) => {
@@ -790,6 +792,380 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
 
     return combinedTimeSlots[currentSlotPosition + 1]?.time || null;
   }, [combinedTimeSlots]);
+
+  const getRotatingPilotOrder = useCallback((timeIndex: number, timeSlot: string, nextTimeSlot: string | null) => {
+    if (pilots.length === 0) return [];
+
+    const currentSlotPosition = combinedTimeSlots.findIndex((slot) => slot.originalIndex === timeIndex);
+    const priorityQueue = [...pilots];
+
+    // Replay every earlier assignment against the day's header order. Each
+    // pilot who flew moves from their current place to the back of the queue.
+    // At each active turn, every signed-out pilot moves behind the available
+    // pilots before assignments are replayed. Available pilots who were
+    // manually skipped keep their relative priority.
+    for (let slotPosition = 0; slotPosition < currentSlotPosition; slotPosition++) {
+      const previousSlot = combinedTimeSlots[slotPosition];
+      const previousTimeIndex = previousSlot.originalIndex;
+      const previousBookings = sortBookingsForRow(bookings.filter((booking) =>
+        booking.timeIndex === previousTimeIndex &&
+        booking.date === dateString &&
+        booking.bookingStatus !== "cancelled" &&
+        !booking.isBlocked
+      ));
+      const previousAssignedPilotNames = previousBookings.flatMap((booking) =>
+        (booking.assignedPilots || []).filter(Boolean)
+      );
+
+      if (previousAssignedPilotNames.length === 0) continue;
+
+      const availableAtPreviousTurn: Pilot[] = [];
+      const unavailableAtPreviousTurn: Pilot[] = [];
+      priorityQueue.forEach((pilot) => {
+        if (isPilotAvailableForTimeSlot(pilot.uid, previousSlot.time)) {
+          availableAtPreviousTurn.push(pilot);
+        } else {
+          unavailableAtPreviousTurn.push(pilot);
+        }
+      });
+      priorityQueue.splice(
+        0,
+        priorityQueue.length,
+        ...availableAtPreviousTurn,
+        ...unavailableAtPreviousTurn
+      );
+
+      previousAssignedPilotNames.forEach((assignedPilotName) => {
+          const queueIndex = priorityQueue.findIndex(
+            (pilot) => pilot.displayName === assignedPilotName
+          );
+          if (queueIndex === -1) return;
+          const [assignedPilot] = priorityQueue.splice(queueIndex, 1);
+          priorityQueue.push(assignedPilot);
+      });
+    }
+
+    const rotatedPilots = priorityQueue
+      .filter((pilot) => isPilotAvailableForTimeSlot(pilot.uid, timeSlot));
+
+    if (!nextTimeSlot || !getPilotAvailabilityStatus) {
+      return rotatedPilots;
+    }
+
+    // A pilot signed out for the following turn keeps eligibility for this
+    // turn, but loses priority and moves to the end of this turn's loop.
+    const availableNextTurn: Pilot[] = [];
+    const signedOutNextTurn: Pilot[] = [];
+    rotatedPilots.forEach((pilot) => {
+      if (getPilotAvailabilityStatus(pilot.uid, nextTimeSlot) === "unavailable") {
+        signedOutNextTurn.push(pilot);
+      } else {
+        availableNextTurn.push(pilot);
+      }
+    });
+
+    return [...availableNextTurn, ...signedOutNextTurn];
+  }, [bookings, combinedTimeSlots, dateString, getPilotAvailabilityStatus, isPilotAvailableForTimeSlot, pilots]);
+
+  const filterContextMenuPilots = useCallback((sourcePilots: Pilot[]) => {
+    if (!contextMenu) return [];
+
+    return sourcePilots.filter((pilot) => {
+      if (!isPilotAvailableForTimeSlot(pilot.uid, contextMenu.timeSlot)) {
+        return false;
+      }
+
+      if (
+        contextMenu.booking.femalePilotsRequired &&
+        contextMenu.slotIndex < contextMenu.booking.femalePilotsRequired &&
+        !pilot.femalePilot
+      ) {
+        return false;
+      }
+
+      const alreadyAssignedToThisBooking = contextMenu.booking.assignedPilots
+        .filter((assignedPilot, index) => assignedPilot && index !== contextMenu.slotIndex)
+        .includes(pilot.displayName);
+      if (alreadyAssignedToThisBooking) {
+        return false;
+      }
+
+      return !bookings.some((booking) =>
+        booking.id !== contextMenu.booking.id &&
+        booking.timeIndex === contextMenu.booking.timeIndex &&
+        booking.date === contextMenu.booking.date &&
+        booking.assignedPilots.some((assignedPilot) => assignedPilot === pilot.displayName)
+      );
+    });
+  }, [bookings, contextMenu, isPilotAvailableForTimeSlot]);
+
+  const contextMenuAvailablePilots = useMemo(() => {
+    const availablePilots = filterContextMenuPilots(pilots);
+
+    return availablePilots.sort((a, b) => {
+      const aSignedOutNextSlot = Boolean(
+        contextMenu?.nextTimeSlot &&
+        getPilotAvailabilityStatus?.(a.uid, contextMenu.nextTimeSlot) === "unavailable"
+      );
+      const bSignedOutNextSlot = Boolean(
+        contextMenu?.nextTimeSlot &&
+        getPilotAvailabilityStatus?.(b.uid, contextMenu.nextTimeSlot) === "unavailable"
+      );
+
+      if (aSignedOutNextSlot !== bSignedOutNextSlot) {
+        return aSignedOutNextSlot ? 1 : -1;
+      }
+
+      return 0;
+    });
+  }, [contextMenu?.nextTimeSlot, filterContextMenuPilots, getPilotAvailabilityStatus, pilots]);
+
+  const getAutoAssignmentPlan = useCallback(() => {
+    if (!contextMenu) {
+      return {
+        updates: [] as Array<{ bookingId: string; assignedPilots: string[] }>,
+        selectedPilots: [] as Pilot[],
+      };
+    }
+
+    const { booking: selectedBooking, timeSlot, nextTimeSlot = null } = contextMenu;
+    const turnBookings = sortBookingsForRow(bookings.filter((booking) =>
+      booking.date === selectedBooking.date &&
+      booking.timeIndex === selectedBooking.timeIndex &&
+      booking.bookingStatus !== "cancelled" &&
+      !booking.isBlocked &&
+      booking.id
+    ));
+    const orderedAvailablePilots = getRotatingPilotOrder(
+      selectedBooking.timeIndex,
+      timeSlot,
+      nextTimeSlot
+    );
+    const plannedAssignments = new Map<string, string[]>();
+    const changedBookingIds = new Set<string>();
+    const newlyAssignedPositions = new Set<string>();
+
+    turnBookings.forEach((booking) => {
+      const requiredLength = getBookingSpan(booking);
+      const assignedPilots = [...(booking.assignedPilots || [])];
+      while (assignedPilots.length < requiredLength) assignedPilots.push("");
+      plannedAssignments.set(booking.id!, assignedPilots);
+    });
+
+    const currentSlotPosition = combinedTimeSlots.findIndex(
+      (slot) => slot.originalIndex === selectedBooking.timeIndex
+    );
+    const slotsThroughCurrentTurn = combinedTimeSlots.slice(0, currentSlotPosition + 1);
+    const earlierTimeIndexes = new Set(
+      combinedTimeSlots.slice(0, currentSlotPosition).map((slot) => slot.originalIndex)
+    );
+    const earlierBookings = bookings.filter((booking) =>
+      booking.date === selectedBooking.date &&
+      earlierTimeIndexes.has(booking.timeIndex) &&
+      booking.bookingStatus !== "cancelled" &&
+      !booking.isBlocked
+    );
+    const getEarlierFlightCount = (pilotName: string) =>
+      earlierBookings.reduce((count, booking) =>
+        count + booking.assignedPilots.filter((assignedPilot) => assignedPilot === pilotName).length,
+      0);
+    const continuouslyAvailablePilots = pilots.filter((pilot) =>
+      slotsThroughCurrentTurn.every((slot) =>
+        isPilotAvailableForTimeSlot(pilot.uid, slot.time)
+      )
+    );
+
+    // Reserve a booking for the pilot named as its source before filling the
+    // normal rotation, but only when that pilot has not already been assigned
+    // anywhere in this turn. Existing placements are never moved by this rule.
+    const initiallyAssignedPilotNames = new Set(
+      turnBookings.flatMap((booking) =>
+        plannedAssignments.get(booking.id!)!.filter(Boolean)
+      )
+    );
+    const bookingSourcePilotNames = new Set(
+      turnBookings
+        .map((booking) => booking.bookingSource?.trim().toLowerCase())
+        .filter((source): source is string => Boolean(source))
+    );
+    const reservedSourcePilotNames = new Set(
+      orderedAvailablePilots
+        .filter((pilot) =>
+          initiallyAssignedPilotNames.has(pilot.displayName) &&
+          bookingSourcePilotNames.has(pilot.displayName.trim().toLowerCase())
+        )
+        .map((pilot) => pilot.displayName)
+    );
+    turnBookings.forEach((booking) => {
+      const normalizedBookingSource = booking.bookingSource?.trim().toLowerCase();
+      if (!normalizedBookingSource) return;
+
+      const sourcePilot = orderedAvailablePilots.find((pilot) =>
+        pilot.displayName.trim().toLowerCase() === normalizedBookingSource
+      );
+      if (!sourcePilot || reservedSourcePilotNames.has(sourcePilot.displayName)) return;
+
+      const assignedPilots = plannedAssignments.get(booking.id!)!;
+
+      const sourcePilotFlightCount = getEarlierFlightCount(sourcePilot.displayName);
+      const isMoreThanTwoFlightsAhead = continuouslyAvailablePilots.some((pilot) =>
+        pilot.uid !== sourcePilot.uid &&
+        sourcePilotFlightCount - getEarlierFlightCount(pilot.displayName) > 2
+      );
+      if (isMoreThanTwoFlightsAhead) return;
+
+      const eligibleSlotIndexes = assignedPilots
+        .map((_, slotIndex) => slotIndex)
+        .filter((slotIndex) => {
+        const requiresFemalePilot = Boolean(
+          booking.femalePilotsRequired && slotIndex < booking.femalePilotsRequired
+        );
+        return !requiresFemalePilot || sourcePilot.femalePilot;
+      });
+      const sourceSlotIndex =
+        eligibleSlotIndexes.find((slotIndex) => !assignedPilots[slotIndex]) ??
+        eligibleSlotIndexes.find((slotIndex) =>
+          !reservedSourcePilotNames.has(assignedPilots[slotIndex])
+        ) ??
+        -1;
+      if (sourceSlotIndex === -1) return;
+
+      assignedPilots[sourceSlotIndex] = sourcePilot.displayName;
+      reservedSourcePilotNames.add(sourcePilot.displayName);
+      changedBookingIds.add(booking.id!);
+      newlyAssignedPositions.add(`${booking.id}:${sourceSlotIndex}`);
+    });
+
+    const assignedAfterSourceReservations = new Set(
+      turnBookings.flatMap((booking) =>
+        plannedAssignments.get(booking.id!)!.filter(Boolean)
+      )
+    );
+    const remainingCandidates = orderedAvailablePilots.filter((pilot) =>
+      !assignedAfterSourceReservations.has(pilot.displayName)
+    );
+
+    // Reserve the next-up female pilots for every required lady-pilot position
+    // before ordinary positions consume them. This keeps the fairness queue's
+    // female order while guaranteeing that later lady-pilot bookings can be
+    // filled when an eligible pilot is available.
+    turnBookings.forEach((booking) => {
+      const assignedPilots = plannedAssignments.get(booking.id!)!;
+      const requiredFemaleSlots = Math.min(
+        booking.femalePilotsRequired || 0,
+        getBookingSpan(booking)
+      );
+
+      for (let slotIndex = 0; slotIndex < requiredFemaleSlots; slotIndex++) {
+        if (assignedPilots[slotIndex]) continue;
+
+        const candidateIndex = remainingCandidates.findIndex((pilot) => pilot.femalePilot);
+        if (candidateIndex === -1) continue;
+
+        const [pilot] = remainingCandidates.splice(candidateIndex, 1);
+        assignedPilots[slotIndex] = pilot.displayName;
+        changedBookingIds.add(booking.id!);
+        newlyAssignedPositions.add(`${booking.id}:${slotIndex}`);
+      }
+    });
+
+    turnBookings.forEach((booking) => {
+      const requiredLength = getBookingSpan(booking);
+      const assignedPilots = plannedAssignments.get(booking.id!)!;
+
+      for (let slotIndex = 0; slotIndex < requiredLength; slotIndex++) {
+        if (assignedPilots[slotIndex]) continue;
+
+        const requiresFemalePilot = Boolean(
+          booking.femalePilotsRequired && slotIndex < booking.femalePilotsRequired
+        );
+        const candidateIndex = remainingCandidates.findIndex((pilot) =>
+          !requiresFemalePilot || pilot.femalePilot
+        );
+        if (candidateIndex === -1) continue;
+
+        const [pilot] = remainingCandidates.splice(candidateIndex, 1);
+        assignedPilots[slotIndex] = pilot.displayName;
+        changedBookingIds.add(booking.id!);
+        newlyAssignedPositions.add(`${booking.id}:${slotIndex}`);
+      }
+    });
+
+    const updates = turnBookings
+      .filter((booking) => changedBookingIds.has(booking.id!))
+      .map((booking) => ({
+        bookingId: booking.id!,
+        assignedPilots: plannedAssignments.get(booking.id!)!,
+      }));
+    const pilotByName = new Map(pilots.map((pilot) => [pilot.displayName, pilot]));
+    const selectedPilots = turnBookings.flatMap((booking) =>
+      plannedAssignments.get(booking.id!)!
+        .map((pilotName, slotIndex) =>
+          newlyAssignedPositions.has(`${booking.id}:${slotIndex}`)
+            ? pilotByName.get(pilotName)
+            : undefined
+        )
+        .filter((pilot): pilot is Pilot => Boolean(pilot))
+    );
+
+    return { updates, selectedPilots };
+  }, [bookings, combinedTimeSlots, contextMenu, getRotatingPilotOrder, isPilotAvailableForTimeSlot, pilots]);
+
+  const contextMenuPilotSuggestionRanks = useMemo(() => {
+    const { selectedPilots } = getAutoAssignmentPlan();
+
+    return Object.fromEntries(
+      selectedPilots.map((pilot, index) => [pilot.uid, index + 1])
+    );
+  }, [getAutoAssignmentPlan]);
+
+  const handleAutoAssignTurn = useCallback(async () => {
+    if (
+      !onUpdateBooking ||
+      currentUser?.email?.trim().toLowerCase() !== AUTO_ASSIGN_EMAIL
+    ) {
+      return;
+    }
+
+    const { updates } = getAutoAssignmentPlan();
+
+    await Promise.all(
+      updates.map(({ bookingId, assignedPilots }) =>
+        onUpdateBooking(bookingId, { assignedPilots })
+      )
+    );
+  }, [currentUser?.email, getAutoAssignmentPlan, onUpdateBooking]);
+
+  const handleUnassignAllForTurn = useCallback(async () => {
+    if (
+      !contextMenu ||
+      !onUpdateBooking ||
+      currentUser?.email?.trim().toLowerCase() !== AUTO_ASSIGN_EMAIL
+    ) {
+      return;
+    }
+
+    const { booking: selectedBooking } = contextMenu;
+    const turnBookings = bookings.filter((booking) =>
+      booking.date === selectedBooking.date &&
+      booking.timeIndex === selectedBooking.timeIndex &&
+      booking.id &&
+      booking.assignedPilots.some(Boolean)
+    );
+
+    await Promise.all(
+      turnBookings.map((booking) => {
+        const assignmentCount = Math.max(
+          getBookingSpan(booking),
+          booking.assignedPilots.length
+        );
+
+        return onUpdateBooking(booking.id!, {
+          assignedPilots: Array(assignmentCount).fill(""),
+        });
+      })
+    );
+  }, [bookings, contextMenu, currentUser?.email, onUpdateBooking]);
 
   // Disable drag-and-drop on mobile (use long press move mode instead)
   const isDragEnabled = !isMobile && role === 'admin';
@@ -3579,68 +3955,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
           isOpen={contextMenu.isOpen}
           position={contextMenu.position}
           bookingStatus={contextMenu.booking.bookingStatus}
-          availablePilots={pilots
-            .filter((pilot) => {
-              // Check if pilot is available for this time slot
-              if (!isPilotAvailableForTimeSlot(pilot.uid, contextMenu.timeSlot)) {
-                return false;
-              }
-
-              // Check if this specific position requires a female pilot
-              // Only the first N positions require female pilots, where N = femalePilotsRequired
-              if (contextMenu.booking.femalePilotsRequired && contextMenu.slotIndex < contextMenu.booking.femalePilotsRequired) {
-                if (!pilot.femalePilot) {
-                  return false;
-                }
-              }
-
-              // Exclude pilots already assigned to this booking (to prevent double-assignment within same booking)
-              const alreadyAssignedToThisBooking = contextMenu.booking.assignedPilots
-                .filter((p, index) => p && p !== "" && index !== contextMenu.slotIndex)
-                .includes(pilot.displayName);
-
-              if (alreadyAssignedToThisBooking) {
-                return false;
-              }
-
-              // Exclude pilots already assigned to other bookings at the same time
-              const alreadyAssignedToOtherBooking = bookings.some(booking => {
-                // Skip the current booking we're editing
-                if (booking.id === contextMenu.booking.id) {
-                  return false;
-                }
-
-                // Check if this booking is at the same time and date
-                if (booking.timeIndex === contextMenu.booking.timeIndex &&
-                    booking.date === contextMenu.booking.date) {
-                  // Check if this pilot is assigned to this booking
-                  return booking.assignedPilots.some(p => p && p !== "" && p === pilot.displayName);
-                }
-
-                return false;
-              });
-
-              return !alreadyAssignedToOtherBooking;
-            })
-            .sort((a, b) => {
-              const aSignedOutNextSlot = Boolean(
-                contextMenu.nextTimeSlot &&
-                getPilotAvailabilityStatus?.(a.uid, contextMenu.nextTimeSlot) === "unavailable"
-              );
-              const bSignedOutNextSlot = Boolean(
-                contextMenu.nextTimeSlot &&
-                getPilotAvailabilityStatus?.(b.uid, contextMenu.nextTimeSlot) === "unavailable"
-              );
-
-              // Push "signed out next turn" pilots to bottom of list; otherwise
-              // preserve the day's priority order (matches the header row, which
-              // admins can reorder per-day via drag-and-drop).
-              if (aSignedOutNextSlot !== bSignedOutNextSlot) {
-                return aSignedOutNextSlot ? 1 : -1;
-              }
-
-              return 0;
-            })}
+          availablePilots={contextMenuAvailablePilots}
+          pilotSuggestionRanks={contextMenuPilotSuggestionRanks}
           pilotFlightCounts={bookings
             .filter(booking => booking.date === contextMenu.booking.date)
             .reduce((counts, booking) => {
@@ -3656,8 +3972,10 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
           isAcknowledged={contextMenu.booking.acknowledgedPilots?.includes(contextMenu.booking.assignedPilots[contextMenu.slotIndex]) || false}
           nextTimeSlot={contextMenu.nextTimeSlot}
           getPilotAvailabilityStatus={getPilotAvailabilityStatus}
+          onAutoAssign={currentUser?.email?.trim().toLowerCase() === AUTO_ASSIGN_EMAIL ? handleAutoAssignTurn : undefined}
           onSelectPilot={handleSelectPilot}
           onUnassign={handleUnassignPilot}
+          onUnassignAll={currentUser?.email?.trim().toLowerCase() === AUTO_ASSIGN_EMAIL ? handleUnassignAllForTurn : undefined}
           onMoveToBack={role === "admin" ? handleMoveBookingToBack : undefined}
           onCopyTo={role === "admin" ? handleOpenCopyBooking : undefined}
           onAcknowledge={async () => {

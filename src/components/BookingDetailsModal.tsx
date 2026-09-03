@@ -264,8 +264,8 @@ export function BookingDetailsModal({
       const timeSlotX = padding + (leftColumnWidth - timeSlotWidth) / 2;
       const timeSlotY = leftColumnStartY + dateCellImg.height + gap;
 
-      // Get the time string from timeSlots array
-      const timeString = timeSlots[booking.timeIndex] || '';
+      // Match the time displayed by the grid, including a changed-time override.
+      const timeString = timeOverrides[booking.timeIndex] || timeSlots[booking.timeIndex] || '';
 
       // Draw rounded rectangle background
       ctx.fillStyle = '#52525b'; // zinc-600 (dark grey)

@@ -20,6 +20,8 @@ export function useAvailability(targetUserId?: string) {
   const { currentUser } = useAuth();
   const [statusMap, setStatusMap] = useState<Map<string, AvailabilityStatus>>(new Map()); // key -> status
   const [loading, setLoading] = useState(true);
+  const [loadedUserId, setLoadedUserId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
 
@@ -28,9 +30,18 @@ export function useAvailability(targetUserId?: string) {
 
   useEffect(() => {
     if (!userId) {
+      setStatusMap(new Map());
+      setLoadedUserId(null);
+      setError(null);
       setLoading(false);
       return;
     }
+
+    let active = true;
+    setStatusMap(new Map());
+    setLoadedUserId(null);
+    setError(null);
+    setLoading(true);
 
     // Subscribe to availability for the specified user
     const q = query(
@@ -38,19 +49,39 @@ export function useAvailability(targetUserId?: string) {
       where("userId", "==", userId)
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const newStatusMap = new Map<string, AvailabilityStatus>();
-      snapshot.docs.forEach((doc) => {
-        const data = doc.data() as AvailabilityData;
-        const key = `${data.date}-${data.timeSlot}`;
-        newStatusMap.set(key, normalizeAvailabilityStatus(data.status));
-      });
-      setStatusMap(newStatusMap);
-      setLoading(false);
-    });
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        if (!active) return;
 
-    return unsubscribe;
+        const newStatusMap = new Map<string, AvailabilityStatus>();
+        snapshot.docs.forEach((doc) => {
+          const data = doc.data() as AvailabilityData;
+          const key = `${data.date}-${data.timeSlot}`;
+          newStatusMap.set(key, normalizeAvailabilityStatus(data.status));
+        });
+        setStatusMap(newStatusMap);
+        setLoadedUserId(userId);
+        setLoading(false);
+      },
+      (snapshotError) => {
+        if (!active) return;
+
+        console.error("Error loading availability:", snapshotError);
+        setStatusMap(new Map());
+        setLoadedUserId(null);
+        setError("Availability could not be loaded. Please try again.");
+        setLoading(false);
+      }
+    );
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, [userId]);
+
+  const isLoadingSelectedUser = Boolean(userId) && !error && (loading || loadedUserId !== userId);
 
   const isAvailable = (date: Date, timeSlot: string): boolean => {
     const dateStr = format(date, "yyyy-MM-dd");
@@ -193,7 +224,8 @@ export function useAvailability(targetUserId?: string) {
     setOnRequest,
     toggleAvailability,
     toggleDay,
-    loading,
+    loading: isLoadingSelectedUser,
+    error,
     saving,
     justSaved,
   };

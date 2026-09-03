@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { X, UserCheck, Check, Copy, ArrowRightToLine } from "lucide-react";
+import { X, UserCheck, Check, Copy, ArrowRightToLine, Sparkles } from "lucide-react";
 import type { Pilot, AvailabilityStatus } from "../types/index";
 
 interface PilotContextMenuProps {
@@ -7,17 +7,20 @@ interface PilotContextMenuProps {
   position: { x: number; y: number };
   bookingStatus?: "unconfirmed" | "confirmed" | "pending" | "cancelled" | "deleted" | "no show";
   availablePilots: Pilot[];
+  pilotSuggestionRanks?: Record<string, number>;
   pilotFlightCounts?: Record<string, number>;
   currentPilot?: string;
   currentUserDisplayName?: string;
   isAcknowledged?: boolean;
   nextTimeSlot?: string | null;
   getPilotAvailabilityStatus?: (pilotUid: string, timeSlot: string) => AvailabilityStatus;
+  onAutoAssign?: () => void | Promise<void>;
   onSelectPilot: (pilotName: string) => void;
   onUnassign: () => void;
   onAcknowledge?: () => void;
   onCopyTo?: () => void;
   onMoveToBack?: () => void;
+  onUnassignAll?: () => void | Promise<void>;
   onClose: () => void;
   isPilotSelfUnassign?: boolean; // Whether this is a pilot unassigning themselves
 }
@@ -27,17 +30,20 @@ export function PilotContextMenu({
   position,
   bookingStatus,
   availablePilots,
+  pilotSuggestionRanks = {},
   pilotFlightCounts = {},
   currentPilot,
   currentUserDisplayName,
   isAcknowledged = false,
   nextTimeSlot,
   getPilotAvailabilityStatus,
+  onAutoAssign,
   onSelectPilot,
   onUnassign,
   onAcknowledge,
   onCopyTo,
   onMoveToBack,
+  onUnassignAll,
   onClose,
   isPilotSelfUnassign = false,
 }: PilotContextMenuProps) {
@@ -124,9 +130,23 @@ export function PilotContextMenu({
         onTouchStart={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Restricted automatic assignment action */}
+        {onAutoAssign && !isPilotSelfUnassign && canAssignPilots && (
+          <button
+            onClick={async () => {
+              await onAutoAssign();
+              onClose();
+            }}
+            className="w-full px-3 py-2 text-left text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2"
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>Auto assign</span>
+          </button>
+        )}
+
         {/* Header */}
         {!isPilotSelfUnassign && canAssignPilots && (
-          <div className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-zinc-400 border-b border-gray-300 dark:border-zinc-700">
+          <div className={`px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-zinc-400 border-b border-gray-300 dark:border-zinc-700 ${onAutoAssign ? 'border-t' : ''}`}>
             Assign Pilot
           </div>
         )}
@@ -167,6 +187,7 @@ export function PilotContextMenu({
               <div className="py-1">
                 {availablePilots.map((pilot) => {
                   const isCurrent = currentPilot === pilot.displayName;
+                  const suggestionRank = pilotSuggestionRanks[pilot.uid];
                   const flightCount = pilotFlightCounts[pilot.displayName] || 0;
                   // Treat as "signed out next turn" when pilot is available now (this list)
                   // but unavailable in the immediate next time slot.
@@ -192,6 +213,11 @@ export function PilotContextMenu({
                       className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center justify-between gap-2 ${textClass}`}
                     >
                       <div className="flex items-center gap-2">
+                        {suggestionRank && (
+                          <span className="bg-green-700 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center shrink-0">
+                            {suggestionRank}
+                          </span>
+                        )}
                         <span>{pilot.displayName}</span>
                         {flightCount > 0 && (
                           <span className="bg-blue-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
@@ -240,6 +266,23 @@ export function PilotContextMenu({
                 <span>Copy to</span>
               </button>
             )}
+          </>
+        )}
+
+        {/* Keep this destructive turn-level action at the very bottom. */}
+        {onUnassignAll && !isPilotSelfUnassign && canAssignPilots && (
+          <>
+            <div className="border-t border-gray-300 dark:border-zinc-700 my-1" />
+            <button
+              onClick={async () => {
+                await onUnassignAll();
+                onClose();
+              }}
+              className="w-full px-3 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2"
+            >
+              <X className="w-4 h-4" />
+              <span>Unassign all</span>
+            </button>
           </>
         )}
       </div>
