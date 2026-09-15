@@ -4,6 +4,12 @@ const CACHE_NAME = 'twin-scheduler-v4';
 function canHandleRequest(requestUrl, method) {
   if (method !== 'GET') return false;
   const url = new URL(requestUrl);
+  // Vite serves transformed source modules whose contents depend on the dev
+  // server environment. Never serve cached copies of those modules.
+  if (url.pathname.startsWith('/src/') ||
+      url.pathname.startsWith('/node_modules/') ||
+      url.pathname.startsWith('/@') ||
+      url.pathname === '/@react-refresh') return false;
   // Cache API only supports HTTP(S). Skip extension/browser internal schemes.
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
   if (

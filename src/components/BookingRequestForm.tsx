@@ -8,18 +8,31 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { CountryCodeSelect } from "./CountryCodeSelect";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { format, parse } from "date-fns";
+import { getSwissBookingClock, isFutureSwissBooking } from "../utils/swissBookingTime";
 import { getTimeSlotsByDate } from "../utils/timeSlots";
 import type { Booking, Pilot, UserProfile } from "../types/index";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Calendar } from "./ui/calendar";
 
 export function BookingRequestForm() {
+  const [now, setNow] = useState(() => new Date());
+  const swissToday = getSwissBookingClock(now).date;
+
+  useEffect(() => {
+    const refreshClock = () => setNow(new Date());
+    const interval = window.setInterval(refreshClock, 1000);
+    window.addEventListener("focus", refreshClock);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refreshClock);
+    };
+  }, []);
   const [formData, setFormData] = useState({
     customerName: "",
     email: "",
     phone: "",
     phoneCountryCode: "+41",
-    date: format(new Date(), "yyyy-MM-dd"),
+    date: getSwissBookingClock().date,
     timeIndex: "",
     numberOfPeople: 1,
     meetingPoint: "",
@@ -282,6 +295,16 @@ export function BookingRequestForm() {
     return [...baseSlots, ...extraSlots];
   }, [timeSlots, timeOverrides, additionalSlots]);
 
+  // Expire a selection when its Swiss departure time passes, including after tab resume.
+  useEffect(() => {
+    if (!formData.timeIndex) return;
+    const slot = displaySlotOptions.find((option) => option.displayIndex.toString() === formData.timeIndex);
+    if (slot && !isFutureSwissBooking(formData.date, slot.displayTime, now)) {
+      setFormData((prev) => ({ ...prev, timeIndex: "" }));
+      setMessage({ type: "error", text: "That departure time has passed in Switzerland. Please select a future date and time." });
+    }
+  }, [now, formData.date, formData.timeIndex, displaySlotOptions]);
+
   // Check if pilot is available for time slot
   // Matches the logic from BookingDetailsModal
   const isPilotAvailableForTimeSlot = (pilotUid: string, timeSlot: string): boolean => {
@@ -413,6 +436,13 @@ export function BookingRequestForm() {
           type: "error",
           text: "Selected time slot is no longer available. Please choose another time.",
         });
+        setSubmitting(false);
+        return;
+      }
+
+      if (!isFutureSwissBooking(formData.date, selectedSlot.displayTime)) {
+        setMessage({ type: "error", text: "That departure time has passed in Switzerland. Please select a future date and time." });
+        setFormData((prev) => ({ ...prev, timeIndex: "" }));
         setSubmitting(false);
         return;
       }
@@ -624,8 +654,10 @@ export function BookingRequestForm() {
                 <Calendar
                   mode="single"
                   selected={selectedDate}
+                  today={parse(swissToday, "yyyy-MM-dd", new Date())}
+                  disabled={(date) => format(date, "yyyy-MM-dd") < swissToday}
                   onSelect={(date) => {
-                    if (date) {
+                    if (date && format(date, "yyyy-MM-dd") >= getSwissBookingClock().date) {
                       setFormData((prev) => ({ ...prev, date: format(date, "yyyy-MM-dd") }));
                       setDatePickerOpen(false);
                     }
@@ -651,7 +683,7 @@ export function BookingRequestForm() {
           {/* Time Slot Selection */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-gray-700">
-              Time Slot *
+              Time Slot * (Swiss time)
             </label>
             {(loading || !settingsLoaded) ? (
               <div className="text-gray-500 text-sm">Loading availability...</div>
@@ -668,8 +700,9 @@ export function BookingRequestForm() {
                   {timeSlotAvailability.map((slot) => {
                     const availableCount = slot.availableSpots;
                     const requiredPilots = formData.numberOfPeople;
-                    // Don't disable slots when skipping availability restrictions
-                    const isDisabled = !skipAvailabilityRestrictions && availableCount < requiredPilots;
+                    // Past departures are unavailable even when capacity restrictions are skipped.
+                    const isDisabled = !isFutureSwissBooking(formData.date, slot.timeSlot, now) ||
+                      (!skipAvailabilityRestrictions && availableCount < requiredPilots);
 
                     return (
                       <SelectItem

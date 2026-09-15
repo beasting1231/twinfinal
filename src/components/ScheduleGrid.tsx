@@ -3887,6 +3887,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
             flightType: deletedBookingToRestore.flightType,
           } : bookingRequestToBook ? {
             customerName: bookingRequestToBook.customerName,
+            pickupLocation: bookingRequestToBook.meetingPoint,
             numberOfPeople: bookingRequestToBook.numberOfPeople,
             phoneNumber: bookingRequestToBook.phone,
             email: bookingRequestToBook.email,

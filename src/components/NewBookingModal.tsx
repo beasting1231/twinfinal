@@ -64,6 +64,7 @@ interface NewBookingModalProps {
   }) => void;
   initialData?: {
     customerName?: string;
+    pickupLocation?: string;
     numberOfPeople?: number;
     phoneNumber?: string;
     email?: string;
@@ -284,8 +285,7 @@ export function NewBookingModal({
         setFlightType(initialData.flightType || "sensational");
         // For non-admins, always use their display name regardless of initialData
         setBookingSource(role === 'admin' ? (initialData.bookingSource || "twin") : defaultBookingSource);
-        // Keep defaults for fields not in initialData
-        setPickupLocation("");
+        setPickupLocation(initialData.pickupLocation || "");
         // Set commission from initialData if provided
         setCommission(initialData.commission !== undefined ? String(initialData.commission) : "");
         setCommissionStatus(initialData.commissionStatus || "unpaid");

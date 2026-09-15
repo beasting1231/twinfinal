@@ -28,7 +28,7 @@ interface DriversContextMenuState {
 interface DriversContextMenuProps {
   isOpen: boolean;
   position: { x: number; y: number };
-  currentDriver?: string;
+  currentDrivers?: string[];
   onSelectDriver: (driverName: string) => void;
   onUnassign: () => void;
   onClose: () => void;
@@ -36,11 +36,34 @@ interface DriversContextMenuProps {
 
 const WEEK_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const DRIVER_NAMES = ["Roger", "Pitsch", "Csaba", "Spas"];
+const DRIVER_COLORS: Record<string, string> = {
+  roger: "#1d4ed8",
+  pitsch: "#047857",
+  csaba: "#7e22ce",
+  spas: "#c2410c",
+};
+
+function getDriverColor(driverName: string): string {
+  const key = driverName.trim().toLowerCase();
+  if (Object.hasOwn(DRIVER_COLORS, key)) return DRIVER_COLORS[key];
+  // Keep custom drivers' colors consistent across months and devices.
+  const hash = Array.from(key).reduce((value, char) => (value * 31 + char.charCodeAt(0)) >>> 0, 0);
+  return `hsl(${hash % 360} 65% 32%)`;
+}
+
+function getDriverBackground(drivers: string[]): string | undefined {
+  if (!drivers.length) return undefined;
+  if (drivers.length === 1) return getDriverColor(drivers[0]);
+  const stops = drivers.map((driver, index) =>
+    `${getDriverColor(driver)} ${(index / drivers.length) * 100}% ${((index + 1) / drivers.length) * 100}%`
+  );
+  return `linear-gradient(135deg, ${stops.join(", ")})`;
+}
 
 function DriversContextMenu({
   isOpen,
   position,
-  currentDriver,
+  currentDrivers,
   onSelectDriver,
   onUnassign,
   onClose,
@@ -139,7 +162,7 @@ function DriversContextMenu({
           Assign Driver
         </div>
 
-        {currentDriver && (
+        {Boolean(currentDrivers?.length) && (
           <button
             type="button"
             onClick={() => {
@@ -155,7 +178,7 @@ function DriversContextMenu({
 
         <div className="py-1">
           {DRIVER_NAMES.map((driverName) => {
-            const isCurrent = currentDriver === driverName;
+            const isCurrent = currentDrivers?.includes(driverName);
 
             return (
               <button
@@ -169,7 +192,10 @@ function DriversContextMenu({
                   isCurrent ? "text-green-600 dark:text-green-400" : "text-gray-900 dark:text-white"
                 }`}
               >
-                <span>{driverName}</span>
+                <span className="flex items-center gap-2">
+                  <span aria-hidden="true" className="h-3 w-3 rounded-full" style={{ background: getDriverColor(driverName) }} />
+                  {driverName}
+                </span>
                 {isCurrent && <UserCheck className="h-4 w-4" />}
               </button>
             );
@@ -239,35 +265,31 @@ export function DriversCalendar({ monthStartDate }: DriversCalendarProps) {
   const driversByDate = useMemo(() => {
     const groupedDrivers: Record<string, string[]> = {};
 
-    driverAssignments
-      .filter((assignment) => assignment.driver?.trim())
+    [...driverAssignments]
       .sort((a, b) => {
         if (a.date !== b.date) return a.date.localeCompare(b.date);
         return a.timeIndex - b.timeIndex;
       })
       .forEach((assignment) => {
-        const driverName = assignment.driver?.trim();
-        if (!driverName) return;
-
-        if (!groupedDrivers[assignment.date]) {
-          groupedDrivers[assignment.date] = [];
-        }
-
-        if (!groupedDrivers[assignment.date].includes(driverName)) {
-          groupedDrivers[assignment.date].push(driverName);
+        for (const name of [assignment.driver, assignment.driver2]) {
+          const driverName = name?.trim();
+          if (!driverName) continue;
+          const drivers = groupedDrivers[assignment.date] ??= [];
+          if (!drivers.some((driver) => driver.toLowerCase() === driverName.toLowerCase())) {
+            drivers.push(driverName);
+          }
         }
       });
-
-    return Object.fromEntries(
-      Object.entries(groupedDrivers).map(([date, drivers]) => {
-        if (drivers.length <= 2) {
-          return [date, drivers.join(" & ")];
-        }
-
-        return [date, `${drivers.slice(0, -1).join(", ")} & ${drivers[drivers.length - 1]}`];
-      })
-    );
+    return groupedDrivers;
   }, [driverAssignments]);
+
+  const legendDrivers = useMemo(() => {
+    const names = new Map(DRIVER_NAMES.map((name) => [name.toLowerCase(), name]));
+    Object.values(driversByDate).flat().forEach((name) => {
+      if (!names.has(name.toLowerCase())) names.set(name.toLowerCase(), name);
+    });
+    return [...names.values()];
+  }, [driversByDate]);
 
   useEffect(() => {
     setLoading(true);
@@ -480,6 +502,14 @@ export function DriversCalendar({ monthStartDate }: DriversCalendarProps) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-gray-50 p-3 dark:bg-zinc-950 sm:p-4">
+      <div className="mb-3 flex flex-wrap gap-x-4 gap-y-2 text-xs text-gray-700 dark:text-zinc-200" aria-label="Driver colors">
+        {legendDrivers.map((driver) => (
+          <span key={driver} className="flex items-center gap-1.5">
+            <span aria-hidden="true" className="h-3 w-3 rounded-full" style={{ background: getDriverColor(driver) }} />
+            {driver}
+          </span>
+        ))}
+      </div>
       <div
         ref={containerRef}
         className="min-h-0 flex-1 overflow-auto overscroll-contain [-webkit-overflow-scrolling:touch]"
@@ -508,21 +538,24 @@ export function DriversCalendar({ monthStartDate }: DriversCalendarProps) {
                   const dateKey = format(day, "yyyy-MM-dd");
                   const inMonth = isSameMonth(day, monthStartDate);
                   const today = isToday(day);
-                  const assignedDrivers = driversByDate[dateKey];
+                  const assignedDrivers = driversByDate[dateKey] ?? [];
+                  const hasDrivers = assignedDrivers.length > 0;
                   const isSavingCell = savingDateKeys.has(dateKey);
 
                   return (
                     <div
                       key={day.toISOString()}
                       className={`relative h-28 overflow-hidden rounded-lg border p-2 transition-colors ${
-                        today
+                        hasDrivers
+                          ? `border-transparent text-white hover:brightness-110 ${today ? "ring-2 ring-blue-400 ring-offset-1 dark:ring-offset-zinc-950" : ""}`
+                          : today
                           ? "border-blue-300 bg-blue-500/10 hover:bg-blue-500/15 dark:border-blue-500/40 dark:bg-blue-500/15 dark:hover:bg-blue-500/20"
-                          : assignedDrivers
-                          ? "border-green-300 bg-green-500/10 hover:bg-green-500/15 dark:border-green-500/40 dark:bg-green-500/15 dark:hover:bg-green-500/20"
                           : inMonth
                           ? "border-gray-300 bg-white hover:bg-gray-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800"
                           : "border-gray-200 bg-gray-100 text-gray-400 dark:border-zinc-900 dark:bg-zinc-950 dark:text-zinc-600"
                       }`}
+                      style={{ background: getDriverBackground(assignedDrivers) }}
+                      title={`${format(day, "MMMM d, yyyy")}: ${hasDrivers ? assignedDrivers.join(" & ") : "No driver assigned"}${today ? " (Today)" : ""}`}
                       onContextMenu={(event) => {
                         event.preventDefault();
                         openDriverContextMenu(dateKey, { x: event.clientX, y: event.clientY });
@@ -535,7 +568,9 @@ export function DriversCalendar({ monthStartDate }: DriversCalendarProps) {
                       <div className="flex justify-center">
                         <span
                           className={`flex h-7 min-w-7 items-center justify-center rounded-md px-2 text-sm font-semibold ${
-                            today
+                            hasDrivers
+                              ? `text-white ${today ? "bg-black/25" : ""}`
+                              : today
                               ? "text-blue-700 dark:text-blue-200"
                               : inMonth
                               ? "text-gray-900 dark:text-white"
@@ -545,10 +580,10 @@ export function DriversCalendar({ monthStartDate }: DriversCalendarProps) {
                           {format(day, "MMM d").toLowerCase()}
                         </span>
                       </div>
-                      {assignedDrivers && (
-                        <div className="mt-5 flex justify-center">
-                          <span className="text-sm font-semibold text-white">
-                            {assignedDrivers}
+                      {hasDrivers && (
+                        <div className="mt-3 flex justify-center">
+                          <span className="rounded bg-black/20 px-1.5 py-0.5 text-center text-sm font-semibold leading-tight text-white">
+                            {assignedDrivers.join(" & ")}
                           </span>
                         </div>
                       )}
@@ -578,7 +613,7 @@ export function DriversCalendar({ monthStartDate }: DriversCalendarProps) {
       <DriversContextMenu
         isOpen={Boolean(contextMenu?.isOpen)}
         position={contextMenu?.position || { x: 0, y: 0 }}
-        currentDriver={contextMenu ? driversByDate[contextMenu.dateKey] : undefined}
+        currentDrivers={contextMenu ? driversByDate[contextMenu.dateKey] : undefined}
         onSelectDriver={(driverName) => {
           if (!contextMenu) return;
           void setDriverForDay(contextMenu.dateKey, driverName);
