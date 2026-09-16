@@ -6,6 +6,7 @@ import { useEditing } from "../contexts/EditingContext";
 import { useAuth } from "../contexts/AuthContext";
 import { getTimeSlotsByDate } from "../utils/timeSlots";
 import { format } from "date-fns";
+import { clearDeletedBookingAssignments } from "../utils/bookingDeletion";
 
 const BOOKINGS_CACHE_KEY = 'twin_bookings_cache';
 const CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
@@ -314,6 +315,7 @@ export function useBookings(options?: UseBookingsOptions) {
   // Update an existing booking
   const updateBooking = async (id: string, booking: Partial<Booking>) => {
     try {
+      booking = clearDeletedBookingAssignments(booking);
       // Filter out undefined values from the update object (Firebase doesn't accept undefined)
       const sanitizedBooking: any = {};
       const existingBooking = bookings.find((b) => b.id === id);
@@ -502,25 +504,22 @@ export function useBookings(options?: UseBookingsOptions) {
     try {
       // Create history entry for deletion (use regular Date since serverTimestamp() can't be used in arrayUnion)
       const now = new Date();
+      const deletion = clearDeletedBookingAssignments({
+        bookingStatus: "deleted" as const,
+        deletedBy: currentUser?.uid || "",
+        deletedByName: currentUser?.displayName || currentUser?.email || "",
+        deletedAt: now,
+      });
       const historyEntry: BookingHistoryEntry = {
         action: "deleted",
         timestamp: now,
         userId: currentUser?.uid || "",
         userName: currentUser?.displayName || currentUser?.email || "Unknown",
-        snapshotAfter: applyBookingPatchToSnapshot(bookings.find((b) => b.id === id), {
-          bookingStatus: "deleted",
-          assignedPilots: [],
-          deletedBy: currentUser?.uid || "",
-          deletedByName: currentUser?.displayName || currentUser?.email || "",
-          deletedAt: now,
-        }, now),
+        snapshotAfter: applyBookingPatchToSnapshot(bookings.find((b) => b.id === id), deletion, now),
       };
 
       await updateDoc(doc(db, "bookings", id), {
-        bookingStatus: "deleted",
-        assignedPilots: [], // Unassign all pilots when deleting
-        deletedBy: currentUser?.uid || "",
-        deletedByName: currentUser?.displayName || currentUser?.email || "",
+        ...deletion,
         deletedAt: serverTimestamp(),
         history: arrayUnion(historyEntry),
       });

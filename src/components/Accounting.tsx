@@ -11,6 +11,7 @@ import { getTimeSlotsByDate } from "../utils/timeSlots";
 import { FilterDropdown } from "./FilterDropdown";
 import { doc, updateDoc, onSnapshot, collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase/config";
+import { getAccountingBookings } from "../utils/bookingDeletion";
 
 interface AccountingRow {
   annualFlightNumber: number;
@@ -174,7 +175,7 @@ export function Accounting() {
     if (!bookings || bookings.length === 0) return [];
 
     // Sort all bookings by date and time (earliest to latest)
-    const sortedBookings = [...bookings].sort((a, b) => {
+    const sortedBookings = getAccountingBookings(bookings).sort((a, b) => {
       if (a.date !== b.date) {
         return a.date.localeCompare(b.date);
       }
