@@ -37,3 +37,14 @@ Validation: `npx tsc -b`, main Vite production build (output `/tmp/twinfinal-pic
 Deployed the pickup preservation fix to Firebase Hosting project `twinscheduler`, site `twinparagliding`, https://twinparagliding.web.app. TypeScript and all three Vite builds passed. Built into `/tmp/twinfinal-pickup-release-20260915` to preserve existing generated files. Firebase CLI confirmed release complete. Live index, service worker, both embed HTML files, and main JavaScript bundle returned HTTP 200 and matched the release files byte for byte. Verified request pickup mapping and initialization are present in that bundle. Browser booking save/reopen was not tested. Hosting-only release.
 
 User explicitly requested more initiative: approved fixes should proceed through verification, established deployment, and live checks without a separate deployment prompt. Saved this preference in `/workspace/agents/agt_8c41da30-7d7b-4c2b-866c-bdb53ccb50bf/AGENTS.md`.
+
+
+## Integration API pilot consent — 2026-10-05
+
+User explicitly authorized exposing on-request spaces and preventing direct API bookings from consuming them without pilot consent. Restored bookingApi.js, bookingApiDomain.js and bookingMcp.js from the exact deployed bookingApi source archive; added the bookingApi export to the canonical index. Other source, UI, database rules and existing production records are unchanged.
+
+Availability now returns availableSpots for regular bookable spaces, onRequestSpots separately, and totalAvailableSpots as their sum. Transactional create/move/resize capacity validation excludes request pilots; moving an assigned on-request pilot is also rejected. Consent must be recorded through the existing Twin availability workflow by marking the pilot available; no API override or new consent records.
+
+11 offline domain/transaction tests in tests/bookingApiAvailability.test.cjs passed. Changed API modules passed ESLint with ES2022 parsing; legacy unrelated scripts have lint failures under the archived ES2018 config, so this isolated release checks only the changed API modules. Deployment staging: /workspace/agents/agt_4c773f80-fb37-4c04-ab4f-2db9c4e43985/twin-bookingapi-release, copied from the exact previously deployed archive with only the three API modules changed. firebase deploy --only functions:bookingApi --project twinscheduler succeeded. No hosting, other functions or rules deployment. Live read-only REST/MCP checks returned 2 regular plus 1 on request for 2026-10-05 at 16:45; no production mutation tests were run.
+
+Matching EvenOS app source: /workspace/projects/twin-evenos/uis/twin/ui.js, published as Twin 1.0.3. It displays 2 free (1). Source archives/release staging stay in the private agent directory; never copy deployment environment files into Git.

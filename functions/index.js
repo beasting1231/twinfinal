@@ -13,6 +13,8 @@ const {ImapFlow} = require("imapflow");
 admin.initializeApp();
 
 const db = admin.firestore();
+// Restore the deployed integration API; deploy this endpoint independently of other functions.
+exports.bookingApi = require("./bookingApi").createBookingApiFunctions(db).bookingApi;
 const BOOKING_SEARCH_INDEX_COLLECTION = "bookingSearchIndex";
 const BOOKING_BACKFILL_BATCH_SIZE = 250;
 const bookingSearchBackfillKey = defineSecret("BOOKING_SEARCH_BACKFILL_KEY");
