@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { BookingAvailable } from "./BookingAvailable";
 import { NewBookingModal } from "./NewBookingModal";
@@ -87,6 +87,9 @@ interface ScheduleGridProps {
 }
 
 const TIME_COLUMN_WIDTH = 112;
+const GRID_HEADER_HEIGHT = 28;
+const GRID_ROW_HEIGHT = 80;
+const GRID_GAP = 8;
 
 function toDate(value: any): Date | null {
   if (!value) return null;
@@ -1222,61 +1225,26 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
   const [isPinching, setIsPinching] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
-  const [gridHeight, setGridHeight] = useState(0);
+  const [gridSize, setGridSize] = useState({ width: 0, height: 0 });
   const initialDistanceRef = useRef<number | null>(null);
   const initialScaleRef = useRef<number>(1);
   const rafRef = useRef<number | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTriggeredRef = useRef<boolean>(false);
 
-  // Measure grid height for zoom compensation
-  useEffect(() => {
-    if (gridRef.current) {
-      const updateHeight = () => {
-        if (gridRef.current) {
-          setGridHeight(gridRef.current.offsetHeight);
-        }
-      };
+  const gridRows = `${GRID_HEADER_HEIGHT}px${combinedTimeSlots.length ? ` repeat(${combinedTimeSlots.length}, ${GRID_ROW_HEIGHT}px)` : ''}`;
 
-      // Measure initially
-      updateHeight();
-
-      // Re-measure when window resizes or scale changes
-      window.addEventListener('resize', updateHeight);
-
-      return () => window.removeEventListener('resize', updateHeight);
-    }
-  }, [pilots.length, timeSlots.length, bookings.length, scale]);
-
-  // Handle sticky time column when zoomed (CSS sticky breaks with transform)
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container || scale === 1) return;
-
-    const handleScroll = () => {
-      const scrollLeft = container.scrollLeft;
-      const stickyElements = container.querySelectorAll('[data-sticky-column="true"]');
-
-      stickyElements.forEach((el) => {
-        const element = el as HTMLElement;
-        // Compensate for the scroll position, accounting for scale
-        element.style.transform = `translateX(${scrollLeft / scale}px)`;
-      });
-    };
-
-    container.addEventListener('scroll', handleScroll);
-    // Initial call in case already scrolled
-    handleScroll();
-
-    return () => {
-      container.removeEventListener('scroll', handleScroll);
-      // Reset transforms when scale returns to 1
-      const stickyElements = container.querySelectorAll('[data-sticky-column="true"]');
-      stickyElements.forEach((el) => {
-        (el as HTMLElement).style.transform = '';
-      });
-    };
-  }, [scale]);
+  // Reserve the scaled dimensions so neither scrolling nor following sections
+  // depend on the unscaled footprint of the transformed booking grid.
+  useLayoutEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return;
+    const updateSize = () => setGridSize({ width: grid.offsetWidth, height: grid.offsetHeight });
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(grid);
+    return () => observer.disconnect();
+  }, [loading]);
 
   // Check if the selected date is more than 24 hours in the past
   const isSelectedDateOlderThan24Hours = useMemo(() => {
@@ -2978,11 +2946,17 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
   // Show skeleton loader while loading
   if (loading) {
     return (
-      <div className="flex-1 overflow-auto overscroll-x-contain p-4 bg-gray-50 dark:bg-zinc-950">
-        <div className="inline-block">
-          <div className="grid gap-2" style={{ gridTemplateColumns: `${TIME_COLUMN_WIDTH}px repeat(5, 160px) 48px 98px 98px${role === 'admin' ? ' 98px' : ''}` }}>
-            {/* Header Row Skeleton */}
+      <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden p-4 bg-gray-50 dark:bg-zinc-950">
+        <div className="flex items-start gap-2">
+          <div className="grid shrink-0 gap-2" style={{ width: TIME_COLUMN_WIDTH }}>
             <div className="h-7" />
+            {timeSlots.map((_, index) => (
+              <div key={index} className="h-20 bg-gray-200 dark:bg-zinc-900 rounded-lg animate-pulse" />
+            ))}
+          </div>
+          <div className="min-w-0 flex-1 overflow-x-auto overscroll-x-contain">
+          <div className="grid w-max gap-2" style={{ gridTemplateColumns: `repeat(5, 160px) 48px 98px 98px${role === 'admin' ? ' 98px' : ''}` }}>
+            {/* Header Row Skeleton */}
             <div className="h-7 bg-gray-200 dark:bg-zinc-900 rounded-lg animate-pulse" />
             <div className="h-7 bg-gray-200 dark:bg-zinc-900 rounded-lg animate-pulse" />
             <div className="h-7 bg-gray-200 dark:bg-zinc-900 rounded-lg animate-pulse" />
@@ -2998,8 +2972,6 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
             {/* Time Slot Rows Skeleton */}
             {timeSlots.map((_timeSlot, index) => (
               <div key={index} className="contents">
-                {/* Time label skeleton */}
-                <div className="h-20 bg-gray-200 dark:bg-zinc-900 rounded-lg animate-pulse" />
                 {/* Skeleton cells */}
                 <div className="h-20 bg-gray-100 dark:bg-zinc-800 rounded-lg animate-pulse" />
                 <div className="h-20 bg-gray-100 dark:bg-zinc-800 rounded-lg animate-pulse" />
@@ -3014,6 +2986,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                 {role === 'admin' && <div className="h-20 bg-gray-100 dark:bg-zinc-800 rounded-lg animate-pulse" />}
               </div>
             ))}
+          </div>
           </div>
         </div>
       </div>
@@ -3031,7 +3004,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
     >
       <div
         ref={containerRef}
-        className="flex-1 overflow-auto overscroll-x-contain p-4 bg-gray-50 dark:bg-zinc-950"
+        className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden p-4 bg-gray-50 dark:bg-zinc-950"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -3047,17 +3020,16 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
           </button>
         </div>
       )}
-      <div
-        ref={gridRef}
-        className={`inline-block origin-top-left ${!isPinching ? 'transition-transform duration-100' : ''}`}
-        style={{ transform: `scale(${scale})` }}
-      >
-        <div className="flex gap-4">
-        <div className="grid gap-2" style={{ gridTemplateColumns: `${TIME_COLUMN_WIDTH}px repeat(${maxColumnsNeeded}, 160px) 48px 98px${showSecondDriverColumn ? ' 98px' : ''}${role === 'admin' ? ' 98px' : ''}` }}>
-          {/* Header Row - Shows pilots present today */}
+      <div className="flex items-start" style={{ gap: GRID_GAP * scale }}>
+        {/* Time rail stays outside the horizontal scroll area. Both panes share
+            this parent's vertical scrolling and the same row sizes and scale. */}
+        <div className="relative shrink-0" style={{ width: TIME_COLUMN_WIDTH * scale, height: (GRID_HEADER_HEIGHT + combinedTimeSlots.length * (GRID_ROW_HEIGHT + GRID_GAP)) * scale }}>
+          <div
+            className={`grid gap-2 origin-top-left ${!isPinching ? 'transition-transform duration-100' : ''}`}
+            style={{ width: TIME_COLUMN_WIDTH, gridTemplateRows: gridRows, transform: `scale(${scale})` }}
+          >
           {role !== 'agency' ? (
-            <div data-sticky-column="true" className={`h-7 ${scale === 1 ? 'sticky left-0' : ''} z-10 relative`}>
-              <div className="absolute top-0 bottom-0 bg-gray-50 dark:bg-zinc-950" style={{ left: '-16px', right: '-8px' }} />
+            <div className="h-7 relative">
               <div
                 data-date-cell="true"
                 className="h-full w-full flex items-center justify-center bg-blue-600 hover:bg-blue-700 rounded-lg cursor-pointer transition-colors relative"
@@ -3068,11 +3040,88 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
               </div>
             </div>
           ) : (
-            <div data-sticky-column="true" className={`h-7 ${scale === 1 ? 'sticky left-0' : ''} z-10 relative`}>
-              <div className="absolute top-0 bottom-0 bg-gray-50 dark:bg-zinc-950" style={{ left: '-16px', right: '-8px' }} />
+            <div className="h-7 relative">
               <div data-date-cell="true" className="h-full w-full bg-zinc-900 rounded-lg relative" />
             </div>
           )}
+          {combinedTimeSlots.map(({ time: timeSlot, displayTime, originalIndex: timeIndex, isAdditional }, displayIndex) => {
+            const regularBookingsAtThisTime = bookings.filter(booking =>
+              booking.timeIndex === timeIndex && !booking.isBlocked && booking.bookingSource !== "Blocked"
+            );
+            // Calculate total pax for this time slot (exclude blocked spots)
+            const totalPaxAtThisTime = regularBookingsAtThisTime.reduce((total, booking) => {
+              return total + (booking.numberOfPeople || 1);
+            }, 0);
+
+            // Determine styling: additional slots are green, overridden times are orange
+            const hasTimeOverride = !isAdditional && timeOverrides[timeIndex] !== undefined;
+            const slotDisplayTime = displayTime;
+            const inspectedPilotAvailabilityStatus = inspectedPilotUid
+              ? getPilotAvailabilityStatus?.(inspectedPilotUid, timeSlot) || "unavailable"
+              : null;
+            const inspectedPilotAvailabilityText = inspectedPilotUid
+              ? getFormattedAvailabilityAuditText(inspectedPilotUid, timeSlot)
+              : null;
+
+            return (
+              <div
+                key={`time-${timeIndex}-${displayIndex}`}
+                className="h-20 relative"
+              >
+                <div
+                  data-time-index={timeIndex}
+                  className={`h-full w-full flex flex-col items-center justify-center rounded-lg font-medium text-sm relative px-1 text-center ${
+                    isAdditional
+                      ? 'bg-green-500 dark:bg-green-600 text-white'
+                      : hasTimeOverride
+                      ? 'bg-orange-400 dark:bg-orange-600 text-white'
+                      : 'bg-gray-200 dark:bg-zinc-900 text-gray-900 dark:text-white'
+                  } ${role === 'admin' ? 'cursor-context-menu' : ''} ${moveMode.isActive || requestMoveMode.isActive || deletedBookingMoveMode.isActive ? 'cursor-pointer hover:bg-blue-200 dark:hover:bg-blue-900/50' : ''}`}
+                  onContextMenu={role === 'admin' ? handleTimeSlotContextMenu(timeIndex, timeSlot, isAdditional) : undefined}
+                  onTouchStart={role === 'admin' ? handleTimeSlotTouchStart(timeIndex, timeSlot, isAdditional) : undefined}
+                  onTouchEnd={role === 'admin' ? handleTimeSlotTouchEnd : undefined}
+                  onTouchMove={role === 'admin' ? handleTimeSlotTouchMove : undefined}
+                  onClick={moveMode.isActive || requestMoveMode.isActive || deletedBookingMoveMode.isActive ? () => handleMoveModeDestination(timeIndex) : undefined}
+                >
+                  <span>{slotDisplayTime}</span>
+                  {inspectedPilotAvailabilityText && (
+                    <span className={`mt-1 text-[10px] leading-tight font-normal ${
+                      isAdditional || hasTimeOverride
+                        ? 'text-white/90'
+                        : inspectedPilotAvailabilityStatus === 'unavailable'
+                          ? 'text-red-600 dark:text-red-400'
+                          : 'text-green-600 dark:text-green-400'
+                    }`}>
+                      {inspectedPilotAvailabilityText}
+                    </span>
+                  )}
+                  {totalPaxAtThisTime > 0 && (
+                    <span className={`absolute top-1 right-1 text-xs font-medium rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 ${
+                      isAdditional
+                        ? 'bg-green-700 dark:bg-green-800 text-green-100'
+                        : hasTimeOverride
+                        ? 'bg-orange-600 dark:bg-orange-800 text-orange-100'
+                        : 'bg-gray-400 dark:bg-zinc-700 text-gray-700 dark:text-zinc-400'
+                    }`}>
+                      {totalPaxAtThisTime}
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+          </div>
+        </div>
+        <div className="min-w-0 flex-1 overflow-x-auto overscroll-x-contain" data-booking-grid-scroll="true">
+          <div className="relative overflow-hidden" style={{ width: gridSize.width ? gridSize.width * scale : undefined, height: gridSize.height ? gridSize.height * scale : undefined }}>
+            <div
+              ref={gridRef}
+              className={`w-max origin-top-left ${!isPinching ? 'transition-transform duration-100' : ''}`}
+              style={{ transform: `scale(${scale})` }}
+            >
+        <div className="flex gap-4">
+        <div className="grid gap-2 self-start" style={{ gridTemplateRows: gridRows, gridTemplateColumns: `repeat(${maxColumnsNeeded}, 160px) 48px 98px${showSecondDriverColumn ? ' 98px' : ''}${role === 'admin' ? ' 98px' : ''}` }}>
+          {/* Header Row - Shows pilots present today */}
           {Array.from({ length: maxColumnsNeeded }, (_, index) => {
             const pilot = pilots[index];
             if (pilot) {
@@ -3122,8 +3171,8 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
           )}
 
           {/* Time Slots and Booking Cells */}
-          {combinedTimeSlots.map((slotInfo, displayIndex) => {
-            const { time: timeSlot, displayTime, originalIndex: timeIndex, isAdditional } = slotInfo;
+          {combinedTimeSlots.map((slotInfo) => {
+            const { time: timeSlot, originalIndex: timeIndex } = slotInfo;
 
             // Get all bookings for this time slot and sort by creation time (oldest first, newest last/right)
             const bookingsAtThisTime = sortBookingsForRow(bookings.filter(b => b.timeIndex === timeIndex));
@@ -3280,70 +3329,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
             // Sort cells: booked -> available -> onRequest -> blocked -> noPilot -> invisible
             cellsForRow.sort((a, b) => a.sortOrder - b.sortOrder);
 
-            // Calculate total pax for this time slot (exclude blocked spots)
-            const totalPaxAtThisTime = regularBookingsAtThisTime.reduce((total, booking) => {
-              return total + (booking.numberOfPeople || 1);
-            }, 0);
-
-            // Determine styling: additional slots are green, overridden times are orange
-            const hasTimeOverride = !isAdditional && timeOverrides[timeIndex] !== undefined;
-            const slotDisplayTime = displayTime;
-            const inspectedPilotAvailabilityStatus = inspectedPilotUid
-              ? getPilotAvailabilityStatus?.(inspectedPilotUid, timeSlot) || "unavailable"
-              : null;
-            const inspectedPilotAvailabilityText = inspectedPilotUid
-              ? getFormattedAvailabilityAuditText(inspectedPilotUid, timeSlot)
-              : null;
-
             return [
-              // Time Slot Label
-              <div
-                key={`time-${timeIndex}-${displayIndex}`}
-                data-sticky-column="true"
-                className={`h-20 ${scale === 1 ? 'sticky left-0' : ''} z-10 relative`}
-              >
-                <div className="absolute top-0 bottom-0 bg-gray-50 dark:bg-zinc-950" style={{ left: '-16px', right: '-8px' }} />
-                <div
-                  data-time-index={timeIndex}
-                  className={`h-full w-full flex flex-col items-center justify-center rounded-lg font-medium text-sm relative px-1 text-center ${
-                    isAdditional
-                      ? 'bg-green-500 dark:bg-green-600 text-white'
-                      : hasTimeOverride
-                      ? 'bg-orange-400 dark:bg-orange-600 text-white'
-                      : 'bg-gray-200 dark:bg-zinc-900 text-gray-900 dark:text-white'
-                  } ${role === 'admin' ? 'cursor-context-menu' : ''} ${moveMode.isActive || requestMoveMode.isActive || deletedBookingMoveMode.isActive ? 'cursor-pointer hover:bg-blue-200 dark:hover:bg-blue-900/50' : ''}`}
-                  onContextMenu={role === 'admin' ? handleTimeSlotContextMenu(timeIndex, timeSlot, isAdditional) : undefined}
-                  onTouchStart={role === 'admin' ? handleTimeSlotTouchStart(timeIndex, timeSlot, isAdditional) : undefined}
-                  onTouchEnd={role === 'admin' ? handleTimeSlotTouchEnd : undefined}
-                  onTouchMove={role === 'admin' ? handleTimeSlotTouchMove : undefined}
-                  onClick={moveMode.isActive || requestMoveMode.isActive || deletedBookingMoveMode.isActive ? () => handleMoveModeDestination(timeIndex) : undefined}
-                >
-                  <span>{slotDisplayTime}</span>
-                  {inspectedPilotAvailabilityText && (
-                    <span className={`mt-1 text-[10px] leading-tight font-normal ${
-                      isAdditional || hasTimeOverride
-                        ? 'text-white/90'
-                        : inspectedPilotAvailabilityStatus === 'unavailable'
-                          ? 'text-red-600 dark:text-red-400'
-                          : 'text-green-600 dark:text-green-400'
-                    }`}>
-                      {inspectedPilotAvailabilityText}
-                    </span>
-                  )}
-                  {totalPaxAtThisTime > 0 && (
-                    <span className={`absolute top-1 right-1 text-xs font-medium rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 ${
-                      isAdditional
-                        ? 'bg-green-700 dark:bg-green-800 text-green-100'
-                        : hasTimeOverride
-                        ? 'bg-orange-600 dark:bg-orange-800 text-orange-100'
-                        : 'bg-gray-400 dark:bg-zinc-700 text-gray-700 dark:text-zinc-400'
-                    }`}>
-                      {totalPaxAtThisTime}
-                    </span>
-                  )}
-                </div>
-              </div>,
-
               // Render sorted cells
               // Track cumulative position for overbooking calculation
               ...(() => {
@@ -3693,13 +3679,17 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
         </div>
       </div>
 
+          </div>
+        </div>
+      </div>
+
       {/* Booking Requests Inbox - Only show to admins */}
       {role === 'admin' && (
       <div
         data-history-ignore="true"
         className="flex flex-col gap-4 max-w-4xl sticky left-4"
         style={{
-          marginTop: `${24 + (gridHeight * (scale - 1))}px`
+          marginTop: 24
         }}
       >
         {/* Booking Requests Inbox */}
@@ -3842,7 +3832,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
       <div
         className="flex flex-col gap-4 max-w-4xl sticky left-4"
         style={{
-          marginTop: `${24 + (gridHeight * (scale - 1))}px`
+          marginTop: 24
         }}
       >
         {/* Location Control */}

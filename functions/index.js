@@ -1735,3 +1735,8 @@ exports.backfillBookingSearchIndex = onRequest(
       }
     },
 );
+
+// Website enquiries share the existing booking SMTP connection.
+const websiteForms = require("./websiteForms").createWebsiteForms({db, transporter});
+exports.submitWebsiteContact = websiteForms.submitWebsiteContact;
+exports.submitWebsiteVoucherRequest = websiteForms.submitWebsiteVoucherRequest;

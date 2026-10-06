@@ -3,6 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { startOfWeek, startOfMonth, format, addDays, subDays } from "date-fns";
 import { Header } from "./components/Header";
 import { ScheduleGrid } from "./components/ScheduleGrid";
+import { canUseDailyPlanPreview, DAILY_PLAN_PREVIEW_PATH } from "./utils/dailyPlanPreview";
+
 import { AvailabilityGrid } from "./components/AvailabilityGrid";
 import { AvailabilityMonthGrid } from "./components/AvailabilityMonthGrid";
 import { AvailabilityOverviewTable } from "./components/AvailabilityOverviewTable";
@@ -57,6 +59,10 @@ import { ProtectedRoute } from "./components/Auth/ProtectedRoute";
 import { getTimeSlotsByDate } from "./utils/timeSlots";
 import { SWISS_TIME_ZONE } from "./utils/timezone";
 
+const ScheduleGridNew = lazy(() =>
+  retryImport(() => import("./components/ScheduleGridNew").then(module => ({ default: module.ScheduleGridNew })))
+);
+
 function toDate(value: any): Date | null {
   if (!value) return null;
   const date =
@@ -79,7 +85,8 @@ function getSwissDateKey(value: Date): string {
 }
 
 // Component for the Daily Plan route
-function DailyPlanPage() {
+function DailyPlanPage({ preview = false }: { preview?: boolean }) {
+  const Grid = preview ? ScheduleGridNew : ScheduleGrid;
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [weekStartDate, setWeekStartDate] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [historyState, setHistoryState] = useState<{ isActive: boolean; timestamp: Date | null }>({
@@ -154,26 +161,28 @@ function DailyPlanPage() {
         onHistoryStateChange={setHistoryState}
         getHistoryTimelineEvents={getHistoryTimelineEvents}
       />
-      <ScheduleGrid
-        selectedDate={selectedDate}
-        pilots={pilots}
-        timeSlots={timeSlots}
-        bookings={filteredBookings}
-        allBookingsForSearch={bookings}
-        isPilotAvailableForTimeSlot={isPilotAvailableForTimeSlot}
-        getPilotAvailabilityStatus={getPilotAvailabilityStatus}
-        getPilotSignInTimeForTimeSlot={getPilotSignInTimeForTimeSlot}
-        getPilotSignOutTimeForTimeSlot={getPilotSignOutTimeForTimeSlot}
-        saveCustomPilotOrder={saveCustomPilotOrder}
-        loading={isLoading}
-        currentUserDisplayName={currentUserDisplayName}
-        historyMode={historyState.isActive}
-        historyTimestamp={historyState.timestamp}
-        onAddBooking={addBooking}
-        onUpdateBooking={updateBooking}
-        onDeleteBooking={deleteBooking}
-        onNavigateToDate={setSelectedDate}
-      />
+      <Suspense fallback={<div className="p-4 text-zinc-500">Loading daily plan…</div>}>
+        <Grid
+          selectedDate={selectedDate}
+          pilots={pilots}
+          timeSlots={timeSlots}
+          bookings={filteredBookings}
+          allBookingsForSearch={bookings}
+          isPilotAvailableForTimeSlot={isPilotAvailableForTimeSlot}
+          getPilotAvailabilityStatus={getPilotAvailabilityStatus}
+          getPilotSignInTimeForTimeSlot={getPilotSignInTimeForTimeSlot}
+          getPilotSignOutTimeForTimeSlot={getPilotSignOutTimeForTimeSlot}
+          saveCustomPilotOrder={saveCustomPilotOrder}
+          loading={isLoading}
+          currentUserDisplayName={currentUserDisplayName}
+          historyMode={historyState.isActive}
+          historyTimestamp={historyState.timestamp}
+          onAddBooking={addBooking}
+          onUpdateBooking={updateBooking}
+          onDeleteBooking={deleteBooking}
+          onNavigateToDate={setSelectedDate}
+        />
+      </Suspense>
     </div>
   );
 }
@@ -289,6 +298,12 @@ function AnalyticsPage() {
   );
 }
 
+function DailyPlanPreviewPage() {
+  const { currentUser } = useAuth();
+  if (!canUseDailyPlanPreview(currentUser)) return <Navigate to="/" replace />;
+  return <DailyPlanPage preview />;
+}
+
 function AppContent() {
   // Automatically track driver location for users with driver role
   useDriverLocation();
@@ -306,6 +321,12 @@ function AppContent() {
       <Route path="/" element={
         <ProtectedRoute>
           <DailyPlanPage />
+        </ProtectedRoute>
+      } />
+
+      <Route path={DAILY_PLAN_PREVIEW_PATH} element={
+        <ProtectedRoute>
+          <DailyPlanPreviewPage />
         </ProtectedRoute>
       } />
 

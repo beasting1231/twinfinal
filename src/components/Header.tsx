@@ -15,6 +15,7 @@ import {
 import { DatePicker } from "./DatePicker";
 import { WeekPicker } from "./WeekPicker";
 import { MonthPicker } from "./MonthPicker";
+import { canUseDailyPlanPreview, DAILY_PLAN_PREVIEW_PATH } from "../utils/dailyPlanPreview";
 import { useAuth } from "../contexts/AuthContext";
 import { useRole } from "../hooks/useRole";
 import { getSwissDateTime, SWISS_TIME_ZONE } from "../utils/timezone";
@@ -68,7 +69,8 @@ export function Header({
   const location = useLocation();
   const { currentUser, logout } = useAuth();
   const { permissions, role } = useRole();
-  const showHistoryButton = location.pathname === "/" && role === "admin";
+  const isDailyPlan = location.pathname === "/" || location.pathname === DAILY_PLAN_PREVIEW_PATH;
+  const showHistoryButton = isDailyPlan && role === "admin";
   const historyTime = `${String(Math.floor(historyMinute / 60)).padStart(2, "0")}:${String(historyMinute % 60).padStart(2, "0")}`;
   const historySliderPercent = (historyMinute / 1440) * 100;
   const historyTimestamp = useMemo(
@@ -358,6 +360,16 @@ export function Header({
                   Daily Plan
                 </button>
               )}
+              {permissions.canViewAllBookings && canUseDailyPlanPreview(currentUser) && (
+                <button
+                  onClick={() => handleNavigate(DAILY_PLAN_PREVIEW_PATH)}
+                  className={`w-full text-left px-4 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors text-gray-900 dark:text-white ${
+                    isActive(DAILY_PLAN_PREVIEW_PATH) ? "bg-gray-100 dark:bg-zinc-800" : ""
+                  }`}
+                >
+                  dailyplan NEW
+                </button>
+              )}
               {role === "admin" && (
                 <button
                   onClick={() => handleNavigate("/analytics")}
@@ -523,7 +535,7 @@ export function Header({
 
         {/* Center: Date/Week/Month Picker */}
         <div className="flex-1 flex justify-center items-center gap-2">
-          {location.pathname === "/" && date && onDateChange ? (
+          {isDailyPlan && date && onDateChange ? (
             <DatePicker date={date} onDateChange={onDateChange} />
           ) : location.pathname === "/drivers" && monthStartDate && onMonthChange ? (
             <MonthPicker monthStartDate={monthStartDate} onMonthChange={onMonthChange} />
