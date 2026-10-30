@@ -183,10 +183,10 @@ export function BookingRequestForm() {
     return () => unsubscribe();
   }, [formData.date]);
 
-  // Fetch bookings for the selected date
+  // Fetch bookings for the selected date only
   useEffect(() => {
     const unsubscribe = onSnapshot(
-      collection(db, "bookings"),
+      query(collection(db, "bookings"), where("date", "==", formData.date)),
       (snapshot) => {
         const bookingsData = snapshot.docs.map((doc) => ({
           id: doc.id,
@@ -197,7 +197,7 @@ export function BookingRequestForm() {
       (error) => console.error("Error fetching bookings:", error)
     );
     return () => unsubscribe();
-  }, []);
+  }, [formData.date]);
 
   // Fetch pilots
   useEffect(() => {

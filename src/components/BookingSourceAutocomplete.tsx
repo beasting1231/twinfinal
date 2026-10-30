@@ -19,7 +19,7 @@ export function BookingSourceAutocomplete({
   label = "Booking Source",
   id = "bookingSource",
 }: BookingSourceAutocompleteProps) {
-  const { bookingSources } = useBookingSources();
+  const { bookingSources, loading } = useBookingSources();
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [filteredSources, setFilteredSources] = useState(bookingSources);
@@ -118,15 +118,17 @@ export function BookingSourceAutocomplete({
                     className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-900 dark:text-white flex items-center justify-between group transition-colors"
                   >
                     <span>{source.name}</span>
-                    <span className="text-xs text-gray-500 dark:text-zinc-500 group-hover:text-gray-600 dark:group-hover:text-zinc-400">
-                      {source.count} {source.count === 1 ? "booking" : "bookings"}
-                    </span>
                   </button>
                 ))}
               </div>
             ) : (
               <div className="px-4 py-3 text-gray-500 dark:text-zinc-500 text-sm">
-                {searchQuery.trim() ? (
+                {loading ? (
+                  <span className="flex items-center gap-2">
+                    <span className="h-3 w-3 rounded-full border-2 border-gray-400 border-t-transparent animate-spin" />
+                    Loading booking sources…
+                  </span>
+                ) : searchQuery.trim() ? (
                   <>
                     No matches found. Type to create{" "}
                     <span className="text-gray-900 dark:text-white font-medium">"{searchQuery}"</span>

@@ -3,7 +3,8 @@ import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, where
 import { db } from "../firebase/config";
 import type { DriverAssignment } from "../types/index";
 
-export function useDriverAssignments(date?: string) {
+// `date`: one day. `range`: from/to (inclusive, yyyy-MM-dd). Neither: every assignment.
+export function useDriverAssignments(date?: string, range?: { from: string; to: string }) {
   const [driverAssignments, setDriverAssignments] = useState<DriverAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -13,7 +14,9 @@ export function useDriverAssignments(date?: string) {
     // If date provided, only subscribe to assignments for that date
     const assignmentsQuery = date
       ? query(collection(db, "driverAssignments"), where("date", "==", date))
-      : collection(db, "driverAssignments");
+      : range
+        ? query(collection(db, "driverAssignments"), where("date", ">=", range.from), where("date", "<=", range.to))
+        : collection(db, "driverAssignments");
 
     const unsubscribe = onSnapshot(
       assignmentsQuery,
@@ -36,7 +39,7 @@ export function useDriverAssignments(date?: string) {
     return () => {
       unsubscribe();
     };
-  }, [date]);
+  }, [date, range?.from, range?.to]);
 
   // Add a new driver assignment
   const addDriverAssignment = async (assignment: Omit<DriverAssignment, "id">) => {

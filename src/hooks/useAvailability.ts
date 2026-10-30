@@ -16,7 +16,12 @@ interface AvailabilityData {
   signedOutAt?: string;
 }
 
-export function useAvailability(targetUserId?: string) {
+// Firestore allows at most 30 values in one "in" filter.
+const MAX_DATES_PER_QUERY = 30;
+
+// `dates`: only these days are loaded (the ones on screen), not every entry the
+// pilot ever made. Without it, all of the pilot's availability is loaded.
+export function useAvailability(targetUserId?: string, dates?: Date[]) {
   const { currentUser } = useAuth();
   const [statusMap, setStatusMap] = useState<Map<string, AvailabilityStatus>>(new Map()); // key -> status
   const [loading, setLoading] = useState(true);
@@ -27,6 +32,7 @@ export function useAvailability(targetUserId?: string) {
 
   // Use targetUserId if provided (for admins viewing other users), otherwise use currentUser
   const userId = targetUserId || currentUser?.uid;
+  const datesKey = dates ? dates.map((date) => format(date, "yyyy-MM-dd")).join(",") : null;
 
   useEffect(() => {
     if (!userId) {
@@ -43,23 +49,39 @@ export function useAvailability(targetUserId?: string) {
     setError(null);
     setLoading(true);
 
-    // Subscribe to availability for the specified user
-    const q = query(
-      collection(db, "availability"),
-      where("userId", "==", userId)
-    );
+    // Subscribe to availability for the specified user (only the shown days, if given).
+    // userId + date "in" needs no extra database index.
+    const userQuery = [collection(db, "availability"), where("userId", "==", userId)] as const;
+    const dateChunks: string[][] = [];
+    const dateStrings = datesKey ? datesKey.split(",") : null;
+    if (dateStrings) {
+      for (let i = 0; i < dateStrings.length; i += MAX_DATES_PER_QUERY) {
+        dateChunks.push(dateStrings.slice(i, i + MAX_DATES_PER_QUERY));
+      }
+    }
+    const queries = dateStrings
+      ? dateChunks.map((chunk) => query(...userQuery, where("date", "in", chunk)))
+      : [query(...userQuery)];
 
-    const unsubscribe = onSnapshot(
+    // Each query's latest results; combined once all have answered.
+    const results: (Map<string, AvailabilityStatus> | null)[] = queries.map(() => null);
+
+    const unsubscribes = queries.map((q, index) => onSnapshot(
       q,
       (snapshot) => {
         if (!active) return;
 
-        const newStatusMap = new Map<string, AvailabilityStatus>();
+        const chunkMap = new Map<string, AvailabilityStatus>();
         snapshot.docs.forEach((doc) => {
           const data = doc.data() as AvailabilityData;
           const key = `${data.date}-${data.timeSlot}`;
-          newStatusMap.set(key, normalizeAvailabilityStatus(data.status));
+          chunkMap.set(key, normalizeAvailabilityStatus(data.status));
         });
+        results[index] = chunkMap;
+        if (results.some((result) => result === null)) return;
+
+        const newStatusMap = new Map<string, AvailabilityStatus>();
+        results.forEach((result) => result!.forEach((status, key) => newStatusMap.set(key, status)));
         setStatusMap(newStatusMap);
         setLoadedUserId(userId);
         setLoading(false);
@@ -73,13 +95,13 @@ export function useAvailability(targetUserId?: string) {
         setError("Availability could not be loaded. Please try again.");
         setLoading(false);
       }
-    );
+    ));
 
     return () => {
       active = false;
-      unsubscribe();
+      unsubscribes.forEach((unsubscribe) => unsubscribe());
     };
-  }, [userId]);
+  }, [userId, datesKey]);
 
   const isLoadingSelectedUser = Boolean(userId) && !error && (loading || loadedUserId !== userId);
 

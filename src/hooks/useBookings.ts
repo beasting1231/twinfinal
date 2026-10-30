@@ -7,9 +7,9 @@ import { useAuth } from "../contexts/AuthContext";
 import { getTimeSlotsByDate } from "../utils/timeSlots";
 import { format } from "date-fns";
 import { clearDeletedBookingAssignments } from "../utils/bookingDeletion";
+import { recordBookingSource } from "./useBookingSources";
 
 const BOOKINGS_CACHE_KEY = 'twin_bookings_cache';
-const CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
 const BOOKING_SNAPSHOT_FIELDS: Array<keyof Booking> = [
   "date",
   "pilotIndex",
@@ -90,44 +90,33 @@ interface UseBookingsOptions {
   };
 }
 
+// Bookings used to be cached on the device, which could briefly show outdated
+// bookings. Only live data is shown now; this clears what older versions left behind.
+function clearOldBookingsCache() {
+  try {
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith(BOOKINGS_CACHE_KEY)) localStorage.removeItem(key);
+    }
+  } catch {
+    // Storage unavailable: nothing to clear.
+  }
+}
+
 export function useBookings(options?: UseBookingsOptions) {
-  const [bookings, setBookings] = useState<Booking[]>(() => {
-    // Try to load from cache on initialization
-    try {
-      const cached = localStorage.getItem(BOOKINGS_CACHE_KEY);
-      if (cached) {
-        const { data, timestamp } = JSON.parse(cached);
-        const age = Date.now() - timestamp;
-        if (age < CACHE_EXPIRY_MS) {
-          console.log('📦 Loaded bookings from cache');
-          return data;
-        }
-      }
-    } catch (error) {
-      console.error('Error loading bookings cache:', error);
-    }
-    return [];
-  });
-  const [loading, setLoading] = useState(() => {
-    // If we have cached data, set loading to false immediately
-    try {
-      const cached = localStorage.getItem(BOOKINGS_CACHE_KEY);
-      if (cached) {
-        const { data, timestamp } = JSON.parse(cached);
-        const age = Date.now() - timestamp;
-        if (age < CACHE_EXPIRY_MS && data.length > 0) {
-          return false; // Don't show loading screen if we have valid cache
-        }
-      }
-    } catch (error) {
-      console.error('Error checking bookings cache:', error);
-    }
-    return true;
-  });
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  // True until live data for the current date range has arrived.
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { isEditing, incrementPendingUpdates } = useEditing();
   const { currentUser, userProfile } = useAuth();
   const pendingUpdateRef = useRef<Booking[] | null>(null);
+
+  useEffect(clearOldBookingsCache, []);
+
+  const rangeStart = options?.dateRange?.start?.getTime();
+  const rangeEnd = options?.dateRange?.end?.getTime();
+  // A new date range isn't loaded until its live data arrives.
+  useEffect(() => setLoading(true), [rangeStart, rangeEnd]);
 
   useEffect(() => {
     const subscriptionStartTime = performance.now();
@@ -172,15 +161,6 @@ export function useBookings(options?: UseBookingsOptions) {
           setBookings(prevBookings => {
             // If this is the first load, just set all bookings
             if (prevBookings.length === 0) {
-              // Update cache
-              try {
-                localStorage.setItem(BOOKINGS_CACHE_KEY, JSON.stringify({
-                  data: bookingsData,
-                  timestamp: Date.now(),
-                }));
-              } catch (error) {
-                console.error('Error caching bookings:', error);
-              }
               return bookingsData;
             }
 
@@ -221,16 +201,6 @@ export function useBookings(options?: UseBookingsOptions) {
               }
               return newBooking;
             });
-
-            // Update cache
-            try {
-              localStorage.setItem(BOOKINGS_CACHE_KEY, JSON.stringify({
-                data: updatedBookings,
-                timestamp: Date.now(),
-              }));
-            } catch (error) {
-              console.error('Error caching bookings:', error);
-            }
 
             return updatedBookings;
           });
@@ -306,6 +276,7 @@ export function useBookings(options?: UseBookingsOptions) {
       historyEntry.snapshotAfter = createBookingSnapshot(snapshotSource);
       bookingWithCreator.history = [historyEntry];
       await addDoc(collection(db, "bookings"), bookingWithCreator);
+      recordBookingSource(booking.bookingSource);
     } catch (err: any) {
       console.error("Error adding booking:", err);
       setError(err.message);
@@ -493,6 +464,7 @@ export function useBookings(options?: UseBookingsOptions) {
       }
 
       await updateDoc(doc(db, "bookings", id), sanitizedBooking);
+      if (booking.bookingSource !== undefined) recordBookingSource(booking.bookingSource);
     } catch (err: any) {
       console.error("Error updating booking:", err);
       setError(err.message);

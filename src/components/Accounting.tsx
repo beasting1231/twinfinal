@@ -1,6 +1,7 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { format, parseISO, startOfDay } from "date-fns";
 import { useBookings } from "../hooks/useBookings";
+import { recordDriverVehicleUse } from "../hooks/useDriverVehicleSuggestions";
 import { useDriverAssignments } from "../hooks/useDriverAssignments";
 import { useAuth } from "../contexts/AuthContext";
 import { useRole } from "../hooks/useRole";
@@ -48,8 +49,6 @@ type EditingCell = {
 };
 
 export function Accounting() {
-  const { bookings, loading, updateBooking } = useBookings();
-  const { driverAssignments, loading: driversLoading, updateDriverAssignment, addDriverAssignment } = useDriverAssignments(); // Fetch all driver assignments
   const { currentUser } = useAuth();
   const { role } = useRole();
 
@@ -61,6 +60,19 @@ export function Accounting() {
       to: format(today, "yyyy-MM-dd"),
     };
   });
+
+  // Only the chosen dates are loaded, not every booking and assignment ever made.
+  // While a date field is cleared or half-typed, the last complete range stays loaded.
+  const lastValidRange = useRef(dateRange);
+  const isDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
+  if (isDate(dateRange.from) && isDate(dateRange.to)) lastValidRange.current = dateRange;
+  const loadedRange = lastValidRange.current;
+  const bookingsRange = useMemo(() => ({
+    start: new Date(`${loadedRange.from}T00:00:00`),
+    end: new Date(`${loadedRange.to}T00:00:00`),
+  }), [loadedRange.from, loadedRange.to]);
+  const { bookings, loading, updateBooking } = useBookings({ dateRange: bookingsRange });
+  const { driverAssignments, loading: driversLoading, updateDriverAssignment, addDriverAssignment } = useDriverAssignments(undefined, loadedRange);
   const [selectedPilots, setSelectedPilots] = useState<string[]>([]);
   const [selectedMethods, setSelectedMethods] = useState<string[]>([]);
   const [selectedDrivers, setSelectedDrivers] = useState<string[]>([]);
@@ -566,6 +578,7 @@ export function Accounting() {
           [field]: value,
         });
       }
+      recordDriverVehicleUse({ [field]: value });
     } catch (error) {
       console.error("Error saving driver/vehicle:", error);
     }

@@ -3,8 +3,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Input } from "./ui/input";
 import type { Booking, BookingRequest } from "../types/index";
 import { format, parse } from "date-fns";
-import { collection, getDocs, orderBy, query, where } from "firebase/firestore";
+import { collection, getDocs, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import { db } from "../firebase/config";
+import { showsPrepaid } from "../utils/prepaid";
 
 interface SearchBookingModalProps {
   open: boolean;
@@ -75,6 +76,35 @@ function getStatusBadgeClass(status?: Booking["bookingStatus"]) {
   return "bg-gray-100 dark:bg-zinc-700 text-gray-700 dark:text-zinc-300";
 }
 
+// All bookings for search: one live listener, started the first time search is opened and
+// kept for the rest of the session. Re-opening search costs nothing; changes arrive live.
+type AllBookingsListener = (bookings: Booking[] | null, error?: unknown) => void;
+let allBookingsCache: Booking[] | null = null;
+let allBookingsStarted = false;
+const allBookingsListeners = new Set<AllBookingsListener>();
+
+function subscribeAllBookings(listener: AllBookingsListener) {
+  allBookingsListeners.add(listener);
+  if (allBookingsCache) listener(allBookingsCache);
+  if (!allBookingsStarted) {
+    allBookingsStarted = true;
+    onSnapshot(
+      query(collection(db, "bookings"), orderBy("date", "desc")),
+      (snapshot) => {
+        allBookingsCache = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as Booking[];
+        allBookingsListeners.forEach((notify) => notify(allBookingsCache));
+      },
+      (error) => {
+        allBookingsStarted = false;
+        allBookingsListeners.forEach((notify) => notify(null, error));
+      }
+    );
+  }
+  return () => {
+    allBookingsListeners.delete(listener);
+  };
+}
+
 export function SearchBookingModal({
   open,
   onOpenChange,
@@ -86,83 +116,70 @@ export function SearchBookingModal({
   const [searchQuery, setSearchQuery] = useState("");
   const [displayCount, setDisplayCount] = useState(RESULTS_PER_PAGE);
   const [allBookings, setAllBookings] = useState<Booking[]>([]);
+  const bookingsRef = useRef(bookings);
+  bookingsRef.current = bookings;
   const [waitlistRequests, setWaitlistRequests] = useState<BookingRequest[]>([]);
   const [hasLoadedAllBookings, setHasLoadedAllBookings] = useState(false);
   const [isLoadingAllBookings, setIsLoadingAllBookings] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
+  // Bookings: shared live listener (see subscribeAllBookings).
+  useEffect(() => {
+    if (!open) return;
+
+    setLoadError(null);
+    if (!allBookingsCache) {
+      setHasLoadedAllBookings(false);
+      setIsLoadingAllBookings(true);
+    }
+
+    return subscribeAllBookings((latest, error) => {
+      if (latest) {
+        setAllBookings(latest);
+      } else {
+        console.error("Error loading all bookings for search:", error);
+        // Fallback to currently loaded bookings in memory
+        setAllBookings(bookingsRef.current);
+        setLoadError("Could not load all bookings. Showing currently loaded bookings.");
+      }
+      setHasLoadedAllBookings(true);
+      setIsLoadingAllBookings(false);
+    });
+  }, [open]);
+
+  // Waiting list entries: small, loaded each time search opens.
   useEffect(() => {
     if (!open) return;
 
     let cancelled = false;
-
-    const loadAllBookings = async () => {
-      setHasLoadedAllBookings(false);
-      setIsLoadingAllBookings(true);
-      setLoadError(null);
-
-      try {
-        const bookingsQuery = query(collection(db, "bookings"), orderBy("date", "desc"));
-        const snapshot = await getDocs(bookingsQuery);
+    const waitlistQuery = query(
+      collection(db, "bookingRequests"),
+      where("status", "==", "waitlist")
+    );
+    getDocs(waitlistQuery)
+      .then((waitlistSnapshot) => {
         if (cancelled) return;
-
-        const fetchedBookings = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as Booking[];
-
-        setAllBookings(fetchedBookings);
-
-        try {
-          const waitlistQuery = query(
-            collection(db, "bookingRequests"),
-            where("status", "==", "waitlist")
-          );
-          const waitlistSnapshot = await getDocs(waitlistQuery);
-          if (cancelled) return;
-
-          const fetchedWaitlist = waitlistSnapshot.docs.map((doc) => {
-            const data = doc.data();
-            return {
-              id: doc.id,
-              ...data,
-              createdAt: data.createdAt?.toDate?.() || data.createdAt || new Date(),
-            } as BookingRequest;
-          });
-
-          setWaitlistRequests(fetchedWaitlist);
-        } catch (error) {
-          console.error("Error loading waitlist entries for search:", error);
-          if (!cancelled) {
-            setWaitlistRequests([]);
-            setLoadError("Could not load waiting list entries. Showing bookings only.");
-          }
-        }
-
-        setHasLoadedAllBookings(true);
-      } catch (error) {
-        console.error("Error loading all bookings for search:", error);
+        setWaitlistRequests(waitlistSnapshot.docs.map((doc) => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            createdAt: data.createdAt?.toDate?.() || data.createdAt || new Date(),
+          } as BookingRequest;
+        }));
+      })
+      .catch((error) => {
+        console.error("Error loading waitlist entries for search:", error);
         if (cancelled) return;
-
-        // Fallback to currently loaded bookings in memory
-        setAllBookings(bookings);
         setWaitlistRequests([]);
-        setHasLoadedAllBookings(true);
-        setLoadError("Could not load all bookings. Showing currently loaded bookings.");
-      } finally {
-        if (!cancelled) {
-          setIsLoadingAllBookings(false);
-        }
-      }
-    };
-
-    loadAllBookings();
+        setLoadError("Could not load waiting list entries. Showing bookings only.");
+      });
 
     return () => {
       cancelled = true;
     };
-  }, [open, bookings]);
+  }, [open]);
 
   const filteredResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
@@ -420,9 +437,11 @@ export function SearchBookingModal({
                           </div>
                           <div className="mt-1">
                             <span className={`inline-block px-2 py-0.5 text-xs rounded ${
-                              getStatusBadgeClass(booking.bookingStatus)
+                              showsPrepaid(booking)
+                                ? "bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-400"
+                                : getStatusBadgeClass(booking.bookingStatus)
                             }`}>
-                              {booking.bookingStatus || "unknown"}
+                              {showsPrepaid(booking) ? "prepaid" : booking.bookingStatus || "unknown"}
                             </span>
                           </div>
                         </div>

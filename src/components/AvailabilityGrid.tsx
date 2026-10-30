@@ -79,8 +79,10 @@ export function AvailabilityGrid({ weekStartDate, onShowOverview }: Availability
   // For non-admins, always use currentUser
   const targetUserId = role === 'admin' && selectedUserId ? selectedUserId : undefined;
 
-  const { isAvailable, getAvailabilityStatus, toggleAvailability, toggleDay, loading, error: availabilityError, saving, justSaved } = useAvailability(targetUserId);
-  const { bookings } = useBookings();
+  const { isAvailable, getAvailabilityStatus, toggleAvailability, toggleDay, loading, error: availabilityError, saving, justSaved } = useAvailability(targetUserId, days);
+  // Only this week's bookings: the grid never looks outside it.
+  const bookingsRange = useMemo(() => ({ start: weekStartDate, end: addDays(weekStartDate, 6) }), [weekStartDate]);
+  const { bookings, loading: bookingsLoading } = useBookings({ dateRange: bookingsRange });
 
   // State to track all pilots' availability data (currently unused but kept for potential future use)
   const [_pilotsAvailabilityData, setPilotsAvailabilityData] = useState<{
@@ -108,10 +110,10 @@ export function AvailabilityGrid({ weekStartDate, onShowOverview }: Availability
 
   // Update initial loading state - only set to false when BOTH are loaded AND we're not changing dates
   useEffect(() => {
-    if (!loading && !pilotsAvailabilityLoading && !isChangingDate) {
+    if (!loading && !bookingsLoading && !pilotsAvailabilityLoading && !isChangingDate) {
       setIsInitialLoading(false);
     }
-  }, [loading, pilotsAvailabilityLoading, isChangingDate]);
+  }, [loading, bookingsLoading, pilotsAvailabilityLoading, isChangingDate]);
 
   // Fetch all pilots and admins for the dropdown (admin only)
   useEffect(() => {
@@ -141,61 +143,54 @@ export function AvailabilityGrid({ weekStartDate, onShowOverview }: Availability
     fetchPilotsAndAdmins();
   }, [role]);
 
-  // Fetch availability data for all pilots to determine if cells should be locked
+  // Keep all pilots' availability for this week live, to determine if cells should be locked.
+  // One listener: a tap only costs the record that changed, instead of re-reading the whole week.
   useEffect(() => {
-    async function fetchAllPilotsAvailability() {
-      if (!currentUser) {
-        setPilotsAvailabilityLoading(false);
-        setIsChangingDate(false);
-        return;
-      }
+    if (!currentUser) {
+      setPilotsAvailabilityLoading(false);
+      setIsChangingDate(false);
+      return;
+    }
 
-      setPilotsAvailabilityLoading(true);
+    setPilotsAvailabilityLoading(true);
 
-      try {
+    const weekQuery = query(
+      collection(db, "availability"),
+      where("date", ">=", format(weekStartDate, "yyyy-MM-dd")),
+      where("date", "<=", format(addDays(weekStartDate, 6), "yyyy-MM-dd"))
+    );
+
+    return onSnapshot(
+      weekQuery,
+      (availabilitySnapshot) => {
         const pilotsSignedInPerDay = new Map<string, Set<string>>();
         const pilotsAvailablePerTimeSlot = new Map<string, Set<string>>();
 
-        // Generate days for this week
-        const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStartDate, i));
+        // Track which pilots are signed in for each day and which times they're available
+        availabilitySnapshot.docs.forEach((doc) => {
+          const data = doc.data();
+          const dateStr = data.date;
+          const pilotId = data.userId;
+          const timeSlot = data.timeSlot;
+          const status = normalizeAvailabilityStatus(data.status);
 
-        // For each day in the week
-        for (const day of weekDays) {
-          const dateStr = format(day, "yyyy-MM-dd");
+          if (!isAvailabilityActive(status)) {
+            return;
+          }
 
-          // Query availability for this date
-          const availabilityQuery = query(
-            collection(db, "availability"),
-            where("date", "==", dateStr)
-          );
+          // Add pilot to the day's signed-in set
+          if (!pilotsSignedInPerDay.has(dateStr)) {
+            pilotsSignedInPerDay.set(dateStr, new Set());
+          }
+          pilotsSignedInPerDay.get(dateStr)!.add(pilotId);
 
-          const availabilitySnapshot = await getDocs(availabilityQuery);
-
-          // Track which pilots are signed in for this day and which times they're available
-          availabilitySnapshot.docs.forEach((doc) => {
-            const data = doc.data();
-            const pilotId = data.userId;
-            const timeSlot = data.timeSlot;
-            const status = normalizeAvailabilityStatus(data.status);
-
-            if (!isAvailabilityActive(status)) {
-              return;
-            }
-
-            // Add pilot to the day's signed-in set
-            if (!pilotsSignedInPerDay.has(dateStr)) {
-              pilotsSignedInPerDay.set(dateStr, new Set());
-            }
-            pilotsSignedInPerDay.get(dateStr)!.add(pilotId);
-
-            // Add pilot to this time slot's available set
-            const key = `${dateStr}-${timeSlot}`;
-            if (!pilotsAvailablePerTimeSlot.has(key)) {
-              pilotsAvailablePerTimeSlot.set(key, new Set());
-            }
-            pilotsAvailablePerTimeSlot.get(key)!.add(pilotId);
-          });
-        }
+          // Add pilot to this time slot's available set
+          const key = `${dateStr}-${timeSlot}`;
+          if (!pilotsAvailablePerTimeSlot.has(key)) {
+            pilotsAvailablePerTimeSlot.set(key, new Set());
+          }
+          pilotsAvailablePerTimeSlot.get(key)!.add(pilotId);
+        });
 
         setPilotsAvailabilityData({
           pilotsSignedInPerDay,
@@ -203,15 +198,14 @@ export function AvailabilityGrid({ weekStartDate, onShowOverview }: Availability
         });
         setPilotsAvailabilityLoading(false);
         setIsChangingDate(false);
-      } catch (error) {
+      },
+      (error) => {
         console.error("Error fetching pilots availability:", error);
         setPilotsAvailabilityLoading(false);
         setIsChangingDate(false);
       }
-    }
-
-    fetchAllPilotsAvailability();
-  }, [weekStartDate, currentUser, justSaved]);
+    );
+  }, [weekStartDate, currentUser]);
 
   // Fetch additional time slots for each day in the week
   useEffect(() => {

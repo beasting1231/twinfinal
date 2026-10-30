@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
-import { collection, query, getDocs, doc, setDoc, onSnapshot } from "firebase/firestore";
+import { collection, query, getDocs, doc, setDoc, where, getCountFromServer } from "firebase/firestore";
+import { useBookingSources } from "../hooks/useBookingSources";
 import { db } from "../firebase/config";
 import { Search, Palette } from "lucide-react";
 import { Input } from "./ui/input";
@@ -19,47 +20,58 @@ export function BookingSources() {
   const [editingSource, setEditingSource] = useState<BookingSource | null>(null);
   const [editColor, setEditColor] = useState("");
 
-  // Fetch booking sources and calculate counts
+  // Source names come from the saved booking source list; counts are asked from the
+  // database per source instead of downloading every booking ever made.
+  const { bookingSources: sourceNames, loading: namesLoading } = useBookingSources();
+
   useEffect(() => {
+    if (namesLoading) return;
+    let cancelled = false;
     setLoading(true);
 
-    // Subscribe to bookings to calculate counts in real-time
-    const bookingsQuery = query(collection(db, "bookings"));
-    const unsubscribeBookings = onSnapshot(bookingsQuery, async (bookingsSnapshot) => {
-      // Count bookings by source
-      const sourceCounts = new Map<string, number>();
-      bookingsSnapshot.docs.forEach((doc) => {
-        const booking = doc.data();
-        const source = booking.bookingSource || "Unknown";
-        sourceCounts.set(source, (sourceCounts.get(source) || 0) + 1);
-      });
-
-      // Fetch booking source colors from bookingSources collection
-      const sourcesQuery = query(collection(db, "bookingSources"));
-      const sourcesSnapshot = await getDocs(sourcesQuery);
+    async function loadCounts() {
+      const bookingsRef = collection(db, "bookings");
+      const [sourcesSnapshot, total] = await Promise.all([
+        getDocs(query(collection(db, "bookingSources"))),
+        getCountFromServer(bookingsRef).then((result) => result.data().count),
+      ]);
       const sourceColors = new Map<string, string>();
       sourcesSnapshot.docs.forEach((doc) => {
         sourceColors.set(doc.id, doc.data().color || "#1e3a8a");
       });
 
-      // Combine counts and colors
-      const sources: BookingSource[] = Array.from(sourceCounts.entries()).map(([name, count]) => ({
-        name,
-        color: sourceColors.get(name) || "#1e3a8a", // Default blue color
-        count,
-      }));
+      const names = Array.from(new Set(sourceNames.map((source) => source.name)));
+      const counts = await Promise.all(names.map((name) =>
+        getCountFromServer(query(bookingsRef, where("bookingSource", "==", name))).then((result) => result.data().count)
+      ));
+
+      const sources: BookingSource[] = names
+        .map((name, index) => ({ name, color: sourceColors.get(name) || "#1e3a8a", count: counts[index] }))
+        .filter((source) => source.count > 0);
+
+      // Bookings without a source (or with one missing from the list).
+      const counted = counts.reduce((sum, count) => sum + count, 0);
+      if (total > counted) {
+        sources.push({ name: "Unknown", color: sourceColors.get("Unknown") || "#1e3a8a", count: total - counted });
+      }
 
       // Sort by count (most to least)
       sources.sort((a, b) => b.count - a.count);
 
+      if (cancelled) return;
       setBookingSources(sources);
       setLoading(false);
+    }
+
+    loadCounts().catch((error) => {
+      console.error("Error loading booking source counts:", error);
+      if (!cancelled) setLoading(false);
     });
 
     return () => {
-      unsubscribeBookings();
+      cancelled = true;
     };
-  }, []);
+  }, [namesLoading, sourceNames]);
 
   // Filter sources by search term
   const filteredSources = useMemo(() => {

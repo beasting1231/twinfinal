@@ -1,48 +1,20 @@
-import { useState, useEffect } from "react";
-import { collection, onSnapshot } from "firebase/firestore";
+import { collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase/config";
+import { createSuggestionList, namesByUse } from "../utils/suggestionList";
 
-export interface BookingSourceData {
-  name: string;
-  count: number;
+// Booking source names for the booking source box, in display order.
+const bookingSourceList = createSuggestionList({
+  path: ["bookingSourceSuggestions", "list"],
+  fields: ["sources"] as const,
+  async buildFromHistory() {
+    const bookings = await getDocs(collection(db, "bookings"));
+    return { sources: namesByUse(bookings.docs.map((entry) => entry.data().bookingSource)) };
+  },
+});
+
+export function useBookingSources(enabled = true) {
+  const { sources, loading } = bookingSourceList.useList(enabled);
+  return { bookingSources: sources, loading };
 }
 
-export function useBookingSources() {
-  const [bookingSources, setBookingSources] = useState<BookingSourceData[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const unsubscribe = onSnapshot(
-      collection(db, "bookings"),
-      (snapshot) => {
-        // Count occurrences of each booking source
-        const sourceCounts = new Map<string, number>();
-
-        snapshot.docs.forEach((doc) => {
-          const data = doc.data();
-          const source = data.bookingSource;
-
-          if (source) {
-            sourceCounts.set(source, (sourceCounts.get(source) || 0) + 1);
-          }
-        });
-
-        // Convert to array and sort by count (descending)
-        const sortedSources = Array.from(sourceCounts.entries())
-          .map(([name, count]) => ({ name, count }))
-          .sort((a, b) => b.count - a.count);
-
-        setBookingSources(sortedSources);
-        setLoading(false);
-      },
-      (error) => {
-        console.error("Error fetching booking sources:", error);
-        setLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, []);
-
-  return { bookingSources, loading };
-}
+export const recordBookingSource = (source?: string | null) => bookingSourceList.record({ sources: source });

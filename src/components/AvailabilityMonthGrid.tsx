@@ -20,8 +20,6 @@ export function AvailabilityMonthGrid({ monthStartDate, onShowOverview }: Availa
   // For admins, use selectedUserId if set, otherwise currentUser
   const targetUserId = role === 'admin' && selectedUserId ? selectedUserId : undefined;
 
-  const { isAvailable, loading } = useAvailability(targetUserId);
-
   // State for additional time slots per date
   const [additionalSlotsByDate, setAdditionalSlotsByDate] = useState<Record<string, string[]>>({});
 
@@ -37,6 +35,8 @@ export function AvailabilityMonthGrid({ monthStartDate, onShowOverview }: Availa
 
     return eachDayOfInterval({ start: calendarStart, end: calendarEnd });
   }, [monthStartDate]);
+
+  const { isAvailable, loading } = useAvailability(targetUserId, days);
 
   // Fetch all pilots and admins for the dropdown (admin only)
   useEffect(() => {

@@ -9,8 +9,7 @@ import { Button } from "./ui/button";
 import { Label } from "./ui/label";
 import { Input } from "./ui/input";
 import { ChevronDown } from "lucide-react";
-import { useDrivers } from "../hooks/useDrivers";
-import { useVehicles } from "../hooks/useVehicles";
+import { useDriverVehicleSuggestions, recordDriverVehicleUse } from "../hooks/useDriverVehicleSuggestions";
 import { useDriverAssignments } from "../hooks/useDriverAssignments";
 import type { Booking } from "../types";
 import { doc, updateDoc } from "firebase/firestore";
@@ -31,7 +30,8 @@ interface AutocompleteFieldProps {
   onChange: (value: string) => void;
   label: string;
   id: string;
-  suggestions: { name: string; count: number }[];
+  suggestions: { name: string }[];
+  loading?: boolean;
   placeholder: string;
 }
 
@@ -41,6 +41,7 @@ function AutocompleteField({
   label,
   id,
   suggestions,
+  loading = false,
   placeholder,
 }: AutocompleteFieldProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -123,15 +124,17 @@ function AutocompleteField({
                     className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-900 dark:text-white flex items-center justify-between group transition-colors"
                   >
                     <span>{item.name}</span>
-                    <span className="text-xs text-gray-500 dark:text-zinc-500 group-hover:text-gray-600 dark:group-hover:text-zinc-400">
-                      {item.count} {item.count === 1 ? "time" : "times"}
-                    </span>
                   </button>
                 ))}
               </div>
             ) : (
               <div className="px-4 py-3 text-gray-500 dark:text-zinc-500 text-sm">
-                {searchQuery.trim() ? (
+                {loading ? (
+                  <span className="flex items-center gap-2">
+                    <span className="h-3 w-3 rounded-full border-2 border-gray-400 border-t-transparent animate-spin" />
+                    Loading {label.toLowerCase()}s…
+                  </span>
+                ) : searchQuery.trim() ? (
                   <>
                     No matches found. Type to create{" "}
                     <span className="text-gray-900 dark:text-white font-medium">"{searchQuery}"</span>
@@ -156,8 +159,7 @@ export function DriverVehicleModal({
   timeIndex = 0,
   date = new Date(),
 }: DriverVehicleModalProps) {
-  const { drivers } = useDrivers();
-  const { vehicles } = useVehicles();
+  const { drivers, vehicles, loading: suggestionsLoading } = useDriverVehicleSuggestions(isOpen);
   const dateString = format(date, "yyyy-MM-dd");
   const {
     addDriverAssignment,
@@ -250,6 +252,7 @@ export function DriverVehicleModal({
           await addDriverAssignment(newAssignment);
         }
       }
+      recordDriverVehicleUse({ driver, vehicle });
       onClose();
     } catch (error) {
       console.error("Error updating driver/vehicle:", error);
@@ -305,6 +308,7 @@ export function DriverVehicleModal({
             label="Driver"
             id="driver"
             suggestions={drivers}
+            loading={suggestionsLoading}
             placeholder="Type to search or create new..."
           />
 
@@ -314,6 +318,7 @@ export function DriverVehicleModal({
             label="Vehicle"
             id="vehicle"
             suggestions={vehicles}
+            loading={suggestionsLoading}
             placeholder="Type to search or create new..."
           />
         </div>
