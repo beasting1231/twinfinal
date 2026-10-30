@@ -4,6 +4,8 @@ import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../firebase/config";
 import type { AvailabilityStatus, UserProfile } from "../types/index";
 import { isAvailabilityActive, normalizeAvailabilityStatus } from "../utils/availabilityState";
+import { AvailabilityHistoryPanel } from "./AvailabilityHistoryPanel";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 
 interface AvailabilityOverviewTableProps {
   monthStartDate: Date;
@@ -11,6 +13,7 @@ interface AvailabilityOverviewTableProps {
 }
 
 interface AvailabilityRecord {
+  id: string;
   userId: string;
   date: string;
   timeSlot?: string;
@@ -116,7 +119,7 @@ export function AvailabilityOverviewTable({ monthStartDate, onBack }: Availabili
     const unsubscribe = onSnapshot(
       availabilityQuery,
       (snapshot) => {
-        const records = snapshot.docs.map((docSnapshot) => docSnapshot.data() as AvailabilityRecord);
+        const records = snapshot.docs.map((docSnapshot) => ({ ...docSnapshot.data(), id: docSnapshot.id }) as AvailabilityRecord);
         setAvailability(records);
         setAvailabilityLoading(false);
       },
@@ -128,23 +131,6 @@ export function AvailabilityOverviewTable({ monthStartDate, onBack }: Availabili
 
     return unsubscribe;
   }, [monthStart, monthEnd]);
-
-  useEffect(() => {
-    if (!openCellKey) return;
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target as Element | null;
-      if (!target?.closest('[data-history-cell-open="true"]')) {
-        setOpenCellKey(null);
-      }
-    };
-
-    document.addEventListener("pointerdown", handlePointerDown);
-
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-    };
-  }, [openCellKey]);
 
   useEffect(() => {
     const table = tableRef.current;
@@ -370,7 +356,6 @@ export function AvailabilityOverviewTable({ monthStartDate, onBack }: Availabili
                     {pilots.map((pilot) => {
                       const cellKey = `${dateStr}-${pilot.uid}`;
                       const cell = cellByDateAndPilot.get(cellKey) || { state: "never" as const, history: [] };
-                      const hasHistory = cell.history.length > 0;
 
                       return (
                         <td
@@ -379,38 +364,29 @@ export function AvailabilityOverviewTable({ monthStartDate, onBack }: Availabili
                           className={`relative h-10 w-24 min-w-24 max-w-24 border-b border-r border-gray-300 p-0 text-center font-semibold dark:border-zinc-800 ${getCellClassName(cell.state)}`}
                           title={getCellTitle(cell.state)}
                         >
-                          <button
+                          <Popover open={openCellKey === cellKey} onOpenChange={(open) =>
+                            setOpenCellKey(current => open ? cellKey : current === cellKey ? null : current)
+                          }>
+                          <PopoverTrigger asChild><button
                             type="button"
-                            disabled={!hasHistory}
-                            onClick={() => setOpenCellKey(openCellKey === cellKey ? null : cellKey)}
-                            className={`h-10 w-full px-2 text-sm font-bold ${hasHistory ? "cursor-pointer" : "cursor-default"}`}
+                            aria-label={`Availability history for ${pilot.displayName}, ${format(day, "dd/MM")}`}
+                            aria-expanded={openCellKey === cellKey}
+                            className="h-10 w-full cursor-pointer px-2 text-sm font-bold"
                           >
                             {cell.state === "never" ? "" : formatCellDate(cell.timestamp, dateStr)}
-                          </button>
-                          {openCellKey === cellKey && hasHistory && (
-                            <div className="absolute left-1/2 top-full z-30 mt-1 w-56 -translate-x-1/2 rounded-lg border border-gray-300 bg-white p-2 text-left shadow-xl dark:border-zinc-700 dark:bg-zinc-900">
+                          </button></PopoverTrigger>
+                          {openCellKey === cellKey && (
+                            <PopoverContent collisionPadding={12} aria-label={`${pilot.displayName} availability history`}
+                              className="z-50 max-h-[var(--radix-popover-content-available-height)] w-64 overflow-y-auto rounded-lg border border-gray-300 bg-white p-2 text-left text-gray-900 shadow-xl dark:border-zinc-700 dark:bg-zinc-900 dark:text-white">
                               <div className="mb-2 border-b border-gray-200 pb-2 text-xs font-semibold uppercase tracking-wide text-gray-600 dark:border-zinc-700 dark:text-zinc-400">
                                 {pilot.displayName} · {format(day, "dd/MM")}
                               </div>
-                              <div className="max-h-56 overflow-y-auto">
-                                {cell.history.map((event) => (
-                                  <div
-                                    key={`${event.type}-${event.timestamp}`}
-                                    className={`flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-xs font-semibold ${
-                                      event.type === "signed-in"
-                                        ? "bg-green-500 text-white dark:bg-green-600"
-                                        : "bg-red-500 text-white dark:bg-red-600"
-                                    }`}
-                                  >
-                                    <span>{event.type === "signed-in" ? "Signed in" : "Signed out for day"}</span>
-                                    <span className="font-mono text-white/90">
-                                      {formatHistoryDate(event.timestamp)}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
+                              <AvailabilityHistoryPanel key={cellKey} date={dateStr} pilotId={pilot.uid}
+                                pilotName={pilot.displayName}
+                                records={availability.filter(record => record.date === dateStr && record.userId === pilot.uid)} />
+                            </PopoverContent>
                           )}
+                          </Popover>
                         </td>
                       );
                     })}
@@ -551,13 +527,4 @@ function latestTimestamp(events: OverviewHistoryEvent[]) {
 
     return latest;
   }, undefined);
-}
-
-function formatHistoryDate(timestamp: string) {
-  const parsedDate = parseISO(timestamp);
-  if (Number.isNaN(parsedDate.getTime())) {
-    return timestamp;
-  }
-
-  return format(parsedDate, "dd/MM HH:mm");
 }

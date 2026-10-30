@@ -1,8 +1,8 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
-import { getAuth } from "firebase/auth";
-import { getStorage } from "firebase/storage";
-import { getFunctions } from "firebase/functions";
+import { connectFirestoreEmulator, getFirestore } from "firebase/firestore";
+import { connectAuthEmulator, getAuth } from "firebase/auth";
+import { connectStorageEmulator, getStorage } from "firebase/storage";
+import { connectFunctionsEmulator, getFunctions } from "firebase/functions";
 
 // Firebase configuration using environment variables
 // Copy .env.example to .env and fill in your Firebase credentials
@@ -34,6 +34,12 @@ if (missingFirebaseEnv.length > 0) {
 }
 
 // Initialize Firebase
+const useLocalEmulators = import.meta.env.VITE_USE_FIREBASE_EMULATORS === "true";
+if (useLocalEmulators && (!import.meta.env.DEV || firebaseConfig.projectId !== "demo-twin-history" ||
+    !["localhost", "127.0.0.1"].includes(window.location.hostname))) {
+  throw new Error("Availability testing requires localhost and the demo-twin-history project.");
+}
+
 export const app = initializeApp(firebaseConfig);
 
 // Initialize Firestore
@@ -47,3 +53,12 @@ export const storage = getStorage(app);
 
 // Initialize Firebase Functions
 export const functions = getFunctions(app, "us-central1");
+
+if (useLocalEmulators) {
+  const apiLocal = import.meta.env.VITE_BOOKING_API_LOCAL === "true";
+  connectAuthEmulator(auth, apiLocal ? "http://127.0.0.1:9399" : "http://127.0.0.1:9199", { disableWarnings: true });
+  connectFirestoreEmulator(db, "127.0.0.1", apiLocal ? 8380 : 8180);
+  connectFunctionsEmulator(functions, "127.0.0.1", apiLocal ? 5301 : 5101);
+  // Storage is intentionally unavailable in this focused local stack.
+  connectStorageEmulator(storage, "127.0.0.1", 9299);
+}

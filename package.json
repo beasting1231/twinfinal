@@ -4,6 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "dev:availability-local": "vite --config vite.availability-local.config.ts",
+    "emulators:availability-local": "node scripts/availabilityLocal.mjs",
+    "test:availability-local": "node scripts/availabilityLocal.mjs test",
+    "test:availability-history": "node --test tests/availabilityHistory.test.mjs",
     "dev": "vite",
     "build": "APP_BUILD_VERSION=$(date +%Y.%m.%d.%H%M%S) && VITE_APP_VERSION=$APP_BUILD_VERSION tsc -b && VITE_APP_VERSION=$APP_BUILD_VERSION vite build && sed -i '' \"s/__BUILD_TIME__/$(date +%s)/\" dist/sw.js && VITE_APP_VERSION=$APP_BUILD_VERSION npm run build:embed && cp -r dist-embed/* dist/embed/ && VITE_APP_VERSION=$APP_BUILD_VERSION npm run build:embed-voucher && cp -r dist-embed-voucher/* dist/embed-voucher/",
     "build:embed": "tsc -b && vite build --config vite.config.embed.ts && mkdir -p dist/embed",

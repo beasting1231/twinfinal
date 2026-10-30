@@ -65,6 +65,9 @@ export interface Booking {
   acknowledgedPilots?: string[]; // Pilots who have confirmed they've seen the assignment
   bookingStatus: "unconfirmed" | "confirmed" | "pending" | "cancelled" | "deleted" | "no show";
   isBlocked?: boolean; // Reserved/blocked capacity spot (not a normal customer booking)
+  prepaid?: boolean; // Paid on the website via SumUp (see utils/prepaid.ts)
+  paymentReference?: string;
+  amount?: number; // CHF paid up front
   span: number;
   pilotPayments?: PilotPayment[];
   driver?: string;
@@ -159,5 +162,9 @@ export interface BookingRequest {
   commission?: number; // Commission amount for bookings from custom forms
   commissionStatus?: "paid" | "unpaid"; // Commission payment status
   status: "pending" | "approved" | "rejected" | "waitlist";
+  // Website prepayment (SumUp)
+  paymentStatus?: "awaiting payment" | "paid";
+  paymentReference?: string;
+  amount?: number;
   createdAt: Date;
 }

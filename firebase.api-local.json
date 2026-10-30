@@ -1,0 +1,20 @@
+{
+  "firestore": {"rules": "firestore.rules"},
+  "functions": {"source": "tests/fixtures/api-functions"},
+  "hosting": {
+    "public": "dist",
+    "rewrites": [
+      {"source": "/api/v1/**", "function": "bookingApi"},
+      {"source": "**", "destination": "/index.html"}
+    ]
+  },
+  "emulators": {
+    "auth": {"host": "127.0.0.1", "port": 9399},
+    "firestore": {"host": "127.0.0.1", "port": 8380},
+    "functions": {"host": "127.0.0.1", "port": 5301},
+    "hosting": {"host": "127.0.0.1", "port": 5305},
+    "hub": {"host": "127.0.0.1", "port": 4503},
+    "logging": {"host": "127.0.0.1", "port": 4603},
+    "ui": {"enabled": false}, "singleProjectMode": true
+  }
+}

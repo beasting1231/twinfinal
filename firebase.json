@@ -26,6 +26,10 @@
     ],
     "rewrites": [
       {
+        "source": "/api/v1/**",
+        "function": "bookingApi"
+      },
+      {
         "source": "/api/**",
         "function": "emailApi"
       },

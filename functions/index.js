@@ -13,6 +13,7 @@ const {ImapFlow} = require("imapflow");
 admin.initializeApp();
 
 const db = admin.firestore();
+exports.recordAvailabilityHistory = require("./availabilityHistory").createAvailabilityHistoryFunction(db);
 const BOOKING_SEARCH_INDEX_COLLECTION = "bookingSearchIndex";
 const BOOKING_BACKFILL_BATCH_SIZE = 250;
 const bookingSearchBackfillKey = defineSecret("BOOKING_SEARCH_BACKFILL_KEY");
@@ -766,6 +767,70 @@ function generateTelegramNotification(bookingData) {
 }
 
 // Cloud Function: Send email when a new booking request is created
+// Team notification settings (settings/notifications), shared by booking request and prepaid booking alerts.
+async function getNotificationConfig() {
+  let notificationConfig = {
+    emailNotifications: {
+      enabled: true,
+      recipients: ["petervibecoding@gmail.com"], // Fallback default
+    },
+    telegramNotifications: {
+      enabled: false,
+      chatIds: [],
+      botToken: "",
+    },
+  };
+
+  try {
+    const configDoc = await db.collection("settings")
+        .doc("notifications").get();
+    if (configDoc.exists) {
+      const data = configDoc.data();
+      notificationConfig = {
+        emailNotifications: {
+          enabled: data.emailNotifications?.enabled ?? true,
+          recipients: data.emailNotifications?.recipients ?? [],
+        },
+        telegramNotifications: {
+          enabled: data.telegramNotifications?.enabled ?? false,
+          chatIds: data.telegramNotifications?.chatIds ?? [],
+          botToken: data.telegramNotifications?.botToken ?? "",
+        },
+      };
+    }
+  } catch (error) {
+    console.error("Error fetching notification config:", error);
+  }
+  return notificationConfig;
+}
+
+// Tells the team a prepaid website booking is on the schedule (it skips booking requests).
+async function notifyTeamOfPrepaidBooking(booking) {
+  const config = await getNotificationConfig();
+  const tasks = [];
+  if (config.emailNotifications.enabled && config.emailNotifications.recipients.length > 0) {
+    tasks.push(transporter.sendMail({
+      from: {name: "Twin Paragliding", address: "bookings@twinparagliding.com"},
+      replyTo: booking.email,
+      to: config.emailNotifications.recipients.join(", "),
+      subject: `💳 New prepaid booking (CHF ${booking.amount}) - Twin Paragliding`,
+      html: generateAdminEmailHTML({...booking, meetingPoint: "HW"})
+          .replace(/New Booking Request/g, "New Prepaid Booking"),
+    }));
+  }
+  const telegram = config.telegramNotifications;
+  if (telegram.enabled && telegram.botToken && telegram.chatIds.length > 0) {
+    const {message, inlineKeyboard} = generateTelegramNotification({...booking, meetingPoint: "HW"});
+    const prepaidMessage = message.replace("🔔 *New Booking Request*",
+        `💳 *New Prepaid Booking* (CHF ${booking.amount}, already on the schedule)`);
+    for (const chatId of telegram.chatIds) {
+      tasks.push(sendTelegramMessage(telegram.botToken, chatId, prepaidMessage, inlineKeyboard));
+    }
+  }
+  const failures = (await Promise.allSettled(tasks)).filter((result) => result.status === "rejected");
+  failures.forEach((failure) => console.error("Prepaid booking notification failed:", failure.reason?.message));
+}
+
 exports.sendBookingConfirmationEmail = onDocumentCreated(
     "bookingRequests/{requestId}",
     async (event) => {
@@ -783,39 +848,7 @@ exports.sendBookingConfirmationEmail = onDocumentCreated(
         return {skipped: true, reason: "missing-email"};
       }
 
-      // Fetch notification settings from Firestore
-      let notificationConfig = {
-        emailNotifications: {
-          enabled: true,
-          recipients: ["petervibecoding@gmail.com"], // Fallback default
-        },
-        telegramNotifications: {
-          enabled: false,
-          chatIds: [],
-          botToken: "",
-        },
-      };
-
-      try {
-        const configDoc = await db.collection("settings")
-            .doc("notifications").get();
-        if (configDoc.exists) {
-          const data = configDoc.data();
-          notificationConfig = {
-            emailNotifications: {
-              enabled: data.emailNotifications?.enabled ?? true,
-              recipients: data.emailNotifications?.recipients ?? [],
-            },
-            telegramNotifications: {
-              enabled: data.telegramNotifications?.enabled ?? false,
-              chatIds: data.telegramNotifications?.chatIds ?? [],
-              botToken: data.telegramNotifications?.botToken ?? "",
-            },
-          };
-        }
-      } catch (error) {
-        console.error("Error fetching notification config:", error);
-      }
+      const notificationConfig = await getNotificationConfig();
 
       // Generate HTML emails
       const customerHtmlContent = generateCustomerEmailHTML(bookingData);
@@ -1619,6 +1652,10 @@ exports.sendTodayBookingPushNotifications = onDocumentCreated(
       if (!bookingData) {
         return {skipped: true, reason: "missing-booking-data"};
       }
+      // Placeholder while a website customer pays; the paid booking is created as a new doc.
+      if (bookingData.paymentHold) {
+        return {skipped: true, reason: "payment-hold"};
+      }
 
       return sendTodayBookingPushNotifications(bookingId, bookingData);
     },
@@ -1738,3 +1775,15 @@ exports.backfillBookingSearchIndex = onRequest(
 const websiteForms = require("./websiteForms").createWebsiteForms({db, transporter});
 exports.submitWebsiteContact = websiteForms.submitWebsiteContact;
 exports.submitWebsiteVoucherRequest = websiteForms.submitWebsiteVoucherRequest;
+const websiteBookingTicket = require("./websiteBookingTicket").createWebsiteBookingTicketFunctions({
+  db, transporter, notifyTeam: notifyTeamOfPrepaidBooking,
+});
+exports.confirmWebsiteBookingPayment = websiteBookingTicket.confirmWebsiteBookingPayment;
+exports.sumupWebhook = websiteBookingTicket.sumupWebhook;
+Object.assign(exports, require("./websiteCheckout").createWebsiteCheckoutFunctions({
+  db, confirmCheckout: websiteBookingTicket.confirmCheckout,
+}));
+exports.websiteAvailability = require("./websiteAvailability").createWebsiteAvailability(db);
+
+// Isolated integration API; existing email routes and triggers are unchanged.
+Object.assign(exports, require("./bookingApi").createBookingApiFunctions(db));

@@ -20,6 +20,7 @@ import { BookingSourceAutocomplete } from "./BookingSourceAutocomplete";
 import { MeetingPointAutocomplete, getMeetingPointAbbreviation } from "./MeetingPointAutocomplete";
 import { EmailPreviewModal } from "./EmailPreviewModal";
 import { getTimeSlotsByDate } from "../utils/timeSlots";
+import { showsPrepaid } from "../utils/prepaid";
 import { isAvailabilityActive, normalizeAvailabilityStatus } from "../utils/availabilityState";
 
 interface BookingDetailsModalProps {
@@ -1335,7 +1336,9 @@ export function BookingDetailsModal({
                         ? 'cursor-default'
                         : 'cursor-pointer hover:scale-105'
                     } ${
-                      editedBooking.bookingStatus === 'unconfirmed'
+                      showsPrepaid(editedBooking)
+                        ? 'bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-400 border border-purple-300 dark:border-purple-500/30 hover:bg-purple-200 dark:hover:bg-purple-500/30'
+                        : editedBooking.bookingStatus === 'unconfirmed'
                         ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 border border-blue-300 dark:border-blue-500/30 hover:bg-blue-200 dark:hover:bg-blue-500/30'
                         : editedBooking.bookingStatus === 'confirmed'
                         ? 'bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400 border border-green-300 dark:border-green-500/30 hover:bg-green-200 dark:hover:bg-green-500/30'
@@ -1346,7 +1349,9 @@ export function BookingDetailsModal({
                         : 'bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400 border border-red-300 dark:border-red-500/30 hover:bg-red-200 dark:hover:bg-red-500/30'
                     }`}
                   >
-                    {editedBooking.bookingStatus.charAt(0).toUpperCase() + editedBooking.bookingStatus.slice(1)}
+                    {showsPrepaid(editedBooking)
+                      ? 'Prepaid'
+                      : editedBooking.bookingStatus.charAt(0).toUpperCase() + editedBooking.bookingStatus.slice(1)}
                   </button>
                   </div>
 

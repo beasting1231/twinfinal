@@ -46,6 +46,7 @@ import { formatSwissDateTime } from "../utils/timezone";
 import { DndContext, useSensor, useSensors, PointerSensor, useDraggable, useDroppable, rectIntersection } from "@dnd-kit/core";
 import type { DragEndEvent, DragStartEvent, CollisionDetection } from "@dnd-kit/core";
 import { Plus } from "lucide-react";
+import { prepaidFields, showsPrepaid } from "../utils/prepaid";
 
 const AUTO_ASSIGN_EMAIL = "pccbasting@gmail.com";
 
@@ -1426,6 +1427,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
           assignedPilots: [],
           bookingStatus: "unconfirmed",
           span: request.numberOfPeople,
+          ...prepaidFields(request),
         });
 
         // Mark request as approved
@@ -1631,6 +1633,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
       assignedPilots: [],
       bookingStatus: "unconfirmed",
       span: request.numberOfPeople,
+      ...prepaidFields(request),
     });
 
     await updateDoc(doc(db, "bookingRequests", request.id), {
@@ -2879,6 +2882,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
           assignedPilots: [],
           bookingStatus: "unconfirmed",
           span: request.numberOfPeople,
+          ...prepaidFields(request),
         });
 
         // Mark request as approved
@@ -3450,6 +3454,7 @@ export function ScheduleGrid({ selectedDate, pilots, timeSlots, bookings: allBoo
                         acknowledgedPilots={booking.acknowledgedPilots}
                         pilotPayments={booking.pilotPayments}
                         bookingStatus={booking.bookingStatus === "deleted" || booking.bookingStatus === "no show" ? "confirmed" : booking.bookingStatus}
+                        prepaid={showsPrepaid(booking)}
                         span={span}
                         femalePilotsRequired={booking.femalePilotsRequired}
                         overbookedSlotIndexes={overbookedSlotMap.get(booking.id!)}

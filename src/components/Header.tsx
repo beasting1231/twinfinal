@@ -16,6 +16,7 @@ import { DatePicker } from "./DatePicker";
 import { WeekPicker } from "./WeekPicker";
 import { MonthPicker } from "./MonthPicker";
 import { canUseDailyPlanPreview, DAILY_PLAN_PREVIEW_PATH } from "../utils/dailyPlanPreview";
+import { canManageApiKeys } from "../utils/apiKeyAccess";
 import { useAuth } from "../contexts/AuthContext";
 import { useRole } from "../hooks/useRole";
 import { getSwissDateTime, SWISS_TIME_ZONE } from "../utils/timezone";
@@ -458,6 +459,12 @@ export function Header({
                   }`}
                 >
                   Account
+                </button>
+              )}
+              {canManageApiKeys(currentUser) && (
+                <button onClick={() => handleNavigate("/api-keys")}
+                  className={`w-full rounded-lg px-4 py-3 text-left text-gray-900 hover:bg-gray-100 dark:text-white dark:hover:bg-zinc-800 ${isActive("/api-keys") ? "bg-gray-100 dark:bg-zinc-800" : ""}`}>
+                  API keys
                 </button>
               )}
               {role === "admin" && (

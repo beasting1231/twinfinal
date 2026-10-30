@@ -231,6 +231,7 @@ interface BookingAvailableProps {
   acknowledgedPilots?: string[];
   pilotPayments?: PilotPayment[];
   bookingStatus?: "unconfirmed" | "confirmed" | "pending" | "cancelled";
+  prepaid?: boolean; // Paid on the website: purple instead of the status colour
   span?: number;
   femalePilotsRequired?: number;
   flightType?: "sensational" | "classic" | "early bird";
@@ -288,6 +289,7 @@ export const BookingAvailable = memo(function BookingAvailable({
   acknowledgedPilots = [],
   pilotPayments = [],
   bookingStatus = "confirmed",
+  prepaid = false,
   span = 1,
   femalePilotsRequired = 0,
   flightType,
@@ -855,7 +857,7 @@ export const BookingAvailable = memo(function BookingAvailable({
         onTouchEnd={handleTouchEnd}
       >
         {/* Status indicator bar */}
-        <div className={`absolute top-0 right-0 w-[5px] h-full ${statusColors[bookingStatus]}`} />
+        <div className={`absolute top-0 right-0 w-[5px] h-full ${prepaid ? "bg-purple-500" : statusColors[bookingStatus]}`} />
 
         {/* Pax count circle */}
         {span > 0 && !hideDetails && (

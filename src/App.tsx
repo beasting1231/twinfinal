@@ -21,6 +21,10 @@ import { LiabilityForm } from "./components/LiabilityForm";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { retryImport } from "./utils/retryImport";
 
+const ApiKeys = lazy(() => retryImport(() =>
+  import("./components/ApiKeys").then(module => ({ default: module.ApiKeys }))
+));
+
 // Code-split: NotificationSettings (Phase 1 - Low risk, rarely accessed)
 const NotificationSettings = lazy(() =>
   retryImport(() =>
@@ -102,7 +106,7 @@ function DailyPlanPage({ preview = false }: { preview?: boolean }) {
     end: addDays(selectedDate, 7),
   }), [selectedDate]);
 
-  const { bookings, addBooking, updateBooking, deleteBooking } = useBookings({ dateRange });
+  const { bookings, loading: bookingsLoading, addBooking, updateBooking, deleteBooking } = useBookings({ dateRange });
 
   // Get display name from user profile (already loaded by AuthContext)
   const currentUserDisplayName = userProfile?.displayName || currentUser?.email || undefined;
@@ -146,9 +150,9 @@ function DailyPlanPage({ preview = false }: { preview?: boolean }) {
     return Array.from(timestamps.values()).sort((a, b) => a.getTime() - b.getTime());
   }, [availabilityTimelineEvents, bookings, selectedDate]);
 
-  // Progressive loading: Only wait for pilots data, not bookings
-  // The grid will show immediately with pilots, and bookings will populate as they load
-  const isLoading = pilotsLoading;
+  // Wait for live bookings on first load so the plan never shows empty slots
+  // that are actually booked. Later date changes keep the grid on screen.
+  const isLoading = pilotsLoading || (bookingsLoading && bookings.length === 0);
   const timeSlots = useMemo(() => getTimeSlotsByDate(selectedDate), [selectedDate]);
 
   return (
@@ -435,6 +439,16 @@ function AppContent() {
               <Suspense fallback={<LazyLoadingFallback />}>
                 <Email />
               </Suspense>
+            </ErrorBoundary>
+          </PageWrapper>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/api-keys" element={
+        <ProtectedRoute>
+          <PageWrapper>
+            <ErrorBoundary>
+              <Suspense fallback={<LazyLoadingFallback />}><ApiKeys /></Suspense>
             </ErrorBoundary>
           </PageWrapper>
         </ProtectedRoute>

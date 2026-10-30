@@ -12,7 +12,7 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/api': {
+      '^/api/': {
         target: 'https://us-central1-twinscheduler.cloudfunctions.net/emailApi',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),

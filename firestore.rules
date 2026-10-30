@@ -119,6 +119,12 @@ service cloud.firestore {
       allow write: if request.auth != null && hasRole('admin');
     }
 
+    // Prepaid website checkouts (twinn-react-app). Written only by Cloud Functions
+    // (websiteCheckout.js, websiteBookingTicket.js) after checking the payment with SumUp.
+    match /websiteCheckouts/{reference} {
+      allow read, update, delete: if request.auth != null && hasRole('admin');
+    }
+
     // Booking requests collection
     match /bookingRequests/{requestId} {
       // Anyone can create a booking request (public form)
@@ -136,6 +142,12 @@ service cloud.firestore {
     }
 
     // Availability collection
+    // Append-only server audit trail; clients cannot fabricate or rewrite it.
+    match /availabilityHistory/{date}/pilots/{userId}/events/{eventId} {
+      allow read: if request.auth != null && hasRole('admin');
+      allow write: if false;
+    }
+
     match /availability/{availabilityId} {
       // Allow public read for booking form availability check
       allow read: if true;
